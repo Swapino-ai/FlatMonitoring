@@ -4,14 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "setup": "tsx scripts/setup.ts",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "user": "tsx scripts/user.ts",
     "market:scan": "tsx scripts/market-scan.ts",
-    "report": "tsx scripts/generate-pdf.ts",
-    "user": "tsx scripts/user.ts"
+    "backup": "tsx scripts/backup.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.1.0",

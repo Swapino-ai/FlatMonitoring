@@ -1,0 +1,32 @@
+# systemd — Linux. Aplikace pojede po startu počítače a sama se restartuje při pádu.
+#
+#   sudo cp deploy/flatmonitoring.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now flatmonitoring
+#   journalctl -u flatmonitoring -f        # log
+#
+# Uprav User a WorkingDirectory podle sebe.
+
+[Unit]
+Description=FlatMonitoring — přehled nemovitostního portfolia
+After=network.target
+
+[Service]
+Type=simple
+User=CHANGE_ME
+WorkingDirectory=/home/CHANGE_ME/FlatMonitoring
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=PORT=3000
+
+# Aplikace nepotřebuje nic mimo svůj adresář
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/CHANGE_ME/FlatMonitoring/data /home/CHANGE_ME/FlatMonitoring/zalohy /home/CHANGE_ME/FlatMonitoring/.next
+
+[Install]
+WantedBy=multi-user.target

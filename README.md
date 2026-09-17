@@ -12,57 +12,134 @@ Odpovídá na čtyři otázky:
 
 ---
 
-## Rychlý start
+## Nasazení
+
+Aplikace je zamýšlená tak, že běží **na tvém počítači nebo na domácím serveru**,
+ne v cloudu. Data neopouštějí tvůj stroj.
+
+Potřebuješ jen **Node.js 20 nebo novější** ([nodejs.org](https://nodejs.org)).
+Nic dalšího — databáze je soubor, žádný databázový server se neinstaluje.
+
+### 1. Instalace
 
 ```bash
+git clone https://github.com/Swapino-ai/FlatMonitoring.git
+cd FlatMonitoring
 npm install
-cp .env.example .env          # doplň AUTH_SECRET
-npm run db:push               # vytvoří data.db
-npm run db:seed               # ukázková data (volitelné)
-npm run build && npm start    # http://localhost:3000
+npm run setup
 ```
 
-Do `.env` vygeneruj tajný klíč pro podpis přihlašovacích cookies:
+`npm run setup` je idempotentní — vygeneruje `.env` s náhodným podpisovým klíčem,
+založí databázi v `data/data.db`, zeptá se na tvůj účet a stáhne Chromium pro PDF.
+Když něco už existuje, nechá to být, takže ho můžeš klidně spustit znovu.
+
+Neinteraktivně (např. z vlastního skriptu):
 
 ```bash
-openssl rand -base64 32
+FM_EMAIL=ty@example.com FM_NAME="Tvoje jméno" FM_PASSWORD='silneheslo' npm run setup
 ```
 
-### První uživatel
-
-Aplikace nemá veřejnou registraci — účty se zakládají z příkazové řádky:
+### 2. Spuštění
 
 ```bash
-npm run user -- add ty@example.com "Tvoje jméno" OWNER
+npm run build
+npm start                     # http://localhost:3000
+```
+
+Chceš si to nejdřív osahat na ukázkových datech?
+
+```bash
+npm run db:seed               # tři byty, úvěry, dva roky transakcí
+```
+
+Seed vytvoří i účty `majitel@example.com` a `partner@example.com` s heslem
+`heslo123`. **Než tam dáš ostrá data, smaž je** (`npm run user -- rm ...`).
+
+### 3. Ať to běží pořád
+
+Samotné `npm start` skončí, jakmile zavřeš terminál. Pro trvalý běh jsou
+v adresáři `deploy/` připravené konfigurace — v obou stačí přepsat `CHANGE_ME`:
+
+**Linux (systemd):**
+
+```bash
+sudo cp deploy/flatmonitoring.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now flatmonitoring
+journalctl -u flatmonitoring -f
+```
+
+**macOS (launchd):**
+
+```bash
+mkdir -p logs
+cp deploy/com.flatmonitoring.app.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.flatmonitoring.app.plist
+```
+
+**Windows:** nejjednodušší je [NSSM](https://nssm.cc) — `nssm install FlatMonitoring`,
+jako program zadej cestu k `npm.cmd`, argument `start` a pracovní adresář projektu.
+
+### 4. Přístup pro obchodního partnera
+
+Založ mu účet v režimu jen pro čtení — vidí čísla i reporty, ale nemůže nic měnit
+ani spustit sken:
+
+```bash
 npm run user -- add partner@example.com "Obchodní partner" PARTNER
 ```
 
-`OWNER` může vše, `PARTNER` má přístup jen pro čtení — vidí čísla a reporty,
-ale nemůže nic měnit ani spustit sken trhu.
-
-Pokud jsi spustil `db:seed`, existují ukázkové účty `majitel@example.com` a
-`partner@example.com` s heslem `heslo123`. **Před ostrým použitím je smaž nebo jim
-změň heslo** (`npm run user -- passwd ...`).
-
----
-
-## Sdílení s obchodním partnerem
-
-**PDF e-mailem** — nejjednodušší. V sekci Reporty si vyklikáš sekce a rok, stáhneš PDF a pošleš.
-Partner nepotřebuje nic instalovat.
-
-**Živý přístup** — partner se přihlásí svým účtem a vidí aktuální data. Aplikaci
-nikdy nevystavuj přímo na veřejnou IP. Použij tunel:
+**Aplikaci nikdy nevystavuj přímo na veřejnou IP ani neotevírej port na routeru.**
+Použij tunel, který provoz šifruje a nevystaví tvou domácí síť:
 
 ```bash
-# Tailscale — partner musí být ve tvé síti
+# Tailscale — partner musí být ve tvé tailnet síti. Nejbezpečnější varianta.
 tailscale serve 3000
 
-# nebo Cloudflare Tunnel — veřejná HTTPS adresa, přístup pořád chrání přihlášení
+# Cloudflare Tunnel — veřejná HTTPS adresa, přístup pořád chrání přihlášení.
 cloudflared tunnel --url http://localhost:3000
 ```
 
-**Tisk z prohlížeče** — stránka `/report` má vlastní tiskové styly, stačí Ctrl+P.
+Nechceš-li řešit síť vůbec, funguje i nejjednodušší cesta: v sekci Reporty
+vygeneruj PDF a pošli ho e-mailem. Partner nepotřebuje vůbec nic.
+
+### 5. Automatický provoz
+
+Měsíční sken trhu a denní záloha. Na Linuxu systemd timerem:
+
+```bash
+sudo cp deploy/flatmonitoring-scan.service deploy/flatmonitoring.timer /etc/systemd/system/
+sudo systemctl enable --now flatmonitoring.timer
+```
+
+Nebo prostým cronem:
+
+```cron
+0 4 1 * * cd /cesta/k/FlatMonitoring && /usr/bin/npm run market:scan >> logs/market.log 2>&1
+0 3 * * * cd /cesta/k/FlatMonitoring && /usr/bin/npm run backup >> logs/backup.log 2>&1
+```
+
+### 6. Zálohování
+
+```bash
+npm run backup                      # zalohy/data-2026-09-17.db
+npm run backup -- /Volumes/disk/fm.db
+```
+
+Používá `VACUUM INTO`, takže záloha je konzistentní i za běhu aplikace — na rozdíl
+od prostého kopírování souboru. Posledních 30 záloh si nechá, starší maže.
+
+Obnova je prosté přejmenování zpátky na `data/data.db` (aplikaci předtím zastav).
+
+### Aktualizace
+
+```bash
+git pull
+npm install
+npm run db:push        # promítne případné změny schématu
+npm run build
+sudo systemctl restart flatmonitoring
+```
 
 ---
 
@@ -150,19 +227,20 @@ src/lib/savings.ts       hledání úspor z hromadného vyjednávání
 src/lib/market/          scrapery portálů a oceňování z trhu
 src/lib/pdf.ts           tisk reportu přes headless Chromium
 src/app/report/          tisková verze reportu (zdroj PDF)
-scripts/market-scan.ts   měsíční cron
+scripts/setup.ts         první spuštění (idempotentní)
+scripts/market-scan.ts   měsíční sken trhu pro cron
+scripts/backup.ts        konzistentní záloha databáze
 scripts/user.ts          správa uživatelů
+deploy/                  systemd a launchd konfigurace
+data/data.db             celá databáze — jediný soubor, který je potřeba zálohovat
 ```
 
-## Zálohování
+## Kam se ukládají data
 
-Celá databáze je jeden soubor:
+Celá databáze je jeden soubor: **`data/data.db`**. Zálohuj přes `npm run backup`
+(viz výše), ne kopírováním za běhu.
 
-```bash
-cp data.db zalohy/data-$(date +%F).db
-```
-
-`.env` a `*.db` jsou v `.gitignore` — do gitu se nikdy nedostanou.
+`.env`, `data/` a `zalohy/` jsou v `.gitignore` — do gitu se nikdy nedostanou.
 
 ---
 

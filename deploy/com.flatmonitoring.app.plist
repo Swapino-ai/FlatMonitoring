@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd — macOS. Aplikace se spustí po přihlášení a drží se naživu.
+
+    cp deploy/com.flatmonitoring.app.plist ~/Library/LaunchAgents/
+    # uprav cesty a jméno uživatele
+    launchctl load ~/Library/LaunchAgents/com.flatmonitoring.app.plist
+    tail -f ~/FlatMonitoring/logs/app.log
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.flatmonitoring.app</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/npm</string>
+    <string>start</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/CHANGE_ME/FlatMonitoring</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_ENV</key><string>production</string>
+    <key>PORT</key><string>3000</string>
+  </dict>
+
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/CHANGE_ME/FlatMonitoring/logs/app.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/CHANGE_ME/FlatMonitoring/logs/app.err.log</string>
+</dict>
+</plist>

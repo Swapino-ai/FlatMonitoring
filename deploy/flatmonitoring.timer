@@ -1,0 +1,15 @@
+# Měsíční sken trhu — 1. den v měsíci ve 4:00.
+#
+#   sudo cp deploy/flatmonitoring-scan.service deploy/flatmonitoring.timer /etc/systemd/system/
+#   sudo systemctl enable --now flatmonitoring.timer
+#   systemctl list-timers flatmonitoring.timer
+
+[Unit]
+Description=Měsíční sken trhu pro FlatMonitoring
+
+[Timer]
+OnCalendar=*-*-01 04:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

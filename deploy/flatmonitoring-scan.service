@@ -1,0 +1,9 @@
+[Unit]
+Description=Sken trhu + záloha databáze
+
+[Service]
+Type=oneshot
+User=CHANGE_ME
+WorkingDirectory=/home/CHANGE_ME/FlatMonitoring
+ExecStart=/usr/bin/npm run market:scan
+ExecStartPost=/usr/bin/npm run backup
