@@ -1,0 +1,227 @@
+// FlatMonitoring — datovy model
+// Vse v CZK, castky jako Float (staci pro reporting, ne pro ucetnictvi na halere).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Uzivatele: OWNER = plny pristup, PARTNER = read-only (obchodni partner)
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("PARTNER") // OWNER | PARTNER
+  createdAt    DateTime @default(now())
+}
+
+/// Nemovitost — ustredni entita aplikace
+model Property {
+  id       String  @id @default(cuid())
+  name     String // pracovni nazev, napr. "Vinohrady 2+kk"
+  street   String
+  city     String
+  zip      String
+  district String? // mestska cast / katastr — klic pro tržní sken
+  country  String  @default("CZ")
+
+  disposition String // 1+kk, 2+1, ...
+  areaM2      Float
+  floor       Int?
+  hasBalcony  Boolean @default(false)
+  hasCellar   Boolean @default(false)
+  hasParking  Boolean @default(false)
+  buildYear   Int?
+  cadastralNo String? // cislo jednotky v KN
+
+  // --- Porizeni ---
+  purchaseDate     DateTime
+  purchasePrice    Float // kupni cena jednotky
+  acquisitionCosts Float    @default(0) // dan z nabyti, pravnik, provize, znalec
+  renovationCosts  Float    @default(0) // technicke zhodnoceni pred pronajmem
+  landShareValue   Float    @default(0) // hodnota podilu na pozemku — NEODEPISUJE SE
+
+  // --- Odpisy dle ZDP (§ 30, § 31/32) ---
+  depreciationGroup  Int    @default(5) // 5. skupina = 30 let (zdene domy)
+  depreciationMethod String @default("STRAIGHT") // STRAIGHT (§31) | ACCELERATED (§32)
+  depreciationStart  Int? // prvni rok odpisovani (default: rok porizeni)
+
+  status String @default("RENTED") // RENTED | VACANT | RENOVATION | FOR_SALE | SOLD
+
+  saleDate  DateTime?
+  salePrice Float?
+
+  notes String?
+
+  loans        Loan[]
+  leases       Lease[]
+  transactions Transaction[]
+  services     Service[]
+  valuations   Valuation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Hypoteka / uver — "zda vazne dluh na nich"
+model Loan {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  lender         String
+  contractNo     String?
+  principal      Float // puvodni jistina
+  interestRate   Float // rocni p.a. v procentech, napr. 4.89
+  startDate      DateTime
+  termMonths     Int // celkova splatnost
+  fixationEnd    DateTime? // konec fixace — hlida se, kvuli refinancovani
+  monthlyPayment Float // anuitni splatka
+  currentBalance Float // aktualni zustatek (aktualizuje se vypoctem nebo rucne)
+  balanceAsOf    DateTime  @default(now())
+
+  isActive Boolean @default(true)
+  notes    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Najemni smlouva
+model Lease {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  tenantName  String
+  tenantEmail String?
+  tenantPhone String?
+
+  startDate DateTime
+  endDate   DateTime? // null = na dobu neurcitou
+
+  rentMonthly      Float // ciste najemne (zdanitelny prijem dle §9)
+  utilitiesMonthly Float @default(0) // zalohy na sluzby — pruchozi polozka, nezdanuje se
+  deposit          Float @default(0) // kauce
+
+  indexationClause Boolean @default(false) // inflacni dolozka
+  paymentDay       Int     @default(15)
+
+  isActive Boolean @default(true)
+  notes    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Penezni tok — prijmy i vydaje
+model Transaction {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  date        DateTime
+  amount      Float // kladne = prijem, zaporne = vydaj
+  category    String // viz src/lib/categories.ts
+  description String?
+
+  /// Danova klasifikace pro §9 DPFO:
+  /// INCOME_RENT, EXPENSE_DEDUCTIBLE, EXPENSE_NON_DEDUCTIBLE,
+  /// PASS_THROUGH (zalohy na sluzby), CAPITAL (technicke zhodnoceni),
+  /// LOAN_PRINCIPAL (splatka jistiny — nedanovy vydaj)
+  taxTreatment String @default("EXPENSE_DEDUCTIBLE")
+
+  isRecurring Boolean @default(false)
+  documentRef String? // cislo faktury / odkaz na doklad
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Sluzba / dodavatel — podklad pro hromadne vyjednavani a zlevnovani
+model Service {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  type       String // ELECTRICITY | GAS | WATER | HEATING | INTERNET | INSURANCE | SVJ_FEE | MANAGEMENT | WASTE | OTHER
+  provider   String
+  contractNo String?
+
+  monthlyCost Float
+  annualCost  Float? // pokud se plati rocne
+
+  contractStart      DateTime?
+  contractEnd        DateTime? // konec zavazku — kdy lze prejit jinam
+  noticePeriodMonths Int       @default(0)
+
+  isBundleable Boolean @default(true) // lze zahrnout do hromadne poptavky?
+  notes        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Odhad hodnoty — rucni, znalecky, nebo z mesicniho skenu trhu
+model Valuation {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  date       DateTime @default(now())
+  value      Float // odhadovana trzni hodnota jednotky
+  pricePerM2 Float?
+  source     String // MANUAL | EXPERT | MARKET_SCAN | INDEX
+  confidence String? // LOW | MEDIUM | HIGH
+  sampleSize Int? // pocet srovnatelnych nabidek u MARKET_SCAN
+  notes      String?
+
+  createdAt DateTime @default(now())
+}
+
+/// Jeden beh mesicniho skenu trhu
+model MarketScan {
+  id       String          @id @default(cuid())
+  runAt    DateTime        @default(now())
+  source   String // SREALITY | BEZREALITKY
+  status   String          @default("OK") // OK | PARTIAL | FAILED
+  message  String?
+  listings MarketListing[]
+}
+
+/// Jedna nabidka z trhu (anonymizovany srovnatelny vzorek)
+model MarketListing {
+  id     String     @id @default(cuid())
+  scanId String
+  scan   MarketScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  source      String
+  externalId  String?
+  dealType    String // SALE | RENT
+  city        String
+  district    String?
+  disposition String?
+  areaM2      Float?
+  price       Float
+  pricePerM2  Float?
+  url         String?
+
+  scrapedAt DateTime @default(now())
+
+  @@index([city, district, dealType, disposition])
+}
+
+/// Makro ukazatele pro indexaci a kontext (CNB repo sazba, index cen CSU)
+model MarketIndex {
+  id     String @id @default(cuid())
+  code   String // CZSO_HOUSE_PRICE | CNB_REPO | CPI
+  period String // 2026-Q1 nebo 2026-03
+  value  Float
+
+  @@unique([code, period])
+}

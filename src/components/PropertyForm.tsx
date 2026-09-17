@@ -1,0 +1,141 @@
+"use client";
+
+import { useActionState } from "react";
+import Link from "next/link";
+import { saveProperty, type FormState } from "@/lib/actions";
+import { Card } from "./Stat";
+
+type Values = Partial<{
+  name: string; street: string; city: string; zip: string; district: string | null;
+  disposition: string; areaM2: number; floor: number | null; buildYear: number | null;
+  cadastralNo: string | null; hasBalcony: boolean; hasCellar: boolean; hasParking: boolean;
+  purchaseDate: string | Date; purchasePrice: number; acquisitionCosts: number;
+  renovationCosts: number; landShareValue: number; depreciationGroup: number;
+  depreciationMethod: string; status: string; notes: string | null;
+}>;
+
+export function PropertyForm({ id, values = {} }: { id?: string; values?: Values }) {
+  const action = saveProperty.bind(null, id ?? null);
+  const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
+
+  const v = values;
+  const dateValue = v.purchaseDate ? new Date(v.purchaseDate).toISOString().slice(0, 10) : "";
+
+  return (
+    <form action={formAction} className="space-y-4">
+      {state.error && (
+        <p className="rounded-lg bg-bad/10 px-3 py-2.5 text-sm text-bad">{state.error}</p>
+      )}
+
+      <Card title="Základní údaje">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Název" name="name" defaultValue={v.name} required errors={state.fieldErrors}
+            hint="Pracovní označení, např. „Vinohrady 2+kk“" />
+          <Select label="Stav" name="status" defaultValue={v.status ?? "RENTED"} options={[
+            ["RENTED", "Pronajato"], ["VACANT", "Volné"], ["RENOVATION", "Rekonstrukce"],
+            ["FOR_SALE", "Na prodej"], ["SOLD", "Prodáno"],
+          ]} />
+          <Field label="Ulice a číslo" name="street" defaultValue={v.street} required errors={state.fieldErrors} />
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Město" name="city" defaultValue={v.city} required errors={state.fieldErrors} />
+            <Field label="PSČ" name="zip" defaultValue={v.zip} required errors={state.fieldErrors} />
+          </div>
+          <Field label="Městská část / katastr" name="district" defaultValue={v.district ?? ""}
+            hint="Používá se pro srovnání s trhem" errors={state.fieldErrors} />
+          <Field label="Číslo jednotky v KN" name="cadastralNo" defaultValue={v.cadastralNo ?? ""} errors={state.fieldErrors} />
+        </div>
+      </Card>
+
+      <Card title="Parametry bytu">
+        <div className="grid gap-4 sm:grid-cols-4">
+          <Field label="Dispozice" name="disposition" defaultValue={v.disposition} required
+            hint="např. 2+kk" errors={state.fieldErrors} />
+          <Field label="Plocha (m²)" name="areaM2" type="number" step="0.1" defaultValue={v.areaM2} required errors={state.fieldErrors} />
+          <Field label="Patro" name="floor" type="number" defaultValue={v.floor ?? ""} errors={state.fieldErrors} />
+          <Field label="Rok výstavby" name="buildYear" type="number" defaultValue={v.buildYear ?? ""} errors={state.fieldErrors} />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-5">
+          <Check label="Balkon / terasa" name="hasBalcony" defaultChecked={v.hasBalcony} />
+          <Check label="Sklep" name="hasCellar" defaultChecked={v.hasCellar} />
+          <Check label="Parkování" name="hasParking" defaultChecked={v.hasParking} />
+        </div>
+      </Card>
+
+      <Card title="Pořízení">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Datum pořízení" name="purchaseDate" type="date" defaultValue={dateValue} required errors={state.fieldErrors} />
+          <Field label="Kupní cena (Kč)" name="purchasePrice" type="number" step="1" defaultValue={v.purchasePrice} required errors={state.fieldErrors} />
+          <Field label="Vedlejší náklady pořízení (Kč)" name="acquisitionCosts" type="number" defaultValue={v.acquisitionCosts ?? 0}
+            hint="Provize, právník, znalec, poplatky" errors={state.fieldErrors} />
+          <Field label="Rekonstrukce před pronájmem (Kč)" name="renovationCosts" type="number" defaultValue={v.renovationCosts ?? 0} errors={state.fieldErrors} />
+          <Field label="Hodnota podílu na pozemku (Kč)" name="landShareValue" type="number" defaultValue={v.landShareValue ?? 0}
+            hint="Pozemek se neodepisuje — odečte se ze vstupní ceny" errors={state.fieldErrors} />
+        </div>
+      </Card>
+
+      <Card title="Odpisy">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Select label="Odpisová skupina" name="depreciationGroup" defaultValue={String(v.depreciationGroup ?? 5)} options={[
+            ["4", "4. skupina — 20 let"],
+            ["5", "5. skupina — 30 let (zděné a panelové domy)"],
+            ["6", "6. skupina — 50 let"],
+          ]} />
+          <Select label="Metoda" name="depreciationMethod" defaultValue={v.depreciationMethod ?? "STRAIGHT"} options={[
+            ["STRAIGHT", "Rovnoměrné odpisování (§ 31)"],
+            ["ACCELERATED", "Zrychlené odpisování (§ 32)"],
+          ]} />
+        </div>
+        <p className="mt-3 text-xs text-ink-muted">
+          Metodu nelze po zahájení odpisování změnit. Odpisy se uplatní jen při skutečných výdajích, ne při paušálu.
+        </p>
+      </Card>
+
+      <Card title="Poznámky">
+        <textarea name="notes" defaultValue={v.notes ?? ""} rows={3} className="input" />
+      </Card>
+
+      <div className="flex gap-2">
+        <button type="submit" disabled={pending} className="btn btn-primary">
+          {pending ? "Ukládám…" : id ? "Uložit změny" : "Přidat nemovitost"}
+        </button>
+        <Link href={id ? `/properties/${id}` : "/properties"} className="btn">Zrušit</Link>
+      </div>
+    </form>
+  );
+}
+
+function Field({ label, name, hint, errors, ...rest }: {
+  label: string; name: string; hint?: string; errors?: Record<string, string>;
+} & React.InputHTMLAttributes<HTMLInputElement>) {
+  const error = errors?.[name];
+  return (
+    <div>
+      <label className="label mb-1.5 block" htmlFor={name}>{label}</label>
+      <input id={name} name={name} className="input" {...rest} />
+      {error ? <p className="mt-1 text-xs text-bad">{error}</p>
+             : hint && <p className="mt-1 text-xs text-ink-muted">{hint}</p>}
+    </div>
+  );
+}
+
+function Select({ label, name, options, defaultValue }: {
+  label: string; name: string; options: [string, string][]; defaultValue?: string;
+}) {
+  return (
+    <div>
+      <label className="label mb-1.5 block" htmlFor={name}>{label}</label>
+      <select id={name} name={name} defaultValue={defaultValue} className="input">
+        {options.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function Check({ label, name, defaultChecked }: { label: string; name: string; defaultChecked?: boolean }) {
+  return (
+    <label className="flex items-center gap-2 text-sm">
+      <input type="checkbox" name={name} defaultChecked={defaultChecked} className="h-4 w-4 rounded border-line accent-accent" />
+      {label}
+    </label>
+  );
+}

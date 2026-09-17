@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Data a tajemstvi — nikdy do repozitare
+.env
+*.db
+*.db-journal
+prisma/*.db
+reports/*.pdf

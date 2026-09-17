@@ -1,0 +1,155 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokeny. Barvy grafu pochazi z validovane palety (CVD-safe). */
+:root {
+  color-scheme: light;
+
+  --surface-base: 250 250 248;
+  --surface-card: 255 255 255;
+  --surface-sunken: 244 244 241;
+  --text-primary: 11 11 11;
+  --text-secondary: 82 81 78;
+  --text-muted: 130 129 124;
+  --border: 226 225 220;
+
+  --series-1: 42 120 214;   /* modra */
+  --series-2: 235 104 52;   /* oranzova */
+  --series-3: 27 175 122;   /* aqua */
+  --series-4: 237 161 0;    /* zluta */
+  --series-5: 232 123 164;  /* magenta */
+  --series-6: 0 131 0;      /* zelena */
+  --series-7: 74 58 167;    /* fialova */
+  --series-8: 227 73 72;    /* cervena */
+
+  --status-good: 0 131 0;
+  --status-warning: 237 161 0;
+  --status-critical: 227 73 72;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-base: 20 20 19;
+    --surface-card: 26 26 25;
+    --surface-sunken: 33 33 31;
+    --text-primary: 255 255 255;
+    --text-secondary: 195 194 183;
+    --text-muted: 150 149 140;
+    --border: 56 56 53;
+
+    --series-1: 57 135 229;
+    --series-2: 217 89 38;
+    --series-3: 25 158 112;
+    --series-4: 201 133 0;
+    --series-5: 213 81 129;
+    --series-6: 0 131 0;
+    --series-7: 144 133 233;
+    --series-8: 230 103 103;
+
+    --status-good: 25 158 112;
+    --status-warning: 201 133 0;
+    --status-critical: 230 103 103;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-base: 20 20 19;
+  --surface-card: 26 26 25;
+  --surface-sunken: 33 33 31;
+  --text-primary: 255 255 255;
+  --text-secondary: 195 194 183;
+  --text-muted: 150 149 140;
+  --border: 56 56 53;
+
+  --series-1: 57 135 229;
+  --series-2: 217 89 38;
+  --series-3: 25 158 112;
+  --series-4: 201 133 0;
+  --series-5: 213 81 129;
+  --series-6: 0 131 0;
+  --series-7: 144 133 233;
+  --series-8: 230 103 103;
+
+  --status-good: 25 158 112;
+  --status-warning: 201 133 0;
+  --status-critical: 230 103 103;
+}
+
+body {
+  background: rgb(var(--surface-base));
+  color: rgb(var(--text-primary));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .card {
+    @apply rounded-card border border-line bg-surface-card p-5;
+  }
+  .card-title {
+    @apply text-sm font-semibold text-ink-primary;
+  }
+  .label {
+    @apply text-xs font-medium uppercase tracking-wide text-ink-muted;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line px-3.5 py-2 text-sm font-medium
+           text-ink-primary transition-colors hover:bg-surface-sunken disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply border-transparent bg-accent text-white hover:opacity-90;
+  }
+  .input {
+    @apply w-full rounded-lg border border-line bg-surface-card px-3 py-2 text-sm text-ink-primary
+           outline-none placeholder:text-ink-muted focus:border-accent focus:ring-2 focus:ring-accent/20;
+  }
+  .table-base {
+    @apply w-full text-sm;
+  }
+  .table-base th {
+    @apply border-b border-line px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted;
+  }
+  .table-base td {
+    @apply border-b border-line/60 px-3 py-2.5 text-ink-primary;
+  }
+  .num {
+    @apply whitespace-nowrap text-right tabular-nums;
+  }
+}
+
+/* --- Tiskova / PDF verze --- */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+  :root {
+    --surface-base: 255 255 255;
+    --surface-card: 255 255 255;
+    --surface-sunken: 248 248 246;
+  }
+  body {
+    background: #fff;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-break {
+    break-before: page;
+  }
+  .card {
+    break-inside: avoid;
+    border-color: #d8d7d2;
+  }
+  table {
+    break-inside: auto;
+  }
+  tr {
+    break-inside: avoid;
+  }
+}
