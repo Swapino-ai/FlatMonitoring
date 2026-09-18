@@ -13,18 +13,24 @@
   dostane až tunelem (viz README).
 
 .EXAMPLE
-  # Spusť PowerShell JAKO SPRÁVCE v adresáři projektu:
+  # V adresáři projektu. Práva správce nejsou potřeba — úlohy se zakládají
+  # pod tvým vlastním účtem.
   Set-ExecutionPolicy -Scope Process Bypass -Force
   .\deploy\windows-install.ps1
 
 .EXAMPLE
-  # Odinstalace
+  # Nanečisto: vypíše, co by udělal, ale nic nezmění
+  .\deploy\windows-install.ps1 -Kontrola
+
+.EXAMPLE
+  # Odinstalace (data zůstanou)
   .\deploy\windows-install.ps1 -Odinstalovat
 #>
 
 param(
     [int]$Port = 3000,
-    [switch]$Odinstalovat
+    [switch]$Odinstalovat,
+    [switch]$Kontrola      # jen ukáže, co by se stalo — nic nezmění
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,6 +42,7 @@ $Ulohy = @("FlatMonitoring", "FlatMonitoring-Scan", "FlatMonitoring-Backup")
 function Odeber-Ulohy {
     foreach ($u in $Ulohy) {
         if (Get-ScheduledTask -TaskName $u -ErrorAction SilentlyContinue) {
+            if ($Kontrola) { Write-Host "  [nanečisto] odebral by úlohu $u" -ForegroundColor DarkGray; continue }
             Unregister-ScheduledTask -TaskName $u -Confirm:$false
             Write-Host "  Odebrána úloha $u"
         }
@@ -49,10 +56,26 @@ if ($Odinstalovat) {
     exit 0
 }
 
-Write-Host "Instalace FlatMonitoring" -ForegroundColor Cyan
+Write-Host $(if ($Kontrola) { "Kontrola instalace (nanečisto)" } else { "Instalace FlatMonitoring" }) -ForegroundColor Cyan
 Write-Host ("=" * 40)
 Write-Host "  Projekt: $Projekt"
 Write-Host "  Port:    $Port"
+
+# Úlohy se zakládají pod účtem, který skript spouští. Když si někdo otevře
+# PowerShell jako JINÝ správce, úloha by vznikla pod ním a uživateli by nenaskočila.
+try {
+    $jeSpravce = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
+                 ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+} catch {
+    $jeSpravce = $false   # zjištění se nepovedlo; není důvod kvůli tomu instalaci zastavit
+}
+if ($jeSpravce) {
+    Write-Host "  Účet:    $env:USERNAME (se zvýšenými právy)" -ForegroundColor Yellow
+    Write-Host "           Úlohy poběží pod tímto účtem. Pokud běžně pracuješ pod jiným," -ForegroundColor Yellow
+    Write-Host "           spusť skript znovu z normálního PowerShellu — práva správce nejsou potřeba." -ForegroundColor Yellow
+} else {
+    Write-Host "  Účet:    $env:USERNAME"
+}
 
 # --- Kontrola prostředí ---
 $npm = (Get-Command npm.cmd -ErrorAction SilentlyContinue).Source
@@ -74,7 +97,9 @@ if (-not (Test-Path (Join-Path $Projekt ".next"))) {
     Write-Warning "Aplikace není sestavená. Nejdřív spusť: npm run build"
 }
 
-New-Item -ItemType Directory -Force -Path (Join-Path $Projekt "logs") | Out-Null
+if (-not $Kontrola) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $Projekt "logs") | Out-Null
+}
 
 # Staré úlohy pryč, ať je instalace opakovatelná
 Odeber-Ulohy
@@ -108,6 +133,12 @@ function Nova-Uloha {
             -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2)
     }
 
+    if ($Kontrola) {
+        Write-Host "  [nanečisto] vytvořil by úlohu $Nazev" -ForegroundColor DarkGray
+        Write-Host "              $($akce.Execute) $($akce.Arguments)" -ForegroundColor DarkGray
+        return
+    }
+
     Register-ScheduledTask -TaskName $Nazev -Action $akce -Trigger $Spousteni `
         -Settings $nastaveni -User $uzivatel -RunLevel Limited -Description $Popis | Out-Null
 
@@ -134,6 +165,11 @@ Nova-Uloha -Nazev "FlatMonitoring-Backup" `
     -Popis "Denní záloha databáze"
 
 Write-Host ""
+if ($Kontrola) {
+    Write-Host "Kontrola hotová — nic se nezměnilo." -ForegroundColor Green
+    Write-Host "Pro skutečnou instalaci spusť skript bez -Kontrola."
+    exit 0
+}
 Write-Host "Hotovo." -ForegroundColor Green
 Write-Host @"
 

@@ -69,11 +69,13 @@ v adresáři `deploy/` připravené konfigurace.
 
 #### Windows
 
-Otevři **PowerShell jako správce** v adresáři projektu a spusť:
+V adresáři projektu otevři PowerShell — **práva správce nejsou potřeba**, úlohy
+se zakládají pod tvým vlastním účtem. Nejdřív se podívej, co skript udělá:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
-.\deploy\windows-install.ps1
+.\deploy\windows-install.ps1 -Kontrola    # nanečisto, nic nezmění
+.\deploy\windows-install.ps1              # ostrá instalace
 ```
 
 Skript založí tři naplánované úlohy:
@@ -92,8 +94,9 @@ Get-Content logs\app.log -Wait        # co dělá
 Get-ScheduledTask FlatMonitoring*      # přehled úloh
 ```
 
-Jiný port: `.\deploy\windows-install.ps1 -Port 8080`
+Jiný port: `.\deploy\windows-install.ps1 -Port 8080`.
 Odinstalace: `.\deploy\windows-install.ps1 -Odinstalovat` (data zůstanou).
+Skript je idempotentní — při opakovaném spuštění staré úlohy nejdřív odebere.
 
 Úlohy běží **pod tvým účtem**, takže aplikace jede jen když jsi přihlášený.
 Má-li běžet i po odhlášení, použij místo toho [NSSM](https://nssm.cc), který
