@@ -21,7 +21,9 @@ async function main() {
 
   const prisma = new PrismaClient();
   try {
-    await prisma.$executeRawUnsafe(`VACUUM INTO '${target.replace(/'/g, "''")}'`);
+    // SQLite bere i na Windows lomítka dopředu; zpětná by v řetězci dělala potíže.
+    const sqlPath = target.replace(/\\/g, "/").replace(/'/g, "''");
+    await prisma.$executeRawUnsafe(`VACUUM INTO '${sqlPath}'`);
     const kb = (statSync(target).size / 1024).toFixed(0);
     console.log(`Záloha uložena: ${target} (${kb} kB)`);
   } finally {

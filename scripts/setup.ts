@@ -16,8 +16,18 @@ function step(n: number, text: string) {
   console.log(`\n[${n}/4] ${text}`);
 }
 
+const isWindows = process.platform === "win32";
+
+/**
+ * Na Windows je npx ve skutecnosti npx.cmd a Node od verze 18.20 odmita
+ * spustit .cmd bez shellu (oprava CVE-2024-27980). Proto tam spoustime pres shell.
+ */
 function run(cmd: string, args: string[]) {
-  execFileSync(cmd, args, { stdio: "inherit", cwd: root });
+  execFileSync(isWindows ? `${cmd}.cmd` : cmd, args, {
+    stdio: "inherit",
+    cwd: root,
+    shell: isWindows,
+  });
 }
 
 interface Credentials { email: string; name: string; password: string }

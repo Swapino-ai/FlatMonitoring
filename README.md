@@ -39,6 +39,13 @@ Neinteraktivně (např. z vlastního skriptu):
 FM_EMAIL=ty@example.com FM_NAME="Tvoje jméno" FM_PASSWORD='silneheslo' npm run setup
 ```
 
+Totéž v PowerShellu:
+
+```powershell
+$env:FM_EMAIL="ty@example.com"; $env:FM_NAME="Tvoje jméno"; $env:FM_PASSWORD="silneheslo"
+npm run setup
+```
+
 ### 2. Spuštění
 
 ```bash
@@ -58,9 +65,53 @@ Seed vytvoří i účty `majitel@example.com` a `partner@example.com` s heslem
 ### 3. Ať to běží pořád
 
 Samotné `npm start` skončí, jakmile zavřeš terminál. Pro trvalý běh jsou
-v adresáři `deploy/` připravené konfigurace — v obou stačí přepsat `CHANGE_ME`:
+v adresáři `deploy/` připravené konfigurace.
 
-**Linux (systemd):**
+#### Windows
+
+Otevři **PowerShell jako správce** v adresáři projektu a spusť:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass -Force
+.\deploy\windows-install.ps1
+```
+
+Skript založí tři naplánované úlohy:
+
+| Úloha | Co dělá | Kdy |
+|---|---|---|
+| `FlatMonitoring` | spustí aplikaci | po přihlášení, bez časového limitu |
+| `FlatMonitoring-Scan` | sken trhu | každé 4 týdny, pondělí 4:00 |
+| `FlatMonitoring-Backup` | záloha databáze | denně 3:00 |
+
+Aplikace naskočí po příštím přihlášení, nebo hned:
+
+```powershell
+Start-ScheduledTask -TaskName FlatMonitoring
+Get-Content logs\app.log -Wait        # co dělá
+Get-ScheduledTask FlatMonitoring*      # přehled úloh
+```
+
+Jiný port: `.\deploy\windows-install.ps1 -Port 8080`
+Odinstalace: `.\deploy\windows-install.ps1 -Odinstalovat` (data zůstanou).
+
+Úlohy běží **pod tvým účtem**, takže aplikace jede jen když jsi přihlášený.
+Má-li běžet i po odhlášení, použij místo toho [NSSM](https://nssm.cc), který
+z aplikace udělá skutečnou službu Windows:
+
+```powershell
+nssm install FlatMonitoring "C:\Program Files\nodejs\npm.cmd" start
+nssm set FlatMonitoring AppDirectory C:\cesta\k\FlatMonitoring
+nssm start FlatMonitoring
+```
+
+> **Pozor na spánek.** Když počítač usne, aplikace neodpovídá a partner se
+> nepřipojí. Má-li to běžet spolehlivě, nastav v Možnostech napájení režim spánku
+> na „Nikdy“ — nebo to nech na starém notebooku či mini PC, které je pořád vzhůru.
+
+#### Linux (systemd)
+
+V souborech přepiš `CHANGE_ME` za své uživatelské jméno:
 
 ```bash
 sudo cp deploy/flatmonitoring.service /etc/systemd/system/
@@ -69,16 +120,13 @@ sudo systemctl enable --now flatmonitoring
 journalctl -u flatmonitoring -f
 ```
 
-**macOS (launchd):**
+#### macOS (launchd)
 
 ```bash
 mkdir -p logs
 cp deploy/com.flatmonitoring.app.plist ~/Library/LaunchAgents/
 launchctl load ~/Library/LaunchAgents/com.flatmonitoring.app.plist
 ```
-
-**Windows:** nejjednodušší je [NSSM](https://nssm.cc) — `nssm install FlatMonitoring`,
-jako program zadej cestu k `npm.cmd`, argument `start` a pracovní adresář projektu.
 
 ### 4. Přístup pro obchodního partnera
 
@@ -104,6 +152,9 @@ Nechceš-li řešit síť vůbec, funguje i nejjednodušší cesta: v sekci Repo
 vygeneruj PDF a pošli ho e-mailem. Partner nepotřebuje vůbec nic.
 
 ### 5. Automatický provoz
+
+Na Windows to už zařídil `windows-install.ps1` (viz krok 3) — tahle sekce je
+pro Linux a macOS.
 
 Měsíční sken trhu a denní záloha. Na Linuxu systemd timerem:
 
@@ -138,7 +189,16 @@ git pull
 npm install
 npm run db:push        # promítne případné změny schématu
 npm run build
-sudo systemctl restart flatmonitoring
+```
+
+Pak restartuj běžící aplikaci:
+
+```powershell
+Restart-ScheduledTask -TaskName FlatMonitoring     # Windows
+```
+```bash
+sudo systemctl restart flatmonitoring              # Linux
+launchctl kickstart -k gui/$UID/com.flatmonitoring.app   # macOS
 ```
 
 ---
@@ -231,7 +291,7 @@ scripts/setup.ts         první spuštění (idempotentní)
 scripts/market-scan.ts   měsíční sken trhu pro cron
 scripts/backup.ts        konzistentní záloha databáze
 scripts/user.ts          správa uživatelů
-deploy/                  systemd a launchd konfigurace
+deploy/                  windows-install.ps1, systemd unit, launchd plist
 data/data.db             celá databáze — jediný soubor, který je potřeba zálohovat
 ```
 
