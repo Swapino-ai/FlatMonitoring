@@ -206,6 +206,64 @@ launchctl kickstart -k gui/$UID/com.flatmonitoring.app   # macOS
 
 ---
 
+## Když instalace na Windows selže
+
+### `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` při `npm install`
+
+Firemní síť nebo antivirus (Zscaler, Netskope, ESET, Kaspersky…) rozšifrovává
+HTTPS a podepisuje ho vlastní certifikační autoritou. Windows jí věří, Node.js
+ale ne — má vlastní seznam autorit.
+
+Správné řešení je říct Node.js, ať použije úložiště certifikátů Windows, kde
+firemní autorita už je:
+
+```powershell
+$env:NODE_OPTIONS = "--use-system-ca"
+npm install
+```
+
+Funguje od Node.js 22.15. Když to pomůže, nastav to natrvalo:
+
+```powershell
+[Environment]::SetEnvironmentVariable("NODE_OPTIONS", "--use-system-ca", "User")
+```
+
+Na starším Node.js vyexportuj firemní autoritu (Správce certifikátů →
+Důvěryhodné kořenové certifikační autority → ta firemní → Exportovat jako
+Base-64 `.cer`) a ukaž na ni:
+
+```powershell
+$env:NODE_EXTRA_CA_CERTS = "C:\certy\firemni-ca.cer"
+npm install
+```
+
+**Vypnutí kontroly (`npm config set strict-ssl false`) je až poslední možnost.**
+Tím přestaneš ověřovat, s kým vlastně mluvíš, a to při stahování kódu, který
+se ti pak spustí na počítači. Když to uděláš, hned po instalaci to vrať zpět:
+`npm config delete strict-ssl`.
+
+### `EPERM: operation not permitted, rmdir` v `node_modules`
+
+Projekt leží ve složce, kterou synchronizuje Google Drive, OneDrive nebo
+Dropbox. Ty drží soubory otevřené a npm je pak nemůže přepsat.
+
+**Přesuň projekt na lokální disk** — třeba `C:\Users\<ty>\Documents\FlatMonitoring`.
+Není to jen kvůli téhle chybě:
+
+- `node_modules` má desítky tisíc souborů. Synchronizace je bude přenášet donekonečna.
+- **Databáze v synchronizované složce se může poškodit.** SQLite do souboru zapisuje
+  po částech; když ho synchronizace popadne uprostřed zápisu, nahraje rozbitý stav.
+- Data z aplikace by se tím dostala do cloudu — což je přesně to, čemu se lokální
+  běh vyhýbá.
+
+Zálohy si do cloudu klidně posílej, ty jsou konzistentní:
+
+```powershell
+npm run backup -- "G:\My Drive\zalohy\flatmonitoring.db"
+```
+
+---
+
 ## Měsíční sken trhu
 
 Sken stahuje nabídky ze Sreality a Bezrealitek, spočítá medián ceny za m² u
