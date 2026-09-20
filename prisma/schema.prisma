@@ -6,8 +6,11 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider = "postgresql"
+  // Neon: sdruzene pripojeni pres pooler — to pouziva bezici aplikace.
+  url       = env("DATABASE_URL")
+  // Prime pripojeni — migrace a `prisma db push` pres pooler neprojdou.
+  directUrl = env("DIRECT_URL")
 }
 
 /// Uzivatele: OWNER = plny pristup, PARTNER = read-only (obchodni partner)

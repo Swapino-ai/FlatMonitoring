@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
 import { createSession, getSession, verifyCredentials } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   if (await getSession()) redirect("/");
+  // Prazdna databaze — posleme uzivatele rovnou zalozit prvni ucet
+  if ((await prisma.user.count()) === 0) redirect("/setup");
   const { error } = await searchParams;
 
   async function login(formData: FormData) {

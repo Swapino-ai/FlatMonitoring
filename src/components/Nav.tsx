@@ -13,6 +13,8 @@ const LINKS = [
   { href: "/reports", label: "Reporty" },
 ];
 
+const OWNER_LINKS = [{ href: "/users", label: "Uživatelé" }];
+
 export function Nav({ user }: { user: { name: string; role: string } }) {
   const pathname = usePathname();
 
@@ -25,7 +27,7 @@ export function Nav({ user }: { user: { name: string; role: string } }) {
         </Link>
 
         <nav className="flex flex-1 items-center gap-0.5 overflow-x-auto">
-          {LINKS.map((l) => {
+          {[...LINKS, ...(user.role === "OWNER" ? OWNER_LINKS : [])].map((l) => {
             const active = l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
             return (
               <Link

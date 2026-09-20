@@ -1,7 +1,7 @@
 # FlatMonitoring
 
-Přehled nemovitostního portfolia pro soukromého investora do bytů. Běží lokálně,
-data zůstávají na tvém počítači v jednom SQLite souboru.
+Přehled nemovitostního portfolia pro soukromého investora do bytů.
+Běží na Vercelu, data v Postgresu na Neonu.
 
 Odpovídá na čtyři otázky:
 
@@ -14,305 +14,105 @@ Odpovídá na čtyři otázky:
 
 ## Nasazení
 
-Aplikace je zamýšlená tak, že běží **na tvém počítači nebo na domácím serveru**,
-ne v cloudu. Data neopouštějí tvůj stroj.
+Celé to proběhne v prohlížeči. **Na svém počítači nemusíš nic instalovat** —
+žádný Node.js, žádný Git.
 
-Potřebuješ jen **Node.js 20 nebo novější** ([nodejs.org](https://nodejs.org)).
-Nic dalšího — databáze je soubor, žádný databázový server se neinstaluje.
+### 1. Databáze na Neonu
 
-### 1. Instalace
+1. Jdi na [neon.tech](https://neon.tech) a zaregistruj se (nejrychleji přes GitHub).
+2. **Create project.** Jméno třeba `flatmonitoring`, region **Europe (Frankfurt)** —
+   je nejblíž a aplikace pak odpovídá rychleji.
+3. Po vytvoření se objeví **Connection string**. Potřebuješ z něj **dva tvary**:
 
-```bash
-git clone https://github.com/Swapino-ai/FlatMonitoring.git
-cd FlatMonitoring
-npm install
-npm run setup
-```
+   - **Pooled connection** — v adrese je `-pooler`. Tohle je `DATABASE_URL`.
+     Na konec připoj `&pgbouncer=true`, jinak Prisma selže na prepared statements:
+     ```
+     postgresql://...@ep-neco-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require&pgbouncer=true
+     ```
+   - **Direct connection** — tentýž řetězec **bez** `-pooler`. Tohle je `DIRECT_URL`.
+     Používá se jen při nahrávání schématu.
+     ```
+     postgresql://...@ep-neco.eu-central-1.aws.neon.tech/neondb?sslmode=require
+     ```
 
-`npm run setup` je idempotentní — vygeneruje `.env` s náhodným podpisovým klíčem,
-založí databázi v `data/data.db`, zeptá se na tvůj účet a stáhne Chromium pro PDF.
-Když něco už existuje, nechá to být, takže ho můžeš klidně spustit znovu.
+   V Neonu se mezi nimi přepíná přepínačem **Connection pooling** u connection stringu.
 
-Neinteraktivně (např. z vlastního skriptu):
+4. Oba si někam zkopíruj. **Jsou to hesla k tvým datům** — neposílej je e-mailem ani do chatu.
 
-```bash
-FM_EMAIL=ty@example.com FM_NAME="Tvoje jméno" FM_PASSWORD='silneheslo' npm run setup
-```
+### 2. Klíč pro podpis přihlášení
 
-Totéž v PowerShellu:
+Aplikace potřebuje náhodný tajný klíč (`AUTH_SECRET`). Vygeneruj si ho třeba
+na [generate-secret.vercel.app/32](https://generate-secret.vercel.app/32) — je to jen
+náhodný řetězec, nikde se neregistruje.
 
-```powershell
-$env:FM_EMAIL="ty@example.com"; $env:FM_NAME="Tvoje jméno"; $env:FM_PASSWORD="silneheslo"
-npm run setup
-```
+### 3. Nasazení na Vercel
 
-### 2. Spuštění
+1. Jdi na [vercel.com](https://vercel.com), přihlas se GitHubem.
+2. **Add New → Project** a vyber repozitář `FlatMonitoring`.
+3. Než dáš Deploy, rozbal **Environment Variables** a vlož tři položky:
 
-```bash
-npm run build
-npm start                     # http://localhost:3000
-```
+   | Název | Hodnota |
+   |---|---|
+   | `DATABASE_URL` | pooled řetězec z Neonu (ten s `-pooler` a `&pgbouncer=true`) |
+   | `DIRECT_URL` | direct řetězec z Neonu (bez `-pooler`) |
+   | `AUTH_SECRET` | náhodný klíč z kroku 2 |
 
-Chceš si to nejdřív osahat na ukázkových datech?
+4. **Deploy.** Build zároveň nahraje schéma do Neonu, takže nemusíš spouštět nic ručně.
 
-```bash
-npm run db:seed               # tři byty, úvěry, dva roky transakcí
-```
+### 4. První účet
 
-Seed vytvoří i účty `majitel@example.com` a `partner@example.com` s heslem
-`heslo123`. **Než tam dáš ostrá data, smaž je** (`npm run user -- rm ...`).
+Otevři adresu, kterou ti Vercel dal (`neco.vercel.app`). Protože je databáze
+prázdná, aplikace tě sama pustí na stránku **První spuštění** — vyplň e-mail a heslo
+a jsi uvnitř. Jakmile účet vznikne, tahle stránka se zavře a už se k ní nikdo nedostane.
 
-### 3. Ať to běží pořád
+### 5. Účet pro obchodního partnera
 
-Samotné `npm start` skončí, jakmile zavřeš terminál. Pro trvalý běh jsou
-v adresáři `deploy/` připravené konfigurace.
+V aplikaci jdi na **Uživatelé → Přidat účet** a zvol roli **Jen pro čtení**.
+Partner uvidí čísla i reporty, ale nic nezmění a sken trhu nespustí.
 
-#### Windows
+Pak mu pošleš adresu aplikace a přihlašovací údaje — heslo ideálně jinou cestou
+než ten odkaz. Žádné tunely, žádná nastavení routeru, funguje to odkudkoli.
 
-V adresáři projektu otevři PowerShell — **práva správce nejsou potřeba**, úlohy
-se zakládají pod tvým vlastním účtem. Nejdřív se podívej, co skript udělá:
+### 6. Měsíční sken trhu
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass -Force
-.\deploy\windows-install.ps1 -Kontrola    # nanečisto, nic nezmění
-.\deploy\windows-install.ps1              # ostrá instalace
-```
+Sken běží přes GitHub Actions, ne na Vercelu — mezi dotazy záměrně čeká, aby
+portály nezatěžoval, a do časového limitu serverless funkce by se nevešel.
 
-Skript založí tři naplánované úlohy:
+V repozitáři na GitHubu: **Settings → Secrets and variables → Actions →
+New repository secret** a přidej `DATABASE_URL` a `DIRECT_URL` (stejné hodnoty
+jako na Vercelu).
 
-| Úloha | Co dělá | Kdy |
-|---|---|---|
-| `FlatMonitoring` | spustí aplikaci | po přihlášení, bez časového limitu |
-| `FlatMonitoring-Scan` | sken trhu | každé 4 týdny, pondělí 4:00 |
-| `FlatMonitoring-Backup` | záloha databáze | denně 3:00 |
-
-Aplikace naskočí po příštím přihlášení, nebo hned:
-
-```powershell
-Start-ScheduledTask -TaskName FlatMonitoring
-Get-Content logs\app.log -Wait        # co dělá
-Get-ScheduledTask FlatMonitoring*      # přehled úloh
-```
-
-Jiný port: `.\deploy\windows-install.ps1 -Port 8080`.
-Odinstalace: `.\deploy\windows-install.ps1 -Odinstalovat` (data zůstanou).
-Skript je idempotentní — při opakovaném spuštění staré úlohy nejdřív odebere.
-
-Úlohy běží **pod tvým účtem**, takže aplikace jede jen když jsi přihlášený.
-Má-li běžet i po odhlášení, použij místo toho [NSSM](https://nssm.cc), který
-z aplikace udělá skutečnou službu Windows:
-
-```powershell
-nssm install FlatMonitoring "C:\Program Files\nodejs\npm.cmd" start
-nssm set FlatMonitoring AppDirectory C:\cesta\k\FlatMonitoring
-nssm start FlatMonitoring
-```
-
-> **Pozor na spánek.** Když počítač usne, aplikace neodpovídá a partner se
-> nepřipojí. Má-li to běžet spolehlivě, nastav v Možnostech napájení režim spánku
-> na „Nikdy“ — nebo to nech na starém notebooku či mini PC, které je pořád vzhůru.
-
-#### Linux (systemd)
-
-V souborech přepiš `CHANGE_ME` za své uživatelské jméno:
-
-```bash
-sudo cp deploy/flatmonitoring.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now flatmonitoring
-journalctl -u flatmonitoring -f
-```
-
-#### macOS (launchd)
-
-```bash
-mkdir -p logs
-cp deploy/com.flatmonitoring.app.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.flatmonitoring.app.plist
-```
-
-### 4. Přístup pro obchodního partnera
-
-Založ mu účet v režimu jen pro čtení — vidí čísla i reporty, ale nemůže nic měnit
-ani spustit sken:
-
-```bash
-npm run user -- add partner@example.com "Obchodní partner" PARTNER
-```
-
-**Aplikaci nikdy nevystavuj přímo na veřejnou IP ani neotevírej port na routeru.**
-Použij tunel, který provoz šifruje a nevystaví tvou domácí síť:
-
-```bash
-# Tailscale — partner musí být ve tvé tailnet síti. Nejbezpečnější varianta.
-tailscale serve 3000
-
-# Cloudflare Tunnel — veřejná HTTPS adresa, přístup pořád chrání přihlášení.
-cloudflared tunnel --url http://localhost:3000
-```
-
-Nechceš-li řešit síť vůbec, funguje i nejjednodušší cesta: v sekci Reporty
-vygeneruj PDF a pošli ho e-mailem. Partner nepotřebuje vůbec nic.
-
-### 5. Automatický provoz
-
-Na Windows to už zařídil `windows-install.ps1` (viz krok 3) — tahle sekce je
-pro Linux a macOS.
-
-Měsíční sken trhu a denní záloha. Na Linuxu systemd timerem:
-
-```bash
-sudo cp deploy/flatmonitoring-scan.service deploy/flatmonitoring.timer /etc/systemd/system/
-sudo systemctl enable --now flatmonitoring.timer
-```
-
-Nebo prostým cronem:
-
-```cron
-0 4 1 * * cd /cesta/k/FlatMonitoring && /usr/bin/npm run market:scan >> logs/market.log 2>&1
-0 3 * * * cd /cesta/k/FlatMonitoring && /usr/bin/npm run backup >> logs/backup.log 2>&1
-```
-
-### 6. Zálohování
-
-```bash
-npm run backup                      # zalohy/data-2026-09-17.db
-npm run backup -- /Volumes/disk/fm.db
-```
-
-Používá `VACUUM INTO`, takže záloha je konzistentní i za běhu aplikace — na rozdíl
-od prostého kopírování souboru. Posledních 30 záloh si nechá, starší maže.
-
-Obnova je prosté přejmenování zpátky na `data/data.db` (aplikaci předtím zastav).
-
-### Aktualizace
-
-```bash
-git pull
-npm install
-npm run db:push        # promítne případné změny schématu
-npm run build
-```
-
-Pak restartuj běžící aplikaci:
-
-```powershell
-Restart-ScheduledTask -TaskName FlatMonitoring     # Windows
-```
-```bash
-sudo systemctl restart flatmonitoring              # Linux
-launchctl kickstart -k gui/$UID/com.flatmonitoring.app   # macOS
-```
+Pak se sken spustí 1. den v měsíci sám. Ručně ho pustíš v záložce **Actions →
+Měsíční sken trhu → Run workflow**. Ten samý běh po sobě uloží i zálohu dat
+jako artefakt ke stažení.
 
 ---
 
-## Když instalace na Windows selže
+## Zálohování
 
-### `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` při `npm install`
+Neon sám drží historii změn (na free tieru 24 hodin), takže drobný omyl se dá
+vrátit z jeho konzole. Pro vlastní kopii dat slouží export do JSON:
 
-Firemní síť nebo antivirus (Zscaler, Netskope, ESET, Kaspersky…) rozšifrovává
-HTTPS a podepisuje ho vlastní certifikační autoritou. Windows jí věří, Node.js
-ale ne — má vlastní seznam autorit.
-
-Správné řešení je říct Node.js, ať použije úložiště certifikátů Windows, kde
-firemní autorita už je:
-
-```powershell
-$env:NODE_OPTIONS = "--use-system-ca"
-npm install
+```bash
+npm run backup                        # zalohy/flatmonitoring-2026-09-20.json
+npm run restore -- zalohy/soubor.json # POZOR: přepíše všechna data
 ```
 
-Funguje od Node.js 22.15. Když to pomůže, nastav to natrvalo:
-
-```powershell
-[Environment]::SetEnvironmentVariable("NODE_OPTIONS", "--use-system-ca", "User")
-```
-
-Na starším Node.js vyexportuj firemní autoritu (Správce certifikátů →
-Důvěryhodné kořenové certifikační autority → ta firemní → Exportovat jako
-Base-64 `.cer`) a ukaž na ni:
-
-```powershell
-$env:NODE_EXTRA_CA_CERTS = "C:\certy\firemni-ca.cer"
-npm install
-```
-
-**Vypnutí kontroly (`npm config set strict-ssl false`) je až poslední možnost.**
-Tím přestaneš ověřovat, s kým vlastně mluvíš, a to při stahování kódu, který
-se ti pak spustí na počítači. Když to uděláš, hned po instalaci to vrať zpět:
-`npm config delete strict-ssl`.
-
-### `EPERM: operation not permitted, rmdir` v `node_modules`
-
-Projekt leží ve složce, kterou synchronizuje Google Drive, OneDrive nebo
-Dropbox. Ty drží soubory otevřené a npm je pak nemůže přepsat.
-
-**Přesuň projekt na lokální disk** — třeba `C:\Users\<ty>\Documents\FlatMonitoring`.
-Není to jen kvůli téhle chybě:
-
-- `node_modules` má desítky tisíc souborů. Synchronizace je bude přenášet donekonečna.
-- **Databáze v synchronizované složce se může poškodit.** SQLite do souboru zapisuje
-  po částech; když ho synchronizace popadne uprostřed zápisu, nahraje rozbitý stav.
-- Data z aplikace by se tím dostala do cloudu — což je přesně to, čemu se lokální
-  běh vyhýbá.
-
-Zálohy si do cloudu klidně posílej, ty jsou konzistentní:
-
-```powershell
-npm run backup -- "G:\My Drive\zalohy\flatmonitoring.db"
-```
+Export je nezávislý na databázi — nepotřebuje `pg_dump` a dá se z něj obnovit
+i do úplně nové databáze. Měsíční běh na GitHubu ho dělá automaticky a nechává
+ho 90 dní jako artefakt.
 
 ---
 
-## Měsíční sken trhu
+## PDF pro partnera
 
-Sken stahuje nabídky ze Sreality a Bezrealitek, spočítá medián ceny za m² u
-srovnatelných bytů (stejné město, dispozice, plocha ±25 %) a z něj odhadne
-hodnotu tvých bytů.
+V sekci Reporty si vyklikáš rok a sekce a dáš **Vytisknout do PDF**. Otevře se
+tisková verze a rovnou tiskový dialog prohlížeče — v něm zvol **Uložit jako PDF**.
 
-```bash
-npm run market:scan
-```
-
-Měsíčně přes cron (1. den ve 4:00):
-
-```cron
-0 4 1 * * cd /cesta/k/flatmonitoring && /usr/bin/npm run market:scan >> logs/market.log 2>&1
-```
-
-Nebo jednorázově tlačítkem v sekci Trh.
-
-**Na co si dát pozor:**
-
-- Jde o **nabídkové** ceny. Realizované bývají o 5–10 % nižší — ber odhad jako horní hranici.
-- Při méně než třech srovnatelných nabídkách se odhad nepočítá. Raději žádné číslo než nedůvěryhodné.
-- Portály nemají veřejné API pro tento účel a mění strukturu stránek. Když se sken
-  rozbije, uloží se jako `FAILED` s popisem chyby (viditelné v sekci Trh) a
-  **poslední platné ocenění zůstane nedotčené**. Aplikace kvůli tomu nespadne.
-- Sken chodí pomalu a po jednom dotazu na kombinaci město+dispozice, aby portály zbytečně nezatěžoval.
-
-Pokud scraping přestane fungovat, zadej hodnotu ručně jako ocenění typu `MANUAL`
-nebo `EXPERT` — zbytek aplikace funguje dál beze změny.
-
----
-
-## PDF export
-
-PDF se generuje tak, že headless Chromium vytiskne stránku `/report`. Díky tomu
-vypadá PDF stejně jako aplikace a není potřeba udržovat druhou šablonu.
-
-Chromium si Playwright stáhne sám:
-
-```bash
-npx playwright install chromium
-```
-
-Máš-li už Chrome nebo Chromium v systému, ukaž na něj a stahování přeskočíš:
-
-```bash
-# .env
-CHROMIUM_PATH="/usr/bin/chromium"
-```
+Na Vercelu se PDF nevyrábí na serveru: bezhlavý Chromium se do serverless funkce
+nevejde. Výsledek je ale stejný, protože tisková verze používá tytéž styly.
+Při vlastním hostování (viz níže) stačí nastavit `CHROMIUM_PATH` a tlačítko začne
+stahovat hotové PDF jedním klikem.
 
 ---
 
@@ -337,6 +137,74 @@ podnikání, dílčí základy se sčítají a slevu na poplatníka lze uplatnit
 
 ---
 
+## Sken trhu — na co si dát pozor
+
+Sken stahuje nabídky ze Sreality a Bezrealitek, spočítá medián ceny za m² u
+srovnatelných bytů (stejné město, dispozice, plocha ±25 %) a z něj odhadne
+hodnotu tvých bytů.
+
+- Jde o **nabídkové** ceny. Realizované bývají o 5–10 % nižší — ber odhad jako horní hranici.
+- Při méně než třech srovnatelných nabídkách se odhad nepočítá. Raději žádné číslo než nedůvěryhodné.
+- Portály nemají veřejné API a mění strukturu stránek. Když se sken rozbije, uloží se
+  jako `FAILED` s popisem chyby (vidíš to v sekci Trh) a **poslední platné ocenění
+  zůstane nedotčené**.
+- Portály občas blokují požadavky z datových center. Když sken z GitHubu nic nevrátí,
+  spusť ho ze svého počítače, nebo zadej hodnotu ručně jako ocenění typu `MANUAL`.
+
+---
+
+## Práce s projektem lokálně
+
+Pro vývoj nebo vlastní hostování. Potřebuješ Node.js 20+.
+
+```bash
+git clone https://github.com/Swapino-ai/FlatMonitoring.git
+cd FlatMonitoring
+npm install
+cp .env.example .env     # doplň DATABASE_URL, DIRECT_URL, AUTH_SECRET
+npm run setup
+npm run dev
+```
+
+Uživatele spravuj v aplikaci (sekce **Uživatelé**). Z příkazové řádky to jde taky,
+když se nemůžeš přihlásit:
+
+```bash
+npm run user -- list
+npm run user -- add partner@example.com "Obchodní partner" PARTNER
+npm run user -- passwd partner@example.com
+```
+
+Ukázková data (tři byty, hypotéky, dva roky pohybů):
+
+```bash
+npm run db:seed          # POZOR: smaže současný obsah databáze
+```
+
+V `deploy/` jsou konfigurace pro vlastní hostování — systemd, launchd
+a `windows-install.ps1` pro Plánovač úloh Windows.
+
+### Když `npm install` selže na certifikátu
+
+`UNABLE_TO_GET_ISSUER_CERT_LOCALLY` znamená, že firemní síť nebo antivirus
+rozšifrovává HTTPS vlastní certifikační autoritou. Windows jí věří, Node.js ne.
+
+```powershell
+$env:NODE_OPTIONS = "--use-system-ca"   # Node.js 22.15+
+npm install
+```
+
+Vypnutí kontroly (`npm config set strict-ssl false`) je až poslední možnost —
+přestaneš tím ověřovat, odkud se ti stahuje kód, který se pak spustí.
+
+### Nedávej projekt do Google Drivu ani OneDrivu
+
+Synchronizace drží soubory otevřené, `npm install` pak hlásí `EPERM`
+a `node_modules` s desítkami tisíc souborů se bude přenášet donekonečna.
+Dej projekt na lokální disk.
+
+---
+
 ## Struktura
 
 ```
@@ -346,27 +214,18 @@ src/lib/tax.ts           odpisy a daň z příjmu z nájmu dle české legislati
 src/lib/portfolio.ts     agregace — z databáze na ukazatele
 src/lib/savings.ts       hledání úspor z hromadného vyjednávání
 src/lib/market/          scrapery portálů a oceňování z trhu
-src/lib/pdf.ts           tisk reportu přes headless Chromium
+src/app/setup/           založení prvního účtu při prázdné databázi
+src/app/users/           správa účtů pro majitele
 src/app/report/          tisková verze reportu (zdroj PDF)
-scripts/setup.ts         první spuštění (idempotentní)
-scripts/market-scan.ts   měsíční sken trhu pro cron
-scripts/backup.ts        konzistentní záloha databáze
-scripts/user.ts          správa uživatelů
-deploy/                  windows-install.ps1, systemd unit, launchd plist
-data/data.db             celá databáze — jediný soubor, který je potřeba zálohovat
+scripts/backup.ts        export dat do JSON
+scripts/restore.ts       obnova ze zálohy
+.github/workflows/       měsíční sken trhu a záloha
 ```
-
-## Kam se ukládají data
-
-Celá databáze je jeden soubor: **`data/data.db`**. Zálohuj přes `npm run backup`
-(viz výše), ne kopírováním za běhu.
-
-`.env`, `data/` a `zalohy/` jsou v `.gitignore` — do gitu se nikdy nedostanou.
 
 ---
 
 ## Co aplikace záměrně nedělá
 
 - **Negeneruje XML pro finanční správu.** Dává čísla, která do přiznání opíšeš nebo předáš účetní.
-- **Nenapojuje se na bankovní účet.** Transakce se zadávají ručně nebo importem.
+- **Nenapojuje se na bankovní účet.** Transakce se zadávají ručně.
 - **Nepočítá DPH ani příjmy podle § 7.** Míří na fyzickou osobu pronajímající byty dle § 9.

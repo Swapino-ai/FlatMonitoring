@@ -1,13 +1,22 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { renderReportPdf } from "@/lib/pdf";
+import { canRenderPdfOnServer } from "@/lib/runtime";
 
 export const maxDuration = 120;
 
 export async function GET(request: Request) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: "Nepřihlášen" }, { status: 401 });
+
+  if (!canRenderPdfOnServer) {
+    // V serverless prostredi Chromium nespustime. Klient v takovem pripade
+    // otevre tiskovou verzi a necha PDF vyrobit prohlizec.
+    return NextResponse.json(
+      { error: "V tomto prostředí server PDF negeneruje. Použij tiskovou verzi reportu.", usePrint: true },
+      { status: 501 },
+    );
+  }
 
   const url = new URL(request.url);
   const year = url.searchParams.get("rok") ?? String(new Date().getFullYear());
@@ -21,6 +30,7 @@ export async function GET(request: Request) {
   if (!sessionCookie) return NextResponse.json({ error: "Chybí session" }, { status: 401 });
 
   try {
+    const { renderReportPdf } = await import("@/lib/pdf");
     const pdf = await renderReportPdf({
       url: reportUrl.toString(),
       cookie: {

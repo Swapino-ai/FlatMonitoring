@@ -11,7 +11,7 @@ const SECTIONS = [
   { key: "dane", label: "Daňový podklad", desc: "Rozpis dle § 9 ZDP, porovnání paušálu a skutečných výdajů" },
 ];
 
-export function ReportBuilder({ currentYear }: { currentYear: number }) {
+export function ReportBuilder({ currentYear, serverPdf }: { currentYear: number; serverPdf: boolean }) {
   const [selected, setSelected] = useState<string[]>(SECTIONS.map((s) => s.key));
   const [year, setYear] = useState(currentYear);
   const [state, setState] = useState<"idle" | "working" | "error">("idle");
@@ -23,13 +23,22 @@ export function ReportBuilder({ currentYear }: { currentYear: number }) {
     setSelected((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
   }
 
+  /** Otevre tiskovou verzi, ktera si sama vyvola tiskovy dialog prohlizece. */
+  function openPrintView() {
+    window.open(`/report?${query}&tisk=1`, "_blank", "noopener");
+  }
+
   async function download() {
+    if (!serverPdf) return openPrintView();
+
     setState("working");
     setError("");
     try {
       const res = await fetch(`/api/report?${query}`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        // Server na PDF nestaci — necháme ho vyrobit prohlizec
+        if (data.usePrint) return openPrintView();
         throw new Error(data.error);
       }
       const blob = await res.blob();
@@ -83,9 +92,17 @@ export function ReportBuilder({ currentYear }: { currentYear: number }) {
           </div>
         </div>
 
+        {!serverPdf && (
+          <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-xs text-ink-secondary">
+            Otevře se tisková verze a rovnou tiskový dialog prohlížeče — v něm zvol
+            <strong className="text-ink-primary"> Uložit jako PDF</strong>. Výsledek vypadá stejně jako v aplikaci,
+            protože používá tytéž tiskové styly.
+          </p>
+        )}
+
         <div className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
           <button onClick={download} disabled={state === "working" || selected.length === 0} className="btn btn-primary">
-            {state === "working" ? "Generuji PDF…" : "Stáhnout PDF"}
+            {state === "working" ? "Generuji PDF…" : serverPdf ? "Stáhnout PDF" : "Vytisknout do PDF"}
           </button>
           <a href={`/report?${query}`} target="_blank" rel="noreferrer" className="btn">Náhled v prohlížeči</a>
           {state === "error" && <span className="text-sm text-bad">{error}</span>}

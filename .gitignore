@@ -10,8 +10,7 @@ next-env.d.ts
 *.db-journal
 *.db-wal
 *.db-shm
-data/*
-!data/.gitkeep
+data/
 zalohy/
 logs/
 reports/*.pdf

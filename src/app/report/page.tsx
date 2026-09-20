@@ -9,14 +9,15 @@ import { analyzeProperty, loadProperties, summarize } from "@/lib/portfolio";
 import { cashFlowSeries, equitySeries, expenseBreakdown } from "@/lib/series";
 import { findBundleOpportunities, summarizeSavings } from "@/lib/savings";
 import { buildTaxReport } from "@/lib/taxReport";
+import { PrintTrigger } from "@/components/PrintTrigger";
 import { categoryLabel } from "@/lib/categories";
 import { czk, czkCompact, dateCz, num, pct, STATUS_LABELS } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-export default async function ReportPage({ searchParams }: { searchParams: Promise<{ rok?: string; sekce?: string }> }) {
+export default async function ReportPage({ searchParams }: { searchParams: Promise<{ rok?: string; sekce?: string; tisk?: string }> }) {
   await page();
-  const { rok, sekce } = await searchParams;
+  const { rok, sekce, tisk } = await searchParams;
   const year = Number(rok) || new Date().getFullYear();
   const sections = new Set((sekce ?? "prehled,nemovitosti,cashflow,uspory,dane").split(","));
 
@@ -37,6 +38,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
 
   return (
     <main className="mx-auto max-w-[1100px] space-y-6 p-8" data-report-ready="true">
+      <PrintTrigger active={tisk === "1"} />
       <header className="flex items-end justify-between gap-4 border-b border-line pb-5">
         <div>
           <div className="flex items-center gap-2.5">
