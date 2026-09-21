@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { saveProperty, type FormState } from "@/lib/actions";
 import { Card } from "./Stat";
+import { Pole } from "./form";
 import { NEMOVITOST_MAP, TYPY_NEMOVITOSTI } from "@/lib/catalogs";
 
 type Values = Partial<{
@@ -17,7 +18,13 @@ type Values = Partial<{
   depreciationMethod: string; status: string; notes: string | null;
 }>;
 
-export function PropertyForm({ id, values = {} }: { id?: string; values?: Values }) {
+export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik }: {
+  id?: string;
+  values?: Values;
+  /** Seznam uctu pro vyber vlastnika — jen pri zakladani. */
+  uzivatele?: { id: string; name: string; email: string }[];
+  vychoziVlastnik?: string;
+}) {
   const action = saveProperty.bind(null, id ?? null);
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
 
@@ -113,6 +120,26 @@ export function PropertyForm({ id, values = {} }: { id?: string; values?: Values
           Metodu nelze po zahájení odpisování změnit. Odpisy se uplatní jen při skutečných výdajích, ne při paušálu.
         </p>
       </Card>
+
+      {!id && uzivatele.length > 0 && (
+        <Card title="Vlastník">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label mb-1.5 block" htmlFor="ownerId">Komu nemovitost patří</label>
+              <select id="ownerId" name="ownerId" defaultValue={vychoziVlastnik} className="input">
+                {uzivatele.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-ink-muted">
+                Nemusíš to být ty — vlastníkem může být kterýkoli uživatel.
+              </p>
+            </div>
+            <Pole label="Podíl (%)" name="ownerShare" type="number" step="0.01" min={0.01} max={100}
+              defaultValue={100} hint="Spoluvlastníky doplníš po uložení v detailu nemovitosti" />
+          </div>
+        </Card>
+      )}
 
       <Card title="Poznámky">
         <textarea name="notes" defaultValue={v.notes ?? ""} rows={3} className="input" />

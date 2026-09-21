@@ -35,7 +35,14 @@ export function OwnerManager({ propertyId, owners, uzivatele, canEdit }: {
       ) : (
         <>
           <table className="table-base">
-            <thead><tr><th>Vlastník</th><th className="num">Podíl</th><th>Poznámka</th>{canEdit && <th />}</tr></thead>
+            <thead>
+              <tr>
+                <th>Vlastník</th>
+                <th className="num">Podíl</th>
+                {canEdit ? <th>Změnit podíl</th> : <th>Poznámka</th>}
+                {canEdit && <th />}
+              </tr>
+            </thead>
             <tbody>
               {owners.map((o) => (
                 <tr key={o.id}>
@@ -44,9 +51,25 @@ export function OwnerManager({ propertyId, owners, uzivatele, canEdit }: {
                     <div className="text-xs text-ink-muted">{o.user.email}</div>
                   </td>
                   <td className="num font-medium">{num(o.share, o.share % 1 ? 2 : 0)} %</td>
-                  <td className="text-ink-secondary">{o.note}</td>
+                  {canEdit ? (
+                    <td>
+                      {/* Ulozeni bezi pres stejnou akci — upsert podil prepise */}
+                      <form action={addAction} className="flex gap-1.5">
+                        <input type="hidden" name="propertyId" value={propertyId} />
+                        <input type="hidden" name="userId" value={o.userId} />
+                        <input type="hidden" name="note" value={o.note ?? ""} />
+                        <input type="number" name="share" step="0.01" min={0.01} max={100}
+                          defaultValue={o.share} required
+                          className="input max-w-[90px] py-1 text-xs" />
+                        <button type="submit" className="btn px-2 py-1 text-xs">Uložit</button>
+                      </form>
+                      {o.note && <div className="mt-1 text-xs text-ink-muted">{o.note}</div>}
+                    </td>
+                  ) : (
+                    <td className="text-ink-secondary">{o.note}</td>
+                  )}
                   {canEdit && (
-                    <td className="text-right">
+                    <td className="text-right align-top">
                       <SmazatTlacitko action={delAction} id={o.id}
                         potvrzeni={`Odebrat podíl ${o.user.name}? Přepočítá se tím jeho portfolio.`} />
                     </td>

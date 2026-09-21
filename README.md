@@ -207,6 +207,11 @@ Byt bez zadaných vlastníků se počítá jako **celý tvůj** — zavedení po
 nerozbije už vedenou evidenci a podíly se dají doplnit postupně. Když součet
 podílů nedosáhne sta procent, aplikace upozorní, že se zbytek nezapočítá nikomu.
 
+**Vlastníka vybíráš při zakládání nemovitosti** — nemusí to být ten, kdo záznam
+vytvořil. Později ho změníš v **Upravit → Vlastníci a podíly**, kde jde podíl
+přepsat, doplnit dalšího spoluvlastníka nebo některého odebrat. Totéž najdeš
+i v detailu nemovitosti v kartě *Spoluvlastníci*.
+
 Vlastníkem může být jen uživatel s účtem. Účet pro spoluvlastníka založíš
 v sekci **Uživatelé**; roli *jen pro čtení* dej tomu, kdo nemá měnit data.
 

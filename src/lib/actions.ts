@@ -45,6 +45,9 @@ const propertySchema = z.object({
   depreciationMethod: z.enum(["STRAIGHT", "ACCELERATED"]),
   status: z.enum(["RENTED", "VACANT", "RENOVATION", "FOR_SALE", "SOLD"]),
   notes: optionalString,
+  // Jen pri zakladani — u uprav se vlastnici resi vlastni sekci
+  ownerId: optionalString,
+  ownerShare: numberish(100),
 });
 
 export interface FormState {
@@ -92,9 +95,20 @@ export async function saveProperty(id: string | null, _prev: FormState, formData
     status: d.status, notes: d.notes,
   };
 
-  const saved = id
-    ? await prisma.property.update({ where: { id }, data })
-    : await prisma.property.create({ data });
+  let saved;
+  if (id) {
+    saved = await prisma.property.update({ where: { id }, data });
+  } else {
+    saved = await prisma.property.create({ data });
+
+    // Pri zakladani se vlastnik vybira — nemusi jim byt ten, kdo zaznam vytvoril
+    if (d.ownerId) {
+      const podil = Math.max(0, Math.min(100, d.ownerShare || 100));
+      await prisma.propertyOwner.create({
+        data: { propertyId: saved.id, userId: d.ownerId, share: podil },
+      });
+    }
+  }
 
   revalidatePath("/");
   revalidatePath("/properties");
