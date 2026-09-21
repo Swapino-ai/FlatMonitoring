@@ -20,6 +20,8 @@ export interface ScanQuery {
   toleranceM2?: number;
   disposition?: string;
   maxPages?: number;
+  /** Kolik srovnatelnych nabidek staci — pak uz dalsi stranky nenacitame. */
+  targetSample?: number;
 }
 
 export interface MarketSource {

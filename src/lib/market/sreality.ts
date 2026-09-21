@@ -23,7 +23,10 @@ export const srealitySource: MarketSource = {
 
   async fetchListings(query: ScanQuery): Promise<ScrapedListing[]> {
     const out: ScrapedListing[] = [];
-    const maxPages = query.maxPages ?? 3;
+    // Po odfiltrovani dispozice a velikosti zbyde z jedne stranky jen par nabidek,
+    // takze nacitame dal, dokud nemame dost vzorku nebo nedojdou stranky.
+    const cilovyVzorek = query.targetSample ?? 15;
+    const maxPages = query.maxPages ?? 10;
     const typ = query.dealType === "SALE" ? "prodej" : "pronajem";
     const mesto = slugMesta(query.city);
 
@@ -58,6 +61,9 @@ export const srealitySource: MarketSource = {
           url: z.id ? `https://www.sreality.cz/detail/${typ}/byt/x/x/${z.id}` : undefined,
         });
       }
+
+      // Dost srovnatelnych nabidek? Dal uz portal zbytecne nezatezujeme.
+      if (filtrujSrovnatelne(out, query).length >= cilovyVzorek) break;
 
       if (strana < maxPages) await sleep(1500); // ohleduplne tempo
     }
