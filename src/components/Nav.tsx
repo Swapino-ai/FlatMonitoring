@@ -46,7 +46,7 @@ export function Nav({ user, verze }: { user: { name: string; role: string }; ver
         </nav>
 
         <div className="flex items-center gap-3 text-sm">
-          <span className="hidden lg:inline">{verze}</span>
+          {verze}
           <span className="hidden text-ink-secondary md:inline">
             {user.name}
             {user.role === "PARTNER" && (
