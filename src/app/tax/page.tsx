@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
+import { Verze } from "@/components/Verze";
 import { Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { loadProperties } from "@/lib/portfolio";
 import { buildTaxReport } from "@/lib/taxReport";
@@ -22,7 +23,7 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
 
   return (
     <>
-      <Nav user={user} />
+      <Nav user={user} verze={<Verze />} />
       <main className="mx-auto max-w-[1400px] space-y-5 p-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>

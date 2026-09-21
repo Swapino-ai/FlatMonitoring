@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
+import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { AmortizationChart } from "@/components/charts";
 import { ValuationManager } from "@/components/ValuationManager";
@@ -44,7 +45,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
 
   return (
     <>
-      <Nav user={user} />
+      <Nav user={user} verze={<Verze />} />
       <main className="mx-auto max-w-[1400px] space-y-5 p-6">
         <div>
           <Link href="/properties" className="text-sm text-ink-muted hover:text-ink-primary">← Nemovitosti</Link>

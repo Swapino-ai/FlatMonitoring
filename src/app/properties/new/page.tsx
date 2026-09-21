@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
+import { Verze } from "@/components/Verze";
 import { PropertyForm } from "@/components/PropertyForm";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export default async function NewPropertyPage() {
 
   return (
     <>
-      <Nav user={user} />
+      <Nav user={user} verze={<Verze />} />
       <main className="mx-auto max-w-[900px] space-y-5 p-6">
         <div>
           <Link href="/properties" className="text-sm text-ink-muted hover:text-ink-primary">← Nemovitosti</Link>

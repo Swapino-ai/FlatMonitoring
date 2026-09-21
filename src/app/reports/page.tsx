@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
+import { Verze } from "@/components/Verze";
 import { Card } from "@/components/Stat";
 import { ReportBuilder } from "@/components/ReportBuilder";
 import { canRenderPdfOnServer } from "@/lib/runtime";
@@ -13,7 +14,7 @@ export default async function ReportsPage() {
 
   return (
     <>
-      <Nav user={user} />
+      <Nav user={user} verze={<Verze />} />
       <main className="mx-auto max-w-[1000px] space-y-5 p-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Reporty</h1>

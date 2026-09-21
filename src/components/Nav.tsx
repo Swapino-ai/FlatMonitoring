@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 
 const LINKS = [
   { href: "/", label: "Přehled" },
@@ -15,7 +16,7 @@ const LINKS = [
 
 const OWNER_LINKS = [{ href: "/users", label: "Uživatelé" }];
 
-export function Nav({ user }: { user: { name: string; role: string } }) {
+export function Nav({ user, verze }: { user: { name: string; role: string }; verze?: ReactNode }) {
   const pathname = usePathname();
 
   return (
@@ -45,6 +46,7 @@ export function Nav({ user }: { user: { name: string; role: string } }) {
         </nav>
 
         <div className="flex items-center gap-3 text-sm">
+          <span className="hidden lg:inline">{verze}</span>
           <span className="hidden text-ink-secondary md:inline">
             {user.name}
             {user.role === "PARTNER" && (

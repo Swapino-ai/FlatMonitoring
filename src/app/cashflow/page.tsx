@@ -1,5 +1,6 @@
 import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
+import { Verze } from "@/components/Verze";
 import { Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { CashFlowChart, ExpenseBreakdownChart } from "@/components/charts";
 import { loadProperties } from "@/lib/portfolio";
@@ -31,7 +32,7 @@ export default async function CashFlowPage() {
 
   return (
     <>
-      <Nav user={user} />
+      <Nav user={user} verze={<Verze />} />
       <main className="mx-auto max-w-[1400px] space-y-5 p-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Cash flow</h1>

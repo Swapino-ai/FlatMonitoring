@@ -5,8 +5,30 @@ import { balanceAt, computeYields, loanYearBreakdown, propertyIrr, sum, type Yie
 import { depreciationInputPrice, depreciationSchedule } from "./tax";
 import type { Prisma } from "@prisma/client";
 
+/**
+ * Nacitame jen pole, ktera vypocty a vypisy skutecne pouzivaji.
+ * Transakci jsou tisice, takze kazde nepotrebne pole se nasobi — a na Vercelu
+ * se cely vysledek jeste serializuje pres sit.
+ */
 const withRelations = {
-  include: { loans: true, leases: true, transactions: true, services: true, valuations: { orderBy: { date: "desc" } } },
+  include: {
+    loans: true,
+    leases: true,
+    services: true,
+    valuations: { orderBy: { date: "desc" } },
+    transactions: {
+      select: {
+        id: true,
+        date: true,
+        amount: true,
+        category: true,
+        taxTreatment: true,
+        description: true,
+        documentRef: true,
+      },
+      orderBy: { date: "desc" },
+    },
+  },
 } satisfies Prisma.PropertyDefaultArgs;
 
 export type PropertyWithRelations = Prisma.PropertyGetPayload<typeof withRelations>;

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
+import { Verze } from "@/components/Verze";
 import { PropertyForm } from "@/components/PropertyForm";
 import { prisma } from "@/lib/db";
 
@@ -17,7 +18,7 @@ export default async function EditPropertyPage({ params }: { params: Promise<{ i
 
   return (
     <>
-      <Nav user={user} />
+      <Nav user={user} verze={<Verze />} />
       <main className="mx-auto max-w-[900px] space-y-5 p-6">
         <div>
           <Link href={`/properties/${id}`} className="text-sm text-ink-muted hover:text-ink-primary">← {property.name}</Link>

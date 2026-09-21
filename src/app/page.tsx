@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
+import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { CashFlowChart, EquityChart, YieldBarChart } from "@/components/charts";
 import { analyzeProperty, loadProperties, summarize } from "@/lib/portfolio";
@@ -28,7 +29,7 @@ export default async function Dashboard() {
 
   return (
     <>
-      <Nav user={user} />
+      <Nav user={user} verze={<Verze />} />
       <main className="mx-auto max-w-[1400px] space-y-5 p-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
