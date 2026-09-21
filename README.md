@@ -160,6 +160,31 @@ stahovat hotové PDF jedním klikem.
 
 ---
 
+## Druhy nemovitostí a úvěrů
+
+**Nemovitost** může být byt, družstevní byt, rodinný nebo bytový dům, chata,
+garáž, parkovací stání, nebytový či obchodní prostor, sklad a pozemek. Druh
+určuje, co dává smysl evidovat a počítat:
+
+- **Pozemek a družstevní podíl se neodepisují** — u nich se odpisový plán vůbec
+  nezobrazí. Družstevní podíl navíc není nemovitost, takže při prodeji platí
+  časový test pět let podle § 4 odst. 1 písm. s) ZDP, ne deset.
+- **Sklady a haly** patří do 4. odpisové skupiny, tedy 20 let místo 30.
+- U garáže nebo pozemku se **neptá na dispozici**.
+- Sken trhu se spouští jen u druhů, které jdou na Sreality porovnat v kategorii
+  bytů — garáž ani pozemek se přeskočí.
+
+**Úvěr** se dělí podle zákona č. 257/2016 Sb. o spotřebitelském úvěru:
+hypoteční úvěr na bydlení, americká hypotéka, úvěr ze stavebního spoření,
+překlenovací úvěr, spotřebitelský úvěr jiný než na bydlení, podnikatelský úvěr,
+soukromá půjčka.
+
+Při zadávání se u každého druhu ukáže, **jak se u něj řeší předčasné splacení** —
+to je v praxi největší rozdíl. U hypotéky na bydlení zdarma při výročí fixace,
+při prodeji po dvou letech nebo u čtvrtiny jistiny ročně; u spotřebitelského
+úvěru kdykoli s náhradou nejvýš 1 %. U podnikatelského úvěru aplikace upozorní,
+že se zákonná ochrana spotřebitele neuplatní vůbec.
+
 ## Spoluvlastnictví
 
 Byt může mít víc vlastníků s podíly v procentech — třeba ty 50 % a obchodní

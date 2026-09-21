@@ -21,6 +21,7 @@ import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
 import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
 import { categoryLabel, SERVICE_TYPES } from "@/lib/categories";
 import { czk, czkCompact, dateCz, num, pct, STATUS_LABELS } from "@/lib/format";
+import { NEMOVITOST_MAP, nazevNemovitosti } from "@/lib/catalogs";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     ? buildAmortization(activeLoans)
     : [];
 
-  const depSchedule = depreciationSchedule({
+  const lzeOdepisovat = NEMOVITOST_MAP.get(property.type)?.odpisovaSkupina !== null;
+  const depSchedule = !lzeOdepisovat ? [] : depreciationSchedule({
     inputPrice: depreciationInputPrice(property),
     group: property.depreciationGroup,
     method: property.depreciationMethod as "STRAIGHT" | "ACCELERATED",
@@ -71,7 +73,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           <div className="mt-2 flex items-start justify-between gap-4">
           <p className="text-sm text-ink-secondary">
             {property.street}, {property.zip} {property.city}
-            {property.district && ` · ${property.district}`} · {property.disposition} · {property.areaM2} m²
+            {property.district && ` · ${property.district}`} · {nazevNemovitosti(property.type)}
+            {property.disposition && ` · ${property.disposition}`} · {property.areaM2} m²
             {property.floor != null && ` · ${property.floor}. patro`}
             {property.buildYear && ` · rok ${property.buildYear}`}
           </p>
@@ -172,7 +175,16 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
         )}
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card title={`Odpisový plán — ${property.depreciationMethod === "STRAIGHT" ? "rovnoměrné" : "zrychlené"} odpisování, ${property.depreciationGroup}. skupina`}>
+          <Card title={lzeOdepisovat
+            ? `Odpisový plán — ${property.depreciationMethod === "STRAIGHT" ? "rovnoměrné" : "zrychlené"} odpisování, ${property.depreciationGroup}. skupina`
+            : "Odpisy"}>
+            {!lzeOdepisovat && (
+              <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
+                {NEMOVITOST_MAP.get(property.type)?.upozorneni
+                  ?? "Tenhle druh nemovitosti se neodepisuje."}
+              </p>
+            )}
+            {lzeOdepisovat && (<>
             <p className="mb-3 text-xs text-ink-secondary">
               Vstupní cena {czk(depreciationInputPrice(property))} (bez podílu na pozemku). Uplatňuje se jen při
               skutečných výdajích, ne při paušálu.
@@ -192,6 +204,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                 </tbody>
               </table>
             </div>
+            </>)}
           </Card>
 
           <Card title="Ocenění" action={<Link href="/market" className="text-xs text-accent">Sken trhu →</Link>}>

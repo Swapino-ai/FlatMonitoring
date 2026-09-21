@@ -1,0 +1,121 @@
+/**
+ * Ciselniky typu uveru a nemovitosti podle ceske pravni upravy.
+ *
+ * U uveru rozhoduje zakon c. 257/2016 Sb. o spotrebitelskem uveru: uver
+ * na bydleni ma jina pravidla predcasneho splaceni nez uver jiny nez na bydleni,
+ * a na podnikatelsky uver se zakon nevztahuje vubec.
+ */
+
+export interface TypUveru {
+  klic: string;
+  nazev: string;
+  popis: string;
+  /** Vztahuje se zakon o spotrebitelskem uveru? */
+  spotrebitelsky: boolean;
+  zajisteny: boolean;
+  /** Pravidla predcasneho splaceni — v praxi nejdulezitejsi rozdil. */
+  predcasneSplaceni: string;
+}
+
+export const TYPY_UVERU: TypUveru[] = [
+  {
+    klic: "HYPOTEKA_NA_BYDLENI",
+    nazev: "Hypoteční úvěr na bydlení",
+    popis: "Účelový úvěr zajištěný nemovitostí, poskytnutý na její pořízení, výstavbu nebo rekonstrukci. Spotřebitelský úvěr na bydlení dle § 2 odst. 2 zákona č. 257/2016 Sb.",
+    spotrebitelsky: true,
+    zajisteny: true,
+    predcasneSplaceni: "Zdarma při výročí fixace, při prodeji nemovitosti po dvou letech, v případě úmrtí či dlouhodobé nemoci a u čtvrtiny jistiny jednou ročně. Jinak smí banka účtovat jen účelně vynaložené náklady se zákonným stropem.",
+  },
+  {
+    klic: "AMERICKA_HYPOTEKA",
+    nazev: "Americká hypotéka",
+    popis: "Neúčelový úvěr zajištěný nemovitostí — peníze lze použít na cokoli. Bývá dražší než účelová hypotéka.",
+    spotrebitelsky: true,
+    zajisteny: true,
+    predcasneSplaceni: "Jde o spotřebitelský úvěr na bydlení, pokud je zajištěn obytnou nemovitostí — platí stejná pravidla jako u hypotéky. Jinak se řídí režimem úvěru jiného než na bydlení.",
+  },
+  {
+    klic: "STAVEBNI_SPORENI",
+    nazev: "Úvěr ze stavebního spoření",
+    popis: "Řádný úvěr po přidělení cílové částky. Úroková sazba je dána smlouvou a po celou dobu se nemění.",
+    spotrebitelsky: true,
+    zajisteny: false,
+    predcasneSplaceni: "Zpravidla kdykoli zdarma — to je jeho hlavní výhoda proti hypotéce.",
+  },
+  {
+    klic: "PREKLENOVACI",
+    nazev: "Překlenovací úvěr",
+    popis: "Meziúvěr do doby přidělení cílové částky ze stavebního spoření. Splácí se jen úrok, jistina se neumořuje.",
+    spotrebitelsky: true,
+    zajisteny: false,
+    predcasneSplaceni: "Řídí se smlouvou. Pozor: dokud běží, jistina neklesá — splátkový kalendář v aplikaci proto u tohoto typu nesedí.",
+  },
+  {
+    klic: "SPOTREBITELSKY",
+    nazev: "Spotřebitelský úvěr (jiný než na bydlení)",
+    popis: "Nezajištěná půjčka, typicky na rekonstrukci nebo vybavení. Vyšší sazba, kratší splatnost.",
+    spotrebitelsky: true,
+    zajisteny: false,
+    predcasneSplaceni: "Kdykoli. Náhrada nejvýše 1 % z předčasně splacené části (0,5 %, zbývá-li méně než rok), a vždy nejvýš do výše úroku, který bys jinak zaplatil.",
+  },
+  {
+    klic: "PODNIKATELSKY",
+    nazev: "Podnikatelský / investiční úvěr",
+    popis: "Úvěr poskytnutý na podnikatelskou činnost — typicky když nemovitosti pronajímáš na IČO nebo přes s.r.o.",
+    spotrebitelsky: false,
+    zajisteny: true,
+    predcasneSplaceni: "Zákon o spotřebitelském úvěru se nepoužije, ochrana je jen ta smluvní. Podmínky předčasného splacení si ohlídej ve smlouvě.",
+  },
+  {
+    klic: "PUJCKA_SOUKROMA",
+    nazev: "Soukromá půjčka",
+    popis: "Půjčka od fyzické osoby, rodiny nebo společníka.",
+    spotrebitelsky: false,
+    zajisteny: false,
+    predcasneSplaceni: "Podle smlouvy. Úrok musí být obvyklý — jinak hrozí doměrek daně z bezúplatného příjmu.",
+  },
+  { klic: "JINY", nazev: "Jiný úvěr", popis: "Cokoli, co nespadá do předchozích kategorií.", spotrebitelsky: false, zajisteny: false, predcasneSplaceni: "Podle smlouvy." },
+];
+
+export const UVER_MAP = new Map(TYPY_UVERU.map((t) => [t.klic, t]));
+export const nazevUveru = (k: string) => UVER_MAP.get(k)?.nazev ?? k;
+
+// --- Typy nemovitosti ---
+
+export interface TypNemovitosti {
+  klic: string;
+  nazev: string;
+  popis?: string;
+  /** Odpisova skupina dle prilohy c. 1 ZDP. Null = neodepisuje se. */
+  odpisovaSkupina: number | null;
+  /** Ma smysl evidovat dispozici (2+kk apod.)? */
+  maDispozici: boolean;
+  /** Da se pro nej hledat srovnani na Sreality v kategorii bytu? */
+  skenovatelny: boolean;
+  upozorneni?: string;
+}
+
+export const TYPY_NEMOVITOSTI: TypNemovitosti[] = [
+  { klic: "BYT", nazev: "Byt", odpisovaSkupina: 5, maDispozici: true, skenovatelny: true },
+  {
+    klic: "DRUZSTEVNI_BYT", nazev: "Družstevní byt", odpisovaSkupina: null, maDispozici: true, skenovatelny: true,
+    popis: "Nevlastníš nemovitost, ale podíl v bytovém družstvu s právem nájmu.",
+    upozorneni: "Družstevní podíl je movitá věc, ne nemovitost — neodepisuje se a při prodeji platí časový test pět let podle § 4 odst. 1 písm. s) ZDP, ne deset. Banky na něj zpravidla nedají klasickou hypotéku.",
+  },
+  { klic: "RODINNY_DUM", nazev: "Rodinný dům", odpisovaSkupina: 5, maDispozici: true, skenovatelny: false },
+  { klic: "BYTOVY_DUM", nazev: "Bytový dům", odpisovaSkupina: 5, maDispozici: false, skenovatelny: false, popis: "Celý dům s více bytovými jednotkami." },
+  { klic: "CHATA", nazev: "Chata nebo rekreační objekt", odpisovaSkupina: 5, maDispozici: true, skenovatelny: false },
+  { klic: "GARAZ", nazev: "Garáž", odpisovaSkupina: 5, maDispozici: false, skenovatelny: false },
+  { klic: "PARKOVACI_STANI", nazev: "Parkovací stání", odpisovaSkupina: 5, maDispozici: false, skenovatelny: false, popis: "Samostatná jednotka nebo podíl na společné garáži." },
+  { klic: "NEBYTOVY_PROSTOR", nazev: "Nebytový prostor", odpisovaSkupina: 5, maDispozici: false, skenovatelny: false, popis: "Kancelář, ordinace, ateliér." },
+  { klic: "OBCHOD", nazev: "Obchodní prostor", odpisovaSkupina: 5, maDispozici: false, skenovatelny: false },
+  { klic: "SKLAD", nazev: "Sklad nebo hala", odpisovaSkupina: 4, maDispozici: false, skenovatelny: false, upozorneni: "Lehké budovy a haly patří do 4. odpisové skupiny, tedy 20 let místo 30." },
+  {
+    klic: "POZEMEK", nazev: "Pozemek", odpisovaSkupina: null, maDispozici: false, skenovatelny: false,
+    upozorneni: "Pozemek se neodepisuje, protože se neopotřebovává. Odpisový plán proto u tohoto typu nedává smysl.",
+  },
+  { klic: "JINY", nazev: "Jiná nemovitost", odpisovaSkupina: 5, maDispozici: false, skenovatelny: false },
+];
+
+export const NEMOVITOST_MAP = new Map(TYPY_NEMOVITOSTI.map((t) => [t.klic, t]));
+export const nazevNemovitosti = (k: string) => NEMOVITOST_MAP.get(k)?.nazev ?? k;

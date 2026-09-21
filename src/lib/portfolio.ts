@@ -3,6 +3,7 @@
 import { prisma } from "./db";
 import { balanceAt, computeYields, loanYearBreakdown, propertyIrr, sum, type YieldMetrics } from "./finance";
 import { depreciationInputPrice, depreciationSchedule } from "./tax";
+import { NEMOVITOST_MAP } from "./catalogs";
 import type { Prisma } from "@prisma/client";
 
 /**
@@ -193,7 +194,8 @@ export function analyzeProperty(
   const yearsHeld = (asOf.getTime() - new Date(p.purchaseDate).getTime()) / (365.25 * 24 * 3600 * 1000);
 
   const inputPrice = depreciationInputPrice(p);
-  const depSchedule = depreciationSchedule({
+  const lzeOdepisovat = NEMOVITOST_MAP.get(p.type)?.odpisovaSkupina !== null;
+  const depSchedule = !lzeOdepisovat ? [] : depreciationSchedule({
     inputPrice,
     group: p.depreciationGroup,
     method: p.depreciationMethod as "STRAIGHT" | "ACCELERATED",

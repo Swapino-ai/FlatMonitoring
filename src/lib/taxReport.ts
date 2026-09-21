@@ -3,6 +3,7 @@
 import { sum } from "./finance";
 import { loanYearBreakdown } from "./finance";
 import { computeRentalTax, depreciationInputPrice, depreciationSchedule, saleExemption, type TaxComputationResult } from "./tax";
+import { NEMOVITOST_MAP } from "./catalogs";
 import type { PropertyWithRelations } from "./portfolio";
 
 export interface PropertyTaxLine {
@@ -67,8 +68,10 @@ export function buildTaxReport(
     );
     const loanInterest = bookedInterest > 0 ? bookedInterest : modelledInterest;
 
+    // Pozemek ani druzstevni podil se neodepisuji — odpisovy plan by byl nesmysl
+    const lzeOdepisovat = NEMOVITOST_MAP.get(p.type)?.odpisovaSkupina !== null;
     const startYear = p.depreciationStart ?? new Date(p.purchaseDate).getFullYear();
-    const schedule = depreciationSchedule({
+    const schedule = !lzeOdepisovat ? [] : depreciationSchedule({
       inputPrice: depreciationInputPrice(p),
       group: p.depreciationGroup,
       method: p.depreciationMethod as "STRAIGHT" | "ACCELERATED",

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { runScan, valuateFromMarket } from "@/lib/market";
+import { NEMOVITOST_MAP } from "@/lib/catalogs";
 
 // Jeden dotaz na portal trva 15-20 s, protoze se strankuje do hloubky,
 // nez se nasbira dost srovnatelnych nabidek. Proto kazdy pozadavek resi
@@ -25,10 +26,12 @@ export async function POST(request: Request) {
   if (!telo.propertyId) {
     const properties = await prisma.property.findMany({
       where: { status: { not: "SOLD" } },
-      select: { id: true, name: true, city: true, disposition: true },
+      select: { id: true, name: true, city: true, disposition: true, type: true },
       orderBy: { name: "asc" },
     });
-    const kroky = properties.flatMap((p) =>
+    // Garaz ani pozemek na Sreality v kategorii bytu nenajdeme
+    const skenovatelne = properties.filter((p) => NEMOVITOST_MAP.get(p.type)?.skenovatelny ?? true);
+    const kroky = skenovatelne.flatMap((p) =>
       (["SALE", "RENT"] as const).map((dealType) => ({
         propertyId: p.id,
         dealType,
@@ -46,7 +49,7 @@ export async function POST(request: Request) {
   const results = await runScan({
     city: property.city,
     district: property.district ?? undefined,
-    disposition: property.disposition,
+    disposition: property.disposition ?? undefined,
     areaM2: property.areaM2,
     dealType,
   });

@@ -22,12 +22,13 @@ const optionalNumber = z.preprocess((v) => {
 const optionalString = z.preprocess((v) => (v === "" || v == null ? null : String(v)), z.string().nullable());
 
 const propertySchema = z.object({
+  type: z.string().min(1),
   name: z.string().min(1, "Zadej název"),
   street: z.string().min(1, "Zadej ulici"),
   city: z.string().min(1, "Zadej město"),
   zip: z.string().min(1, "Zadej PSČ"),
   district: optionalString,
-  disposition: z.string().min(1, "Zadej dispozici"),
+  disposition: optionalString,
   areaM2: numberish().refine((v) => v > 0, "Plocha musí být větší než nula"),
   floor: optionalNumber,
   buildYear: optionalNumber,
@@ -79,6 +80,7 @@ export async function saveProperty(id: string | null, _prev: FormState, formData
 
   const d = parsed.data;
   const data = {
+    type: d.type,
     name: d.name, street: d.street, city: d.city, zip: d.zip, district: d.district,
     disposition: d.disposition, areaM2: d.areaM2, floor: d.floor, buildYear: d.buildYear,
     cadastralNo: d.cadastralNo, hasBalcony: d.hasBalcony, hasCellar: d.hasCellar, hasParking: d.hasParking,

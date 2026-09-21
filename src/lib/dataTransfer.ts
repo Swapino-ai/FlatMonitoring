@@ -74,9 +74,10 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     obnoveno.user = (await tx.user.createMany({ data: users })).count;
 
     const properties = (t.property as any[] ?? []).map((x) => ({
-      id: String(x.id), name: String(x.name), street: String(x.street), city: String(x.city),
+      id: String(x.id), type: String(x.type ?? "BYT"),
+      name: String(x.name), street: String(x.street), city: String(x.city),
       zip: String(x.zip), district: s(x.district), country: String(x.country ?? "CZ"),
-      disposition: String(x.disposition), areaM2: c(x.areaM2),
+      disposition: s(x.disposition), areaM2: c(x.areaM2),
       floor: x.floor == null ? null : Math.round(c(x.floor)),
       hasBalcony: !!x.hasBalcony, hasCellar: !!x.hasCellar, hasParking: !!x.hasParking,
       buildYear: x.buildYear == null ? null : Math.round(c(x.buildYear)),
@@ -100,7 +101,8 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     if (owners.length) obnoveno.propertyOwner = (await tx.propertyOwner.createMany({ data: owners })).count;
 
     const loans = (t.loan as any[] ?? []).map((x) => ({
-      id: String(x.id), propertyId: String(x.propertyId), lender: String(x.lender),
+      id: String(x.id), propertyId: String(x.propertyId),
+      type: String(x.type ?? "HYPOTEKA_NA_BYDLENI"), lender: String(x.lender),
       contractNo: s(x.contractNo), principal: c(x.principal), interestRate: c(x.interestRate),
       startDate: dPovinne(x.startDate), termMonths: Math.round(c(x.termMonths)),
       fixationEnd: d(x.fixationEnd), monthlyPayment: c(x.monthlyPayment),

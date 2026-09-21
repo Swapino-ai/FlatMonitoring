@@ -156,7 +156,7 @@ export async function valuateFromMarket(propertyId: string): Promise<{ value: nu
     district: p.district,
     dealType: "SALE",
     areaM2: p.areaM2,
-    disposition: p.disposition,
+    disposition: p.disposition ?? undefined,
   });
   if (!stats) return null;
 

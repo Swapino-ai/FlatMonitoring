@@ -49,6 +49,7 @@ function obnov(propertyId: string) {
 
 const uverSchema = z.object({
   propertyId: z.string().min(1),
+  type: z.string().min(1),
   lender: z.string().min(1, "Zadej banku nebo věřitele."),
   contractNo: textNeboNic,
   principal: cislo().refine((v) => v > 0, "Půjčená jistina musí být větší než nula."),
@@ -74,6 +75,7 @@ export async function saveLoan(id: string | null, _prev: EntityFormState, formDa
     : Math.round(annuityPayment(d.principal, d.interestRate, d.termMonths));
 
   const zaklad = {
+    type: d.type,
     lender: d.lender,
     contractNo: d.contractNo,
     principal: d.principal,

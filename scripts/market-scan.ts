@@ -6,6 +6,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { runScan, valuateFromMarket } from "../src/lib/market";
+import { NEMOVITOST_MAP } from "../src/lib/catalogs";
 
 const prisma = new PrismaClient();
 
@@ -20,8 +21,9 @@ async function main() {
   }
 
   // Jeden dotaz na kombinaci mesto+dispozice — nechceme portaly zbytecne zatezovat
-  const queries = new Map<string, { city: string; district: string | null; disposition: string; areaM2: number }>();
+  const queries = new Map<string, { city: string; district: string | null; disposition: string | null; areaM2: number }>();
   for (const p of properties) {
+    if (!(NEMOVITOST_MAP.get(p.type)?.skenovatelny ?? true)) continue;
     queries.set(`${p.city}|${p.disposition}`, {
       city: p.city, district: p.district, disposition: p.disposition, areaM2: p.areaM2,
     });
@@ -34,7 +36,7 @@ async function main() {
     for (const dealType of ["SALE", "RENT"] as const) {
       const results = await runScan({
         city: q.city, district: q.district ?? undefined,
-        disposition: q.disposition, areaM2: q.areaM2, dealType,
+        disposition: q.disposition ?? undefined, areaM2: q.areaM2, dealType,
       });
       for (const r of results) {
         console.log(`  ${q.city} ${q.disposition} ${dealType} · ${r.source}: ${r.status} (${r.count})${r.message ? " — " + r.message : ""}`);

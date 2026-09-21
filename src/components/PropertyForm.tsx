@@ -2,12 +2,15 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
+import { useState } from "react";
 import { saveProperty, type FormState } from "@/lib/actions";
 import { Card } from "./Stat";
+import { NEMOVITOST_MAP, TYPY_NEMOVITOSTI } from "@/lib/catalogs";
 
 type Values = Partial<{
+  type: string;
   name: string; street: string; city: string; zip: string; district: string | null;
-  disposition: string; areaM2: number; floor: number | null; buildYear: number | null;
+  disposition: string | null; areaM2: number; floor: number | null; buildYear: number | null;
   cadastralNo: string | null; hasBalcony: boolean; hasCellar: boolean; hasParking: boolean;
   purchaseDate: string | Date; purchasePrice: number; acquisitionCosts: number;
   renovationCosts: number; landShareValue: number; depreciationGroup: number;
@@ -19,6 +22,8 @@ export function PropertyForm({ id, values = {} }: { id?: string; values?: Values
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, {});
 
   const v = values;
+  const [typ, setTyp] = useState(v.type ?? "BYT");
+  const katalog = NEMOVITOST_MAP.get(typ);
   const dateValue = v.purchaseDate ? new Date(v.purchaseDate).toISOString().slice(0, 10) : "";
 
   return (
@@ -29,6 +34,13 @@ export function PropertyForm({ id, values = {} }: { id?: string; values?: Values
 
       <Card title="Základní údaje">
         <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="label mb-1.5 block" htmlFor="type">Druh nemovitosti</label>
+            <select id="type" name="type" value={typ} onChange={(e) => setTyp(e.target.value)} className="input">
+              {TYPY_NEMOVITOSTI.map((t) => <option key={t.klic} value={t.klic}>{t.nazev}</option>)}
+            </select>
+            {katalog?.popis && <p className="mt-1 text-xs text-ink-muted">{katalog.popis}</p>}
+          </div>
           <Field label="Název" name="name" defaultValue={v.name} required errors={state.fieldErrors}
             hint="Pracovní označení, např. „Vinohrady 2+kk“" />
           <Select label="Stav" name="status" defaultValue={v.status ?? "RENTED"} options={[
@@ -46,10 +58,16 @@ export function PropertyForm({ id, values = {} }: { id?: string; values?: Values
         </div>
       </Card>
 
-      <Card title="Parametry bytu">
+      {katalog?.upozorneni && (
+        <p className="rounded-lg bg-warn/10 px-3 py-2.5 text-sm text-warn">{katalog.upozorneni}</p>
+      )}
+
+      <Card title="Parametry">
         <div className="grid gap-4 sm:grid-cols-4">
-          <Field label="Dispozice" name="disposition" defaultValue={v.disposition} required
-            hint="např. 2+kk" errors={state.fieldErrors} />
+          {katalog?.maDispozici !== false && (
+            <Field label="Dispozice" name="disposition" defaultValue={v.disposition ?? ""}
+              hint="např. 2+kk" errors={state.fieldErrors} />
+          )}
           <Field label="Plocha (m²)" name="areaM2" type="number" step="0.1" defaultValue={v.areaM2} required errors={state.fieldErrors} />
           <Field label="Patro" name="floor" type="number" defaultValue={v.floor ?? ""} errors={state.fieldErrors} />
           <Field label="Rok výstavby" name="buildYear" type="number" defaultValue={v.buildYear ?? ""} errors={state.fieldErrors} />
@@ -74,9 +92,15 @@ export function PropertyForm({ id, values = {} }: { id?: string; values?: Values
       </Card>
 
       <Card title="Odpisy">
+        {katalog?.odpisovaSkupina === null && (
+          <p className="mb-3 rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-secondary">
+            Tenhle druh se neodepisuje — odpisový plán se u něj nebude počítat, ať tu vyplníš cokoli.
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
-          <Select label="Odpisová skupina" name="depreciationGroup" defaultValue={String(v.depreciationGroup ?? 5)} options={[
-            ["4", "4. skupina — 20 let"],
+          <Select label="Odpisová skupina" name="depreciationGroup"
+            defaultValue={String(v.depreciationGroup ?? katalog?.odpisovaSkupina ?? 5)} options={[
+            ["4", "4. skupina — 20 let (haly, lehké budovy)"],
             ["5", "5. skupina — 30 let (zděné a panelové domy)"],
             ["6", "6. skupina — 50 let"],
           ]} />

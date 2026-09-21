@@ -57,7 +57,11 @@ model Property {
   district String? // mestska cast / katastr — klic pro tržní sken
   country  String  @default("CZ")
 
-  disposition String // 1+kk, 2+1, ...
+  /// Druh nemovitosti — viz src/lib/catalogs.ts. Rozhoduje o odpisove skupine
+  /// i o tom, jestli ma smysl evidovat dispozici a hledat srovnani na trhu.
+  type String @default("BYT")
+
+  disposition String? // 1+kk, 2+1 — u garaze nebo pozemku nedava smysl
   areaM2      Float
   floor       Int?
   hasBalcony  Boolean @default(false)
@@ -101,6 +105,10 @@ model Loan {
   id         String   @id @default(cuid())
   propertyId String
   property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  /// Druh uveru dle zakona c. 257/2016 Sb. — viz src/lib/catalogs.ts.
+  /// Rozhoduje o pravidlech predcasneho splaceni.
+  type String @default("HYPOTEKA_NA_BYDLENI")
 
   lender         String
   contractNo     String?
