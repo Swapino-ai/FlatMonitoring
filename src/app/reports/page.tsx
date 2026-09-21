@@ -4,6 +4,7 @@ import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Card } from "@/components/Stat";
 import { ReportBuilder } from "@/components/ReportBuilder";
+import { DataTransfer } from "@/components/DataTransfer";
 import { canRenderPdfOnServer } from "@/lib/runtime";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,8 @@ export default async function ReportsPage() {
         </div>
 
         <ReportBuilder currentYear={currentYear} serverPdf={canRenderPdfOnServer} />
+
+        {user.role === "OWNER" && <DataTransfer />}
 
         <Card title="Jak report sdílet">
           <div className="space-y-3 text-sm text-ink-secondary">

@@ -62,12 +62,18 @@ export interface PropertyAnalysis {
 export async function loadProperties(): Promise<PropertyWithRelations[]> {
   return prisma.property.findMany({
     ...withRelations,
+    // Jeden dotaz misto sesti — rozhoduje, kdyz je databaze na jinem kontinentu
+    relationLoadStrategy: "join",
     orderBy: { purchaseDate: "asc" },
   }) as Promise<PropertyWithRelations[]>;
 }
 
 export async function loadProperty(id: string): Promise<PropertyWithRelations | null> {
-  return prisma.property.findUnique({ where: { id }, ...withRelations }) as Promise<PropertyWithRelations | null>;
+  return prisma.property.findUnique({
+    where: { id },
+    ...withRelations,
+    relationLoadStrategy: "join",
+  }) as Promise<PropertyWithRelations | null>;
 }
 
 export function analyzeProperty(p: PropertyWithRelations, asOf = new Date()): PropertyAnalysis {

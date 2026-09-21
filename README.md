@@ -104,10 +104,38 @@ jako artefakt ke stažení.
 
 ---
 
+## Když je aplikace pomalá
+
+Klikni v hlavičce na ukazatel verze — otevře se `/api/diagnostika`, která změří,
+kde se čas ztrácí, a napíše diagnózu.
+
+Nejčastější příčina je **databáze na jiném kontinentu než aplikace**. Jeden dotaz
+pak trvá kolem 100 ms místo jednotek milisekund a každé načtení stránky na to čeká.
+Region Neonu nejde změnit, ale přestěhovat se dá za pár minut:
+
+1. V Neonu **Create project**, region **Europe (Frankfurt)**.
+2. Ve staré aplikaci: **Reporty → Stáhnout zálohu**.
+3. Ve Vercelu přepiš `DATABASE_URL` a `DIRECT_URL` na nový projekt a nasaď znovu
+   (Deployments → … → Redeploy). Build sám vytvoří schéma.
+4. Otevři aplikaci — prázdná databáze tě pustí na **První spuštění**, kde si
+   založíš dočasný účet.
+5. **Reporty → Obnovit ze zálohy** a nahraj stažený soubor. Přepíše i účty, takže
+   se pak přihlašuješ původním heslem.
+6. Starý projekt v Neonu smaž, ať neplatíš za dva.
+
+Druhá příčina je **uspaná databáze**: Neon ji na free tieru po pěti minutách
+nečinnosti vypne a první dotaz ji budí skoro sekundu. To se na placeném tarifu
+dá vypnout; jinak se to projeví jen u prvního načtení po pauze.
+
 ## Zálohování
 
 Neon sám drží historii změn (na free tieru 24 hodin), takže drobný omyl se dá
-vrátit z jeho konzole. Pro vlastní kopii dat slouží export do JSON:
+vrátit z jeho konzole. Vlastní kopii dat si stáhneš přímo v aplikaci:
+
+**Reporty → Stáhnout zálohu** uloží celou evidenci do jednoho souboru JSON.
+**Obnovit ze zálohy** ji nahraje zpět — pozor, přepíše všechno včetně účtů.
+
+Totéž z příkazové řádky, když ji máš po ruce:
 
 ```bash
 npm run backup                        # zalohy/flatmonitoring-2026-09-20.json

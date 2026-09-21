@@ -1,0 +1,142 @@
+/** Prenos vsech dat aplikace — zaloha i stehovani mezi databazemi. */
+
+import { prisma } from "./db";
+
+export interface Zaloha {
+  verze: 1;
+  vytvoreno: string;
+  tabulky: Record<string, unknown[]>;
+}
+
+/** Poradi je dulezite pri obnove — nadrazene zaznamy musi byt driv. */
+export async function exportujVse(): Promise<Zaloha> {
+  return {
+    verze: 1,
+    vytvoreno: new Date().toISOString(),
+    tabulky: {
+      user: await prisma.user.findMany(),
+      property: await prisma.property.findMany(),
+      loan: await prisma.loan.findMany(),
+      lease: await prisma.lease.findMany(),
+      transaction: await prisma.transaction.findMany(),
+      service: await prisma.service.findMany(),
+      valuation: await prisma.valuation.findMany(),
+      marketScan: await prisma.marketScan.findMany(),
+      marketListing: await prisma.marketListing.findMany(),
+      marketIndex: await prisma.marketIndex.findMany(),
+    },
+  };
+}
+
+export interface VysledekObnovy {
+  obnoveno: Record<string, number>;
+  smazano: boolean;
+}
+
+/**
+ * Nahradi obsah databaze zalohou. Data prichazi od uzivatele, takze je
+ * prevadime pres vlastni mapovani — nikdy nepredavame cizi objekt primo.
+ */
+export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
+  if (zaloha?.verze !== 1) throw new Error("Neznámý formát zálohy.");
+  const t = zaloha.tabulky ?? {};
+  if (!Array.isArray(t.user) || t.user.length === 0) {
+    throw new Error("Záloha neobsahuje žádného uživatele — po obnově by se nešlo přihlásit.");
+  }
+
+  const d = (v: unknown) => (v == null ? null : new Date(String(v)));
+  const dPovinne = (v: unknown) => new Date(String(v));
+  const c = (v: unknown, z = 0) => (typeof v === "number" ? v : Number(v ?? z) || z);
+  const s = (v: unknown) => (v == null ? null : String(v));
+
+  return prisma.$transaction(async (tx) => {
+    // Mazani v opacnem poradi nez vkladani, kvuli cizim klicum
+    await tx.marketListing.deleteMany();
+    await tx.marketScan.deleteMany();
+    await tx.marketIndex.deleteMany();
+    await tx.valuation.deleteMany();
+    await tx.service.deleteMany();
+    await tx.transaction.deleteMany();
+    await tx.lease.deleteMany();
+    await tx.loan.deleteMany();
+    await tx.property.deleteMany();
+    await tx.user.deleteMany();
+
+    const obnoveno: Record<string, number> = {};
+
+    const users = (t.user as any[]).map((x) => ({
+      id: String(x.id), email: String(x.email).toLowerCase(), name: String(x.name),
+      passwordHash: String(x.passwordHash), role: x.role === "OWNER" ? "OWNER" : "PARTNER",
+      createdAt: dPovinne(x.createdAt ?? new Date()),
+    }));
+    obnoveno.user = (await tx.user.createMany({ data: users })).count;
+
+    const properties = (t.property as any[] ?? []).map((x) => ({
+      id: String(x.id), name: String(x.name), street: String(x.street), city: String(x.city),
+      zip: String(x.zip), district: s(x.district), country: String(x.country ?? "CZ"),
+      disposition: String(x.disposition), areaM2: c(x.areaM2),
+      floor: x.floor == null ? null : Math.round(c(x.floor)),
+      hasBalcony: !!x.hasBalcony, hasCellar: !!x.hasCellar, hasParking: !!x.hasParking,
+      buildYear: x.buildYear == null ? null : Math.round(c(x.buildYear)),
+      cadastralNo: s(x.cadastralNo),
+      purchaseDate: dPovinne(x.purchaseDate), purchasePrice: c(x.purchasePrice),
+      acquisitionCosts: c(x.acquisitionCosts), renovationCosts: c(x.renovationCosts),
+      landShareValue: c(x.landShareValue),
+      depreciationGroup: Math.round(c(x.depreciationGroup, 5)),
+      depreciationMethod: x.depreciationMethod === "ACCELERATED" ? "ACCELERATED" : "STRAIGHT",
+      depreciationStart: x.depreciationStart == null ? null : Math.round(c(x.depreciationStart)),
+      status: String(x.status ?? "RENTED"),
+      saleDate: d(x.saleDate), salePrice: x.salePrice == null ? null : c(x.salePrice),
+      notes: s(x.notes),
+    }));
+    if (properties.length) obnoveno.property = (await tx.property.createMany({ data: properties })).count;
+
+    const loans = (t.loan as any[] ?? []).map((x) => ({
+      id: String(x.id), propertyId: String(x.propertyId), lender: String(x.lender),
+      contractNo: s(x.contractNo), principal: c(x.principal), interestRate: c(x.interestRate),
+      startDate: dPovinne(x.startDate), termMonths: Math.round(c(x.termMonths)),
+      fixationEnd: d(x.fixationEnd), monthlyPayment: c(x.monthlyPayment),
+      currentBalance: c(x.currentBalance), balanceAsOf: dPovinne(x.balanceAsOf ?? new Date()),
+      isActive: x.isActive !== false, notes: s(x.notes),
+    }));
+    if (loans.length) obnoveno.loan = (await tx.loan.createMany({ data: loans })).count;
+
+    const leases = (t.lease as any[] ?? []).map((x) => ({
+      id: String(x.id), propertyId: String(x.propertyId), tenantName: String(x.tenantName),
+      tenantEmail: s(x.tenantEmail), tenantPhone: s(x.tenantPhone),
+      startDate: dPovinne(x.startDate), endDate: d(x.endDate),
+      rentMonthly: c(x.rentMonthly), utilitiesMonthly: c(x.utilitiesMonthly), deposit: c(x.deposit),
+      indexationClause: !!x.indexationClause, paymentDay: Math.round(c(x.paymentDay, 15)),
+      isActive: x.isActive !== false, notes: s(x.notes),
+    }));
+    if (leases.length) obnoveno.lease = (await tx.lease.createMany({ data: leases })).count;
+
+    const transactions = (t.transaction as any[] ?? []).map((x) => ({
+      id: String(x.id), propertyId: String(x.propertyId), date: dPovinne(x.date),
+      amount: c(x.amount), category: String(x.category),
+      description: s(x.description), taxTreatment: String(x.taxTreatment ?? "EXPENSE_DEDUCTIBLE"),
+      isRecurring: !!x.isRecurring, documentRef: s(x.documentRef),
+    }));
+    if (transactions.length) obnoveno.transaction = (await tx.transaction.createMany({ data: transactions })).count;
+
+    const services = (t.service as any[] ?? []).map((x) => ({
+      id: String(x.id), propertyId: String(x.propertyId), type: String(x.type),
+      provider: String(x.provider), contractNo: s(x.contractNo),
+      monthlyCost: c(x.monthlyCost), annualCost: x.annualCost == null ? null : c(x.annualCost),
+      contractStart: d(x.contractStart), contractEnd: d(x.contractEnd),
+      noticePeriodMonths: Math.round(c(x.noticePeriodMonths)),
+      isBundleable: x.isBundleable !== false, notes: s(x.notes),
+    }));
+    if (services.length) obnoveno.service = (await tx.service.createMany({ data: services })).count;
+
+    const valuations = (t.valuation as any[] ?? []).map((x) => ({
+      id: String(x.id), propertyId: String(x.propertyId), date: dPovinne(x.date),
+      value: c(x.value), pricePerM2: x.pricePerM2 == null ? null : c(x.pricePerM2),
+      source: String(x.source), confidence: s(x.confidence),
+      sampleSize: x.sampleSize == null ? null : Math.round(c(x.sampleSize)), notes: s(x.notes),
+    }));
+    if (valuations.length) obnoveno.valuation = (await tx.valuation.createMany({ data: valuations })).count;
+
+    return { obnoveno, smazano: true };
+  }, { timeout: 120_000 });
+}

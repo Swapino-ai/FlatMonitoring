@@ -3,6 +3,9 @@
 
 generator client {
   provider = "prisma-client-js"
+  // relationJoins nacte nemovitost i vsechny jeji vazby jednim dotazem pres
+  // LATERAL JOIN. Pri latenci pres Atlantik je kazda usetrena cesta ~100 ms.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
