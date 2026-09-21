@@ -2,6 +2,7 @@ import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
+import { Napoveda } from "@/components/Napoveda";
 import { MarketComparisonChart } from "@/components/charts";
 import { ScanButton } from "@/components/ScanButton";
 import { prisma } from "@/lib/db";
@@ -88,17 +89,17 @@ export default async function MarketPage() {
         )}
 
         <Card title="Srovnání po nemovitostech">
-          <div className="overflow-x-auto">
+          <div className="table-scroll">
             <table className="table-base">
               <thead>
                 <tr>
                   <th>Nemovitost</th>
                   <th className="num">Pořízeno Kč/m²</th>
                   <th className="num">Aktuální odhad Kč/m²</th>
-                  <th className="num">Medián trhu Kč/m²</th>
+                  <th className="num"><Napoveda term="medianTrhu">Medián trhu Kč/m²</Napoveda></th>
                   <th className="num">Nájem Kč/m²</th>
                   <th className="num">Nájem trh Kč/m²</th>
-                  <th>Vzorek</th>
+                  <th><Napoveda term="vzorekNabidek">Vzorek</Napoveda></th>
                 </tr>
               </thead>
               <tbody>
@@ -148,6 +149,7 @@ export default async function MarketPage() {
           {lastScans.length === 0 ? (
             <Empty>Sken ještě neproběhl. Spusť ho ručně, nebo nastav měsíční cron podle README.</Empty>
           ) : (
+            <div className="table-scroll">
             <table className="table-base">
               <thead><tr><th>Kdy</th><th>Zdroj</th><th>Stav</th><th className="num">Nabídek</th><th>Poznámka</th></tr></thead>
               <tbody>
@@ -164,6 +166,7 @@ export default async function MarketPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </Card>
       </main>

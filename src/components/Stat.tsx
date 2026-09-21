@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Napoveda } from "./Napoveda";
 
 /**
  * Statisticka dlazdice. Cislo je hrdina — popis je sekundarni.
@@ -10,12 +11,15 @@ export function Stat({
   sub,
   tone = "neutral",
   hint,
+  term,
 }: {
   label: string;
   value: ReactNode;
   sub?: ReactNode;
   tone?: "neutral" | "good" | "warn" | "bad";
   hint?: string;
+  /** Klic do slovniku vysvetlivek — popisek pak nabidne napovedu. */
+  term?: string;
 }) {
   const toneClass = {
     neutral: "text-ink-primary",
@@ -26,7 +30,9 @@ export function Stat({
 
   return (
     <div className="card">
-      <div className="label" title={hint}>{label}</div>
+      <div className="label" title={hint}>
+        {term ? <Napoveda term={term}>{label}</Napoveda> : label}
+      </div>
       <div className={`mt-2 text-2xl font-semibold tabular-nums tracking-tight ${toneClass}`}>{value}</div>
       {sub && <div className="mt-1 text-xs text-ink-secondary">{sub}</div>}
     </div>

@@ -2,6 +2,7 @@ import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
+import { Napoveda } from "@/components/Napoveda";
 import { loadProperties } from "@/lib/portfolio";
 import { findBundleOpportunities, summarizeSavings } from "@/lib/savings";
 import { czk, dateCz, pct } from "@/lib/format";
@@ -80,8 +81,8 @@ export default async function SavingsPage() {
 
                     <div className="space-y-2.5 rounded-card bg-surface-sunken p-4 text-sm">
                       <Line label="Dnes platíš ročně" value={czk(o.totalAnnual)} />
-                      <Line label="Sjednocením na nejlepší cenu" value={czk(o.levelDownSavingAnnual)} tone="good" />
-                      <Line label="Objemovou slevou navíc" value={czk(o.bundleSavingAnnual)} tone="good" />
+                      <Line label={<Napoveda term="sjednoceni">Sjednocením na nejlepší cenu</Napoveda>} value={czk(o.levelDownSavingAnnual)} tone="good" />
+                      <Line label={<Napoveda term="objemovaSleva">Objemovou slevou navíc</Napoveda>} value={czk(o.bundleSavingAnnual)} tone="good" />
                       <div className="border-t border-line pt-2.5">
                         <Line label="Celkem úspora" value={czk(o.totalSavingAnnual)} tone="good" strong />
                       </div>
@@ -110,7 +111,7 @@ export default async function SavingsPage() {
   );
 }
 
-function Line({ label, value, tone, strong }: { label: string; value: string; tone?: "good"; strong?: boolean }) {
+function Line({ label, value, tone, strong }: { label: React.ReactNode; value: string; tone?: "good"; strong?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
       <span className="text-ink-secondary">{label}</span>

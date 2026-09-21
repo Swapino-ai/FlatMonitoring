@@ -59,18 +59,21 @@ export default async function Dashboard() {
               />
               <Stat
                 label="Vlastní kapitál"
+                term="equity"
                 value={czkCompact(s.equity)}
                 sub={`Dluh ${czkCompact(s.totalDebt)} · LTV ${pct(s.ltv, 0)}`}
                 tone={s.ltv > 80 ? "warn" : "neutral"}
               />
               <Stat
                 label="Měsíční cash flow"
+                term="cashOnCash"
                 value={czk(s.monthlyCashFlow)}
                 sub={`Ročně ${czkCompact(s.annualCashFlow)} po splátkách`}
                 tone={s.annualCashFlow >= 0 ? "good" : "bad"}
               />
               <Stat
                 label="Čistý výnos"
+                term="cistyVynos"
                 value={pct(s.avgNetYield)}
                 sub={`Hrubý ${pct(s.avgGrossYield)} · CoC ${pct(s.avgCashOnCash)}`}
                 hint="NOI dělené celkovými pořizovacími náklady"
@@ -132,7 +135,7 @@ export default async function Dashboard() {
               </Card>
 
               <Card title="Nemovitosti" className="lg:col-span-3">
-                <div className="overflow-x-auto">
+                <div className="table-scroll">
                   <table className="table-base">
                     <thead>
                       <tr>

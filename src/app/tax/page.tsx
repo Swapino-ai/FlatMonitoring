@@ -3,6 +3,7 @@ import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Card, Empty, Stat, StatGrid } from "@/components/Stat";
+import { Napoveda } from "@/components/Napoveda";
 import { loadProperties } from "@/lib/portfolio";
 import { buildTaxReport } from "@/lib/taxReport";
 import { czk, num, pct } from "@/lib/format";
@@ -55,9 +56,9 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
           <>
             <StatGrid>
               <Stat label="Zdanitelné příjmy" value={czk(report.totals.rentalIncome)} sub="Nájemné bez záloh na služby" />
-              <Stat label="Výhodnější varianta" value={recommended.method === "FLAT_RATE" ? "Paušál 30 %" : "Skutečné výdaje"}
+              <Stat term="pausal" label="Výhodnější varianta" value={recommended.method === "FLAT_RATE" ? "Paušál 30 %" : "Skutečné výdaje"}
                 sub={`Uplatnitelné výdaje ${czk(recommended.expenses)}`} tone="good" />
-              <Stat label="Základ daně" value={czk(recommended.taxBase)} sub={`Po slevě na poplatníka ${czk(recommended.credits)}`} />
+              <Stat label="Základ daně" term="zakladDane" value={czk(recommended.taxBase)} sub={`Po slevě na poplatníka ${czk(recommended.credits)}`} />
               <Stat label="Daň k úhradě" value={czk(recommended.taxDue)}
                 sub={`Efektivní sazba ${pct(recommended.effectiveRate)}`} tone={recommended.taxDue > 0 ? "warn" : "good"} />
             </StatGrid>
@@ -93,15 +94,15 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
             </Card>
 
             <Card title="Rozpis podle nemovitostí">
-              <div className="overflow-x-auto">
+              <div className="table-scroll">
                 <table className="table-base">
                   <thead>
                     <tr>
                       <th>Nemovitost</th>
                       <th className="num">Příjmy z nájmu</th>
                       <th className="num">Provozní výdaje</th>
-                      <th className="num">Úroky</th>
-                      <th className="num">Odpisy</th>
+                      <th className="num"><Napoveda term="jistinaUroky">Úroky</Napoveda></th>
+                      <th className="num"><Napoveda term="odpisy">Odpisy</Napoveda></th>
                       <th className="num">Dílčí výsledek</th>
                     </tr>
                   </thead>

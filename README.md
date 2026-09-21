@@ -160,6 +160,15 @@ stahovat hotové PDF jedním klikem.
 
 ---
 
+## Vysvětlivky ukazatelů
+
+Zkratky a ukazatele mají u sebe značku `?`. Po najetí myší, klepnutí na telefonu
+nebo přechodu klávesnicí se objeví vysvětlení — co číslo znamená, jak se počítá
+a hlavně **jak ho číst**: kdy je dobré a kdy varuje.
+
+Texty jsou v `src/lib/terms.ts`, přidání dalšího ukazatele je jeden záznam
+ve slovníku a atribut `term` u popisku.
+
 ## Daňová část
 
 Sekce Daně sestaví podklad pro přílohu č. 2 k přiznání k DPFO — příjmy z nájmu dle § 9 ZDP:

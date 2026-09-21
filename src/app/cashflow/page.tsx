@@ -2,6 +2,7 @@ import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Card, Empty, Stat, StatGrid } from "@/components/Stat";
+import { Napoveda } from "@/components/Napoveda";
 import { CashFlowChart, ExpenseBreakdownChart } from "@/components/charts";
 import { loadProperties } from "@/lib/portfolio";
 import { cashFlowSeries, expenseBreakdown } from "@/lib/series";
@@ -37,7 +38,8 @@ export default async function CashFlowPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Cash flow</h1>
           <p className="mt-1 text-sm text-ink-secondary">
-            Skutečné peněžní toky za posledních 12 měsíců. Průchozí zálohy na služby se nezapočítávají.
+            Skutečné peněžní toky za posledních 12 měsíců.{" "}
+            <Napoveda term="pruchozi">Průchozí zálohy na služby</Napoveda> se nezapočítávají.
           </p>
         </div>
 
@@ -48,7 +50,7 @@ export default async function CashFlowPage() {
             <StatGrid>
               <Stat label="Příjmy za 12 měsíců" value={czk(totalIncome)} />
               <Stat label="Výdaje za 12 měsíců" value={czk(totalExpense)} />
-              <Stat label="Čistý tok" value={czk(net)} tone={net >= 0 ? "good" : "bad"}
+              <Stat label="Čistý tok" term="cashOnCash" value={czk(net)} tone={net >= 0 ? "good" : "bad"}
                 sub={`${czk(net / 12)} měsíčně`} />
               <Stat label="Nejsilnější / nejslabší měsíc"
                 value={`${best?.period ?? "—"} / ${worst?.period ?? "—"}`}

@@ -88,8 +88,10 @@ body {
 }
 
 @layer components {
+  /* min-w-0: prvek v mrizce ma vychozi min-width auto a obsah sirsi nez
+     stopa mrizku roztahne — na telefonu pak cela stranka preteka do sirky. */
   .card {
-    @apply rounded-card border border-line bg-surface-card p-5;
+    @apply min-w-0 rounded-card border border-line bg-surface-card p-5;
   }
   .card-title {
     @apply text-sm font-semibold text-ink-primary;
@@ -110,6 +112,10 @@ body {
   }
   .table-base {
     @apply w-full text-sm;
+  }
+  /* Obal pro siroke tabulky — posouva se tabulka, ne cela stranka. */
+  .table-scroll {
+    @apply -mx-1 overflow-x-auto px-1;
   }
   .table-base th {
     @apply border-b border-line px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted;

@@ -89,7 +89,7 @@ export function YieldBarChart({ data, average }: {
       <BarChart data={data} layout="vertical" margin={{ top: 18, right: 44, left: 4, bottom: 4 }}>
         <CartesianGrid stroke={GRID} strokeDasharray="2 4" horizontal={false} />
         <XAxis type="number" tick={AXIS} tickLine={false} axisLine={false} tickFormatter={(v) => `${v.toFixed(1)} %`} />
-        <YAxis type="category" dataKey="name" tick={AXIS} tickLine={false} axisLine={false} width={150} />
+        <YAxis type="category" dataKey="name" tick={AXIS} tickLine={false} axisLine={false} width={110} />
         <Tooltip content={<ChartTooltip formatter={(v: number) => pct(v)} />} cursor={{ fill: "rgb(var(--surface-sunken))" }} />
         <ReferenceLine x={average} stroke="rgb(var(--text-muted))" strokeDasharray="4 3"
           label={{ value: `⌀ ${average.toFixed(1)} %`, fontSize: 10, fill: "rgb(var(--text-muted))", position: "top" }} />
@@ -111,8 +111,8 @@ export function ExpenseBreakdownChart({ data }: { data: { kategorie: string; cas
       {data.map((d, i) => (
         <div key={d.kategorie}>
           <div className="mb-1 flex items-baseline justify-between gap-3 text-sm">
-            <span className="text-ink-secondary">{d.kategorie}</span>
-            <span className="font-medium tabular-nums text-ink-primary">{czk(d.castka)}</span>
+            <span className="min-w-0 truncate text-ink-secondary" title={d.kategorie}>{d.kategorie}</span>
+            <span className="shrink-0 font-medium tabular-nums text-ink-primary">{czk(d.castka)}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-surface-sunken">
             <div
@@ -135,7 +135,7 @@ export function MarketComparisonChart({ data }: {
       <BarChart data={data} layout="vertical" margin={{ top: 4, right: 16, left: 4, bottom: 4 }} barGap={2}>
         <CartesianGrid stroke={GRID} strokeDasharray="2 4" horizontal={false} />
         <XAxis type="number" tick={AXIS} tickLine={false} axisLine={false} tickFormatter={czkCompact} />
-        <YAxis type="category" dataKey="name" tick={AXIS} tickLine={false} axisLine={false} width={130} />
+        <YAxis type="category" dataKey="name" tick={AXIS} tickLine={false} axisLine={false} width={110} />
         <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgb(var(--surface-sunken))" }} />
         <Legend wrapperStyle={legendStyle} />
         <Bar dataKey="tvoje" name="Pořizovací cena za m²" fill={SERIES[0]} radius={[0, 4, 4, 0]} maxBarSize={14} />

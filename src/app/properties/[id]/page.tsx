@@ -6,6 +6,7 @@ import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { AmortizationChart } from "@/components/charts";
 import { ValuationManager } from "@/components/ValuationManager";
+import { Napoveda } from "@/components/Napoveda";
 import { LoanManager } from "@/components/LoanManager";
 import { LeaseManager } from "@/components/LeaseManager";
 import { ServiceManager } from "@/components/ServiceManager";
@@ -75,9 +76,9 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           <Stat label="Zhodnocení" value={`${a.valueGain >= 0 ? "+" : ""}${czkCompact(a.valueGain)}`}
             sub={`${pct(a.valueGainPct)} za ${a.yearsHeld.toFixed(1)} roku`}
             tone={a.valueGain >= 0 ? "good" : "bad"} />
-          <Stat label="Čistý výnos" value={pct(a.metrics.netYield)}
+          <Stat label="Čistý výnos" term="cistyVynos" value={pct(a.metrics.netYield)}
             sub={`Hrubý ${pct(a.metrics.grossYield)} · cap rate ${pct(a.metrics.capRate)}`} />
-          <Stat label="IRR od pořízení" value={a.irr != null ? pct(a.irr) : "—"}
+          <Stat label="IRR od pořízení" term="irr" value={a.irr != null ? pct(a.irr) : "—"}
             sub={a.estimatedYears.length ? `${a.estimatedYears.length} let odhadnuto z modelu` : "Ze skutečných toků"}
             tone={(a.irr ?? 0) >= 5 ? "good" : "neutral"} />
         </StatGrid>
@@ -90,8 +91,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                 <Row label="Vedlejší náklady pořízení" value={czk(property.acquisitionCosts)} />
                 <Row label="Rekonstrukce" value={czk(property.renovationCosts)} />
                 <Row label="Celková investice" value={czk(a.totalInvestment)} strong />
-                <Row label="Z toho podíl na pozemku" value={czk(property.landShareValue)} muted note="neodepisuje se" />
-                <Row label="Vlastní vložený kapitál" value={czk(a.equityInvested)} />
+                <Row term="vstupniCena" label="Z toho podíl na pozemku" value={czk(property.landShareValue)} muted note="neodepisuje se" />
+                <Row term="vlastniKapital" label="Vlastní vložený kapitál" value={czk(a.equityInvested)} />
                 <Row label="Datum pořízení" value={dateCz(property.purchaseDate)} />
               </tbody>
             </table>
@@ -103,10 +104,10 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
               <div className="mt-4 border-t border-line pt-3">
                 <table className="table-base">
                   <tbody>
-                    <Row label="LTV" value={pct(a.metrics.ltv)} />
-                    <Row label="DSCR" value={isFinite(a.metrics.dscr) ? num(a.metrics.dscr, 2) : "—"}
+                    <Row term="ltv" label="LTV" value={pct(a.metrics.ltv)} />
+                    <Row term="dscr" label="DSCR" value={isFinite(a.metrics.dscr) ? num(a.metrics.dscr, 2) : "—"}
                       note={a.metrics.dscr < 1.2 ? "pod bankovním limitem 1,2" : "zdravé krytí"} />
-                    <Row label={`Úroky ${year}`} value={czk(a.annualInterest)} note="daňově uznatelné" />
+                    <Row term="jistinaUroky" label={`Úroky ${year}`} value={czk(a.annualInterest)} note="daňově uznatelné" />
                   </tbody>
                 </table>
                 {a.fixationAlert && (
@@ -124,8 +125,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
               <table className="table-base">
                 <tbody>
                   <Row label="Provozní náklady / rok" value={czk(a.annualOperatingExpenses)} />
-                  <Row label="Nákladovost" value={pct(a.metrics.expenseRatio)} note="podíl na nájmu" />
-                  <Row label="Breakeven nájem" value={`${czk(a.metrics.breakevenRentMonthly)}/měs.`}
+                  <Row term="nakladovost" label="Nákladovost" value={pct(a.metrics.expenseRatio)} note="podíl na nájmu" />
+                  <Row term="breakeven" label="Breakeven nájem" value={`${czk(a.metrics.breakevenRentMonthly)}/měs.`}
                     note="při něm je cash flow nulový" />
                 </tbody>
               </table>
@@ -194,13 +195,13 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   );
 }
 
-function Row({ label, value, strong, muted, note }: {
-  label: string; value: React.ReactNode; strong?: boolean; muted?: boolean; note?: string;
+function Row({ label, value, strong, muted, note, term }: {
+  label: string; value: React.ReactNode; strong?: boolean; muted?: boolean; note?: string; term?: string;
 }) {
   return (
     <tr>
       <td className={`${muted ? "text-ink-muted" : "text-ink-secondary"}`}>
-        {label}
+        {term ? <Napoveda term={term}>{label}</Napoveda> : label}
         {note && <span className="ml-1.5 text-xs text-ink-muted">({note})</span>}
       </td>
       <td className={`num ${strong ? "font-semibold" : ""}`}>{value}</td>
