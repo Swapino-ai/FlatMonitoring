@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { HLAVICKY_PROHLIZECE } from "@/lib/market/util";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -58,6 +59,25 @@ export async function GET() {
     dbRegion = dbHost.match(/\.([a-z]{2}-[a-z]+-\d)\./)?.[1] ?? "nerozpoznán";
   } catch { /* promenna chybi nebo neni URL */ }
 
+  // Dosazitelnost portalu primo odsud — z prohlizece to vypada jinak nez ze serveru
+  const portal = await (async () => {
+    const url = "https://www.sreality.cz/hledani/prodej/byty/praha";
+    const t = Date.now();
+    try {
+      const r = await fetch(url, { headers: HLAVICKY_PROHLIZECE, redirect: "follow" });
+      const html = await r.text();
+      return {
+        url,
+        stav: r.status,
+        msMs: Date.now() - t,
+        velikostKB: Math.round(html.length / 1024),
+        maData: /__NEXT_DATA__/.test(html),
+      };
+    } catch (e) {
+      return { url, stav: 0, chyba: e instanceof Error ? e.message : String(e) };
+    }
+  })();
+
   const vercelRegion = process.env.VERCEL_REGION ?? "mimo Vercel";
   const stejnyKontinent = dbRegion.startsWith("eu") && vercelRegion.startsWith("fra");
 
@@ -71,6 +91,14 @@ export async function GET() {
   if (velikostKB > 500) {
     diagnoza.push(`Pro jednu stránku se načítá ${velikostKB} kB dat. To už je hodně — vyplatí se omezit rozsah načítaných transakcí.`);
   }
+  if (portal.stav === 404 || portal.stav === 403) {
+    diagnoza.push(`Sreality odsud vracejí HTTP ${portal.stav} na adresu, která z jiných sítí funguje. Odmítají požadavky z datového centra. Sken spouštěj přes GitHub Actions (Actions → Měsíční sken trhu → Run workflow); hodnotu lze také zadat ručně v detailu bytu.`);
+  } else if (portal.stav === 200 && !portal.maData) {
+    diagnoza.push("Sreality odpovídají, ale stránka neobsahuje očekávaná data — patrně se změnila struktura webu. Spusť v Actions workflow Sonda portálů.");
+  } else if (portal.stav === 200) {
+    diagnoza.push(`Sreality jsou odsud dostupné (${portal.msMs} ms), sken trhu by měl fungovat.`);
+  }
+
   if (diagnoza.length === 0) {
     diagnoza.push("Databáze odpovídá rychle a objem dat je malý. Pomalost bude jinde — nejspíš ve studeném startu funkce nebo na straně prohlížeče.");
   }
@@ -89,6 +117,7 @@ export async function GET() {
       celkemMs: Date.now() - zacatek,
     },
     objemDat: { ...pocty, velikostKB },
+    dostupnostPortalu: portal,
     diagnoza,
   }, { headers: { "Cache-Control": "no-store" } });
 }
