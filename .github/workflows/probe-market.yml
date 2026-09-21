@@ -18,9 +18,5 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - name: Sonda dostupnosti
-        run: npx tsx scripts/probe-market.ts
-
-      - name: Sonda struktury dat
-        if: always()
-        run: npx tsx scripts/probe-structure.ts
+      - name: Sonda polí a filtrů
+        run: npx tsx scripts/probe-fields.ts
