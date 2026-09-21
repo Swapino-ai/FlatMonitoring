@@ -15,7 +15,8 @@
     "backup": "tsx scripts/backup.ts",
     "restore": "tsx scripts/restore.ts",
     "postinstall": "prisma generate",
-    "vercel-build": "prisma generate && prisma db push --skip-generate && next build"
+    "vercel-build": "prisma generate && prisma db push --skip-generate && next build",
+    "probe": "tsx scripts/probe-market.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.1.0",

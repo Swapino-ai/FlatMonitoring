@@ -1,0 +1,22 @@
+# Diagnostika inzertnich portalu. Spousti se jen rucne.
+# Nemeni zadna data — pouze vypise, co ktera adresa vraci.
+
+name: Sonda portálů
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Sonda
+        run: npx tsx scripts/probe-market.ts
