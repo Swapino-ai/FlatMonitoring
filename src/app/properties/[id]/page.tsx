@@ -12,6 +12,11 @@ import { LeaseManager } from "@/components/LeaseManager";
 import { ServiceManager } from "@/components/ServiceManager";
 import { TransactionManager } from "@/components/TransactionManager";
 import { analyzeProperty, loadProperty } from "@/lib/portfolio";
+import { nasobitel, podilUzivatele } from "@/lib/ownership";
+import { aktualniPohled } from "@/lib/ownership.server";
+import { prisma } from "@/lib/db";
+import { OwnerManager } from "@/components/OwnerManager";
+import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
 import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
 import { categoryLabel, SERVICE_TYPES } from "@/lib/categories";
@@ -25,8 +30,15 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const property = await loadProperty(id);
   if (!property) notFound();
 
-  const a = analyzeProperty(property);
+  const pohled = await aktualniPohled();
+  const podil = nasobitel(pohled, property.owners, user.id);
+  const a = analyzeProperty(property, new Date(), podil);
   const year = new Date().getFullYear();
+
+  const uzivatele = user.role === "OWNER"
+    ? await prisma.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, email: true } })
+    : [];
+  const mujPodil = podilUzivatele(property.owners, user.id);
 
   const activeLoans = property.loans.filter((l) => l.isActive);
   const amortByYear = activeLoans.length
@@ -63,9 +75,12 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             {property.floor != null && ` · ${property.floor}. patro`}
             {property.buildYear && ` · rok ${property.buildYear}`}
           </p>
-          {user.role === "OWNER" && (
-            <Link href={`/properties/${property.id}/edit`} className="btn no-print shrink-0">Upravit</Link>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {property.owners.some((o) => o.share < 100) && <PohledPrepinac pohled={pohled} />}
+            {user.role === "OWNER" && (
+              <Link href={`/properties/${property.id}/edit`} className="btn no-print">Upravit</Link>
+            )}
+          </div>
           </div>
         </div>
 
@@ -96,6 +111,22 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                 <Row label="Datum pořízení" value={dateCz(property.purchaseDate)} />
               </tbody>
             </table>
+          </Card>
+
+          <Card title="Spoluvlastníci">
+            <OwnerManager
+              propertyId={property.id}
+              owners={property.owners}
+              uzivatele={uzivatele}
+              canEdit={user.role === "OWNER"}
+            />
+            {mujPodil < 1 && (
+              <p className="mt-3 rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-secondary">
+                Tvůj podíl je {Math.round(mujPodil * 1000) / 10} %. V pohledu
+                <strong> Můj podíl</strong> se všechny částky krátí na tuhle část; poměrové ukazatele
+                jako výnos nebo LTV zůstávají stejné.
+              </p>
+            )}
           </Card>
 
           <Card title="Dluh a zajištění">

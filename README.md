@@ -160,6 +160,31 @@ stahovat hotové PDF jedním klikem.
 
 ---
 
+## Spoluvlastnictví
+
+Byt může mít víc vlastníků s podíly v procentech — třeba ty 50 % a obchodní
+partner 50 %. Podíly zadáš v detailu bytu v kartě **Spoluvlastníci**.
+
+Přepínačem v hlavičce pak volíš, co se počítá:
+
+- **Celé portfolio** — všechna čísla za byt jako celek, bez ohledu na podíly.
+- **Můj podíl** — všechny částky krácené na tvou část: hodnota, dluh, nájem,
+  cash flow i odpisy.
+
+**Poměrové ukazatele se podílem nemění.** Výnos, LTV, DSCR ani cap rate nezávisí
+na tom, jak velkou část bytu vlastníš — krátí se čitatel i jmenovatel. Mění se
+jen absolutní částky.
+
+**Daně se počítají vždy jen z tvého podílu**, bez ohledu na přepínač.
+Spoluvlastník zdaňuje svou část příjmů, výdajů i odpisů.
+
+Byt bez zadaných vlastníků se počítá jako **celý tvůj** — zavedení podílů proto
+nerozbije už vedenou evidenci a podíly se dají doplnit postupně. Když součet
+podílů nedosáhne sta procent, aplikace upozorní, že se zbytek nezapočítá nikomu.
+
+Vlastníkem může být jen uživatel s účtem. Účet pro spoluvlastníka založíš
+v sekci **Uživatelé**; roli *jen pro čtení* dej tomu, kdo nemá měnit data.
+
 ## Vysvětlivky ukazatelů
 
 Zkratky a ukazatele mají u sebe značku `?`. Po najetí myší, klepnutí na telefonu

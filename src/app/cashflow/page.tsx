@@ -4,7 +4,7 @@ import { Verze } from "@/components/Verze";
 import { Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { Napoveda } from "@/components/Napoveda";
 import { CashFlowChart, ExpenseBreakdownChart } from "@/components/charts";
-import { loadProperties } from "@/lib/portfolio";
+import { nactiPortfolio } from "@/lib/pohled";
 import { cashFlowSeries, expenseBreakdown } from "@/lib/series";
 import { categoryLabel } from "@/lib/categories";
 import { czk, dateCz } from "@/lib/format";
@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CashFlowPage() {
   const user = await page();
-  const properties = await loadProperties();
+  const { properties } = await nactiPortfolio(user);
   const year = new Date().getFullYear();
 
   const series = cashFlowSeries(properties, 12);

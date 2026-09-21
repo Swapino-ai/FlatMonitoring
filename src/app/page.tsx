@@ -4,7 +4,9 @@ import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { CashFlowChart, EquityChart, YieldBarChart } from "@/components/charts";
-import { analyzeProperty, loadProperties, summarize } from "@/lib/portfolio";
+import { summarize } from "@/lib/portfolio";
+import { nactiPortfolio } from "@/lib/pohled";
+import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { cashFlowSeries, equitySeries } from "@/lib/series";
 import { findBundleOpportunities, summarizeSavings } from "@/lib/savings";
 import { czk, czkCompact, dateCz, pct, STATUS_LABELS } from "@/lib/format";
@@ -13,8 +15,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
   const user = await page();
-  const properties = await loadProperties();
-  const analyses = properties.map((p) => analyzeProperty(p));
+  const { pohled, properties, analyses, maSpoluvlastnictvi } = await nactiPortfolio(user);
   const s = summarize(analyses);
   const savings = summarizeSavings(findBundleOpportunities(properties));
 
@@ -37,9 +38,13 @@ export default async function Dashboard() {
             <p className="mt-1 text-sm text-ink-secondary">
               {s.count} {s.count === 1 ? "nemovitost" : s.count < 5 ? "nemovitosti" : "nemovitostí"} · {Math.round(s.totalAreaM2)} m² ·
               obsazenost {pct(s.occupancyPct, 0)}
+              {pohled === "moje" && <span className="ml-1 text-accent">· jen tvůj podíl</span>}
             </p>
           </div>
-          <Link href="/reports" className="btn no-print">Vygenerovat PDF report</Link>
+          <div className="flex items-center gap-2">
+            {maSpoluvlastnictvi && <PohledPrepinac pohled={pohled} />}
+            <Link href="/reports" className="btn no-print">Vygenerovat PDF report</Link>
+          </div>
         </div>
 
         {properties.length === 0 ? (

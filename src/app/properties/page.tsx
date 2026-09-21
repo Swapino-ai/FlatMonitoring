@@ -3,15 +3,15 @@ import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty } from "@/components/Stat";
-import { analyzeProperty, loadProperties } from "@/lib/portfolio";
+import { nactiPortfolio } from "@/lib/pohled";
+import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { czk, czkCompact, dateCz, pct, STATUS_LABELS } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export default async function PropertiesPage() {
   const user = await page();
-  const properties = await loadProperties();
-  const analyses = properties.map((p) => analyzeProperty(p));
+  const { pohled, analyses, maSpoluvlastnictvi } = await nactiPortfolio(user);
 
   return (
     <>
@@ -22,9 +22,12 @@ export default async function PropertiesPage() {
             <h1 className="text-2xl font-semibold tracking-tight">Nemovitosti</h1>
             <p className="mt-1 text-sm text-ink-secondary">Pořizovací ceny, dluhy a výnosnost jednotlivých bytů.</p>
           </div>
-          {user.role === "OWNER" && (
-            <Link href="/properties/new" className="btn btn-primary no-print">Přidat nemovitost</Link>
-          )}
+          <div className="flex items-center gap-2">
+            {maSpoluvlastnictvi && <PohledPrepinac pohled={pohled} />}
+            {user.role === "OWNER" && (
+              <Link href="/properties/new" className="btn btn-primary no-print">Přidat nemovitost</Link>
+            )}
+          </div>
         </div>
 
         {analyses.length === 0 ? (
@@ -40,9 +43,12 @@ export default async function PropertiesPage() {
                       {a.property.street}, {a.property.city}
                     </p>
                   </div>
-                  <Badge tone={a.property.status === "RENTED" ? "good" : a.property.status === "VACANT" ? "warn" : "neutral"}>
-                    {STATUS_LABELS[a.property.status]}
-                  </Badge>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <Badge tone={a.property.status === "RENTED" ? "good" : a.property.status === "VACANT" ? "warn" : "neutral"}>
+                      {STATUS_LABELS[a.property.status]}
+                    </Badge>
+                    {a.podil < 1 && <Badge>podíl {Math.round(a.podil * 1000) / 10} %</Badge>}
+                  </div>
                 </div>
 
                 <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm">

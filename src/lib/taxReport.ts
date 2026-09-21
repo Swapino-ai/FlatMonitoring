@@ -8,6 +8,8 @@ import type { PropertyWithRelations } from "./portfolio";
 export interface PropertyTaxLine {
   id: string;
   name: string;
+  /** Jakou cast bytu poplatnik dani (0-1). */
+  podil: number;
   rentalIncome: number;
   deductibleExpenses: number;
   loanInterest: number;
@@ -33,10 +35,21 @@ export interface TaxReport {
   computation: TaxComputationResult;
 }
 
-export function buildTaxReport(properties: PropertyWithRelations[], year: number, applyTaxpayerCredit = true): TaxReport {
+/**
+ * `podily` urcuje, jakou cast kazdeho bytu poplatnik dani. Spoluvlastnik zdanuje
+ * jen svuj podil na prijmech, vydajich i odpisech — proto se kráti vsechny castky.
+ */
+export function buildTaxReport(
+  properties: PropertyWithRelations[],
+  year: number,
+  applyTaxpayerCredit = true,
+  podily?: Map<string, number>,
+): TaxReport {
   const lines: PropertyTaxLine[] = [];
 
   for (const p of properties) {
+    const podil = podily?.get(p.id) ?? 1;
+    if (podil <= 0) continue;
     const inYear = p.transactions.filter((t) => new Date(t.date).getFullYear() === year);
 
     const rentalIncome = sum(inYear.filter((t) => t.taxTreatment === "INCOME_RENT").map((t) => t.amount));
@@ -70,16 +83,20 @@ export function buildTaxReport(properties: PropertyWithRelations[], year: number
 
     if (rentalIncome === 0 && deductibleExpenses === 0 && loanInterest === 0 && !depRow) continue;
 
+    const k = (x: number) => x * podil;
+    const odpis = k(depRow?.amount ?? 0);
+
     lines.push({
       id: p.id,
       name: p.name,
-      rentalIncome,
-      deductibleExpenses,
-      loanInterest,
-      depreciation: depRow?.amount ?? 0,
+      podil,
+      rentalIncome: k(rentalIncome),
+      deductibleExpenses: k(deductibleExpenses),
+      loanInterest: k(loanInterest),
+      depreciation: odpis,
       depreciationOrdinal: depRow?.ordinal ?? null,
-      result: rentalIncome - deductibleExpenses - loanInterest - (depRow?.amount ?? 0),
-      passThrough,
+      result: k(rentalIncome) - k(deductibleExpenses) - k(loanInterest) - odpis,
+      passThrough: k(passThrough),
       saleNote,
     });
   }

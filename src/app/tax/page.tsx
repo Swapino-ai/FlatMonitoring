@@ -4,7 +4,8 @@ import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { Napoveda } from "@/components/Napoveda";
-import { loadProperties } from "@/lib/portfolio";
+import { podilUzivatele } from "@/lib/ownership";
+import { nactiPortfolio } from "@/lib/pohled";
 import { buildTaxReport } from "@/lib/taxReport";
 import { czk, num, pct } from "@/lib/format";
 
@@ -16,8 +17,11 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
 
   const currentYear = new Date().getFullYear();
   const year = Number(rok) || currentYear;
-  const properties = await loadProperties();
-  const report = buildTaxReport(properties, year);
+  // Dan se vzdy pocita z vlastniho podilu — spoluvlastnik zdanuje jen svou cast
+  const { properties, analyses } = await nactiPortfolio(user);
+  const podily = new Map(analyses.map((a) => [a.property.id, podilUzivatele(a.property.owners, user.id)]));
+  const report = buildTaxReport(properties, year, true, podily);
+  const maPodily = [...podily.values()].some((p) => p < 1);
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
   const { recommended, options, params } = report.computation;
@@ -31,6 +35,7 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
             <h1 className="text-2xl font-semibold tracking-tight">Podklad pro daňové přiznání {year}</h1>
             <p className="mt-1 text-sm text-ink-secondary">
               Příjmy z nájmu dle § 9 zákona o daních z příjmů — příloha č. 2 k přiznání k DPFO.
+              {maPodily && " Počítá se pouze tvůj spoluvlastnický podíl."}
             </p>
           </div>
           <div className="flex gap-1 no-print">
@@ -109,7 +114,12 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
                   <tbody>
                     {report.lines.map((l) => (
                       <tr key={l.id}>
-                        <td className="font-medium">{l.name}</td>
+                        <td className="font-medium">
+                          {l.name}
+                          {l.podil < 1 && (
+                            <span className="ml-1.5 text-xs text-ink-muted">podíl {Math.round(l.podil * 1000) / 10} %</span>
+                          )}
+                        </td>
                         <td className="num">{czk(l.rentalIncome)}</td>
                         <td className="num">{czk(l.deductibleExpenses)}</td>
                         <td className="num">{czk(l.loanInterest)}</td>

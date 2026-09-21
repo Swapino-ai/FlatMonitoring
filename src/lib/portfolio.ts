@@ -16,6 +16,7 @@ const withRelations = {
     leases: true,
     services: true,
     valuations: { orderBy: { date: "desc" } },
+    owners: { include: { user: { select: { id: true, name: true, email: true } } } },
     transactions: {
       select: {
         id: true,
@@ -35,6 +36,8 @@ export type PropertyWithRelations = Prisma.PropertyGetPayload<typeof withRelatio
 
 export interface PropertyAnalysis {
   property: PropertyWithRelations;
+  /** Jakou cast bytu zahrnuje tento vypocet (0-1). Pri celem portfoliu 1. */
+  podil: number;
   totalInvestment: number;
   equityInvested: number;
   currentValue: number;
@@ -76,7 +79,16 @@ export async function loadProperty(id: string): Promise<PropertyWithRelations | 
   }) as Promise<PropertyWithRelations | null>;
 }
 
-export function analyzeProperty(p: PropertyWithRelations, asOf = new Date()): PropertyAnalysis {
+/**
+ * Prepocet jedne nemovitosti. `podil` kráti vsechny castky na vlastnicky podil —
+ * pomerove ukazatele (vynos, LTV, DSCR) se tim nemeni, protoze se krati citatel
+ * i jmenovatel.
+ */
+export function analyzeProperty(
+  p: PropertyWithRelations,
+  asOf = new Date(),
+  podil = 1,
+): PropertyAnalysis {
   const year = asOf.getFullYear();
 
   const totalInvestment = p.purchasePrice + p.acquisitionCosts + p.renovationCosts;
@@ -202,26 +214,36 @@ export function analyzeProperty(p: PropertyWithRelations, asOf = new Date()): Pr
     }
   }
 
+  // Castky kratime podilem, pomery zustavaji — vynos i LTV jsou na podilu nezavisle
+  const k = (x: number) => x * podil;
+
   return {
     property: p,
-    totalInvestment,
-    equityInvested,
-    currentValue,
+    podil,
+    totalInvestment: k(totalInvestment),
+    equityInvested: k(equityInvested),
+    currentValue: k(currentValue),
     valuationSource,
-    currentDebt,
-    annualGrossRent,
-    annualOperatingExpenses,
-    annualDebtService,
-    annualInterest,
-    monthlyRent,
-    monthlyServiceCost,
-    metrics,
+    currentDebt: k(currentDebt),
+    annualGrossRent: k(annualGrossRent),
+    annualOperatingExpenses: k(annualOperatingExpenses),
+    annualDebtService: k(annualDebtService),
+    annualInterest: k(annualInterest),
+    monthlyRent: k(monthlyRent),
+    monthlyServiceCost: k(monthlyServiceCost),
+    metrics: {
+      ...metrics,
+      noi: k(metrics.noi),
+      cashFlowAnnual: k(metrics.cashFlowAnnual),
+      equity: k(metrics.equity),
+      breakevenRentMonthly: k(metrics.breakevenRentMonthly),
+    },
     irr: irrValue,
-    totalCashFlowToDate,
-    valueGain,
+    totalCashFlowToDate: k(totalCashFlowToDate),
+    valueGain: k(valueGain),
     valueGainPct: totalInvestment ? (valueGain / totalInvestment) * 100 : 0,
     yearsHeld,
-    depreciationThisYear,
+    depreciationThisYear: k(depreciationThisYear),
     estimatedYears,
     activeLease,
     fixationAlert,
@@ -279,7 +301,7 @@ export function summarize(analyses: PropertyAnalysis[]): PortfolioSummary {
     ltv: currentValue ? (totalDebt / currentValue) * 100 : 0,
     valueGain: currentValue - totalInvestment,
     valueGainPct: totalInvestment ? ((currentValue - totalInvestment) / totalInvestment) * 100 : 0,
-    totalAreaM2: sum(active.map((a) => a.property.areaM2)),
+    totalAreaM2: sum(active.map((a) => a.property.areaM2 * a.podil)),
     occupancyPct: active.length ? (rentedCount / active.length) * 100 : 0,
   };
 }

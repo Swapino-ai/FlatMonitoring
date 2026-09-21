@@ -3,7 +3,7 @@ import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { Napoveda } from "@/components/Napoveda";
-import { loadProperties } from "@/lib/portfolio";
+import { nactiPortfolio } from "@/lib/pohled";
 import { findBundleOpportunities, summarizeSavings } from "@/lib/savings";
 import { czk, dateCz, pct } from "@/lib/format";
 
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SavingsPage() {
   const user = await page();
-  const properties = await loadProperties();
+  const { properties } = await nactiPortfolio(user);
   const opportunities = findBundleOpportunities(properties);
   const s = summarizeSavings(opportunities);
 

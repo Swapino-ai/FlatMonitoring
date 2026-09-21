@@ -24,6 +24,27 @@ model User {
   passwordHash String
   role         String   @default("PARTNER") // OWNER | PARTNER
   createdAt    DateTime @default(now())
+
+  podily PropertyOwner[]
+}
+
+/// Spoluvlastnictvi bytu. Podil rozhoduje, kolik z hodnoty, dluhu i najmu
+/// se zapocita do portfolia daneho uzivatele — a co zdani ve svem priznani.
+model PropertyOwner {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Podil v procentech, 0-100. Soucet pres byt nesmi presahnout 100.
+  share Float @default(100)
+
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@unique([propertyId, userId])
+  @@index([userId])
 }
 
 /// Nemovitost — ustredni entita aplikace
@@ -69,6 +90,7 @@ model Property {
   transactions Transaction[]
   services     Service[]
   valuations   Valuation[]
+  owners       PropertyOwner[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

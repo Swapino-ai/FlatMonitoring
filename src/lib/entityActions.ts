@@ -294,3 +294,53 @@ export async function deleteTransaction(_prev: EntityFormState, formData: FormDa
   obnov(tx.propertyId);
   return { success: "Pohyb smazán." };
 }
+
+
+// --- Spoluvlastníci ---
+
+const vlastnikSchema = z.object({
+  propertyId: z.string().min(1),
+  userId: z.string().min(1, "Vyber uživatele."),
+  share: cislo().refine((v) => v > 0 && v <= 100, "Podíl musí být mezi 0 a 100 %."),
+  note: textNeboNic,
+});
+
+export async function saveOwner(_prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+
+  const parsed = vlastnikSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  const d = parsed.data;
+
+  const stavajici = await prisma.propertyOwner.findMany({ where: { propertyId: d.propertyId } });
+  const bezTohoto = stavajici.filter((o) => o.userId !== d.userId);
+  const soucet = bezTohoto.reduce((a, o) => a + o.share, 0) + d.share;
+
+  // Přes sto procent by portfolio nafouklo majetek, který neexistuje
+  if (soucet > 100.01) {
+    const zbyva = Math.round((100 - bezTohoto.reduce((a, o) => a + o.share, 0)) * 100) / 100;
+    return { error: `Součet podílů by byl ${Math.round(soucet * 100) / 100} %. Zbývá nejvýš ${zbyva} %.` };
+  }
+
+  await prisma.propertyOwner.upsert({
+    where: { propertyId_userId: { propertyId: d.propertyId, userId: d.userId } },
+    create: { propertyId: d.propertyId, userId: d.userId, share: d.share, note: d.note },
+    update: { share: d.share, note: d.note },
+  });
+
+  obnov(d.propertyId);
+  return { success: `Podíl uložen. Celkem přiřazeno ${Math.round(soucet * 100) / 100} % bytu.` };
+}
+
+export async function deleteOwner(_prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+
+  const o = await prisma.propertyOwner.findUnique({ where: { id: String(formData.get("id")) } });
+  if (!o) return { error: "Podíl neexistuje." };
+
+  await prisma.propertyOwner.delete({ where: { id: o.id } });
+  obnov(o.propertyId);
+  return { success: "Podíl odebrán." };
+}

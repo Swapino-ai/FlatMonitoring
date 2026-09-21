@@ -16,6 +16,7 @@ export async function exportujVse(): Promise<Zaloha> {
     tabulky: {
       user: await prisma.user.findMany(),
       property: await prisma.property.findMany(),
+      propertyOwner: await prisma.propertyOwner.findMany(),
       loan: await prisma.loan.findMany(),
       lease: await prisma.lease.findMany(),
       transaction: await prisma.transaction.findMany(),
@@ -55,6 +56,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.marketScan.deleteMany();
     await tx.marketIndex.deleteMany();
     await tx.valuation.deleteMany();
+    await tx.propertyOwner.deleteMany();
     await tx.service.deleteMany();
     await tx.transaction.deleteMany();
     await tx.lease.deleteMany();
@@ -90,6 +92,12 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       notes: s(x.notes),
     }));
     if (properties.length) obnoveno.property = (await tx.property.createMany({ data: properties })).count;
+
+    const owners = (t.propertyOwner as any[] ?? []).map((x) => ({
+      id: String(x.id), propertyId: String(x.propertyId), userId: String(x.userId),
+      share: c(x.share, 100), note: s(x.note), createdAt: dPovinne(x.createdAt ?? new Date()),
+    }));
+    if (owners.length) obnoveno.propertyOwner = (await tx.propertyOwner.createMany({ data: owners })).count;
 
     const loans = (t.loan as any[] ?? []).map((x) => ({
       id: String(x.id), propertyId: String(x.propertyId), lender: String(x.lender),
@@ -133,7 +141,8 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       id: String(x.id), propertyId: String(x.propertyId), date: dPovinne(x.date),
       value: c(x.value), pricePerM2: x.pricePerM2 == null ? null : c(x.pricePerM2),
       source: String(x.source), confidence: s(x.confidence),
-      sampleSize: x.sampleSize == null ? null : Math.round(c(x.sampleSize)), notes: s(x.notes),
+      sampleSize: x.sampleSize == null ? null : Math.round(c(x.sampleSize)),
+      comparables: x.comparables ?? undefined, notes: s(x.notes),
     }));
     if (valuations.length) obnoveno.valuation = (await tx.valuation.createMany({ data: valuations })).count;
 
