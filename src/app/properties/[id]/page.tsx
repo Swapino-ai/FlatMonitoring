@@ -5,6 +5,10 @@ import { Nav } from "@/components/Nav";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { AmortizationChart } from "@/components/charts";
 import { ValuationManager } from "@/components/ValuationManager";
+import { LoanManager } from "@/components/LoanManager";
+import { LeaseManager } from "@/components/LeaseManager";
+import { ServiceManager } from "@/components/ServiceManager";
+import { TransactionManager } from "@/components/TransactionManager";
 import { analyzeProperty, loadProperty } from "@/lib/portfolio";
 import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
 import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
@@ -93,64 +97,38 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           </Card>
 
           <Card title="Dluh a zajištění">
-            {activeLoans.length === 0 ? (
-              <Empty>Bez úvěru — byt je čistý.</Empty>
-            ) : (
-              <div className="space-y-4">
-                {activeLoans.map((l) => {
-                  const yb = loanYearBreakdown({ ...l, startDate: new Date(l.startDate) }, year);
-                  return (
-                    <div key={l.id} className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{l.lender}</span>
-                        <span className="text-xs text-ink-muted">{l.contractNo}</span>
-                      </div>
-                      <table className="table-base">
-                        <tbody>
-                          <Row label="Zbývá splatit" value={czk(yb.endBalance)} strong />
-                          <Row label="Úroková sazba" value={`${num(l.interestRate, 2)} % p.a.`} />
-                          <Row label="Měsíční splátka" value={czk(l.monthlyPayment)} />
-                          <Row label={`Úroky ${year}`} value={czk(yb.interest)} note="daňově uznatelné" />
-                          <Row label={`Jistina ${year}`} value={czk(yb.principal)} note="nedaňový výdaj" />
-                          <Row label="Konec fixace" value={dateCz(l.fixationEnd)} />
-                        </tbody>
-                      </table>
-                      {a.fixationAlert && (
-                        <p className="rounded-lg bg-warn/10 px-2.5 py-1.5 text-xs text-warn">
-                          Fixace končí za {Math.round(a.fixationAlert.monthsLeft)} měsíců — začni poptávat refinancování.
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-                <div className="border-t border-line pt-3">
-                  <table className="table-base">
-                    <tbody>
-                      <Row label="LTV" value={pct(a.metrics.ltv)} />
-                      <Row label="DSCR" value={isFinite(a.metrics.dscr) ? num(a.metrics.dscr, 2) : "—"}
-                        note={a.metrics.dscr < 1.2 ? "pod bankovním limitem 1,2" : "zdravé krytí"} />
-                    </tbody>
-                  </table>
-                </div>
+            <LoanManager propertyId={property.id} loans={property.loans} canEdit={user.role === "OWNER"} />
+            {activeLoans.length > 0 && (
+              <div className="mt-4 border-t border-line pt-3">
+                <table className="table-base">
+                  <tbody>
+                    <Row label="LTV" value={pct(a.metrics.ltv)} />
+                    <Row label="DSCR" value={isFinite(a.metrics.dscr) ? num(a.metrics.dscr, 2) : "—"}
+                      note={a.metrics.dscr < 1.2 ? "pod bankovním limitem 1,2" : "zdravé krytí"} />
+                    <Row label={`Úroky ${year}`} value={czk(a.annualInterest)} note="daňově uznatelné" />
+                  </tbody>
+                </table>
+                {a.fixationAlert && (
+                  <p className="mt-2 rounded-lg bg-warn/10 px-2.5 py-1.5 text-xs text-warn">
+                    Fixace u {a.fixationAlert.lender} končí za {Math.round(a.fixationAlert.monthsLeft)} měsíců — začni poptávat refinancování.
+                  </p>
+                )}
               </div>
             )}
           </Card>
 
-          <Card title="Provoz a nájem">
-            <table className="table-base">
-              <tbody>
-                <Row label="Nájemce" value={a.activeLease?.tenantName ?? "—"} />
-                <Row label="Čisté nájemné" value={a.monthlyRent ? `${czk(a.monthlyRent)}/měs.` : "—"} strong />
-                <Row label="Zálohy na služby" value={a.activeLease ? `${czk(a.activeLease.utilitiesMonthly)}/měs.` : "—"} note="průchozí" />
-                <Row label="Kauce" value={a.activeLease ? czk(a.activeLease.deposit) : "—"} />
-                <Row label="Smlouva od" value={dateCz(a.activeLease?.startDate)} />
-                <Row label="Inflační doložka" value={a.activeLease?.indexationClause ? "ano" : "ne"} />
-                <Row label="Provozní náklady / rok" value={czk(a.annualOperatingExpenses)} />
-                <Row label="Nákladovost" value={pct(a.metrics.expenseRatio)} note="podíl na nájmu" />
-                <Row label="Breakeven nájem" value={`${czk(a.metrics.breakevenRentMonthly)}/měs.`}
-                  note="při něm je cash flow nulový" />
-              </tbody>
-            </table>
+          <Card title="Nájem a nájemci">
+            <LeaseManager propertyId={property.id} leases={property.leases} canEdit={user.role === "OWNER"} />
+            <div className="mt-4 border-t border-line pt-3">
+              <table className="table-base">
+                <tbody>
+                  <Row label="Provozní náklady / rok" value={czk(a.annualOperatingExpenses)} />
+                  <Row label="Nákladovost" value={pct(a.metrics.expenseRatio)} note="podíl na nájmu" />
+                  <Row label="Breakeven nájem" value={`${czk(a.metrics.breakevenRentMonthly)}/měs.`}
+                    note="při něm je cash flow nulový" />
+                </tbody>
+              </table>
+            </div>
           </Card>
         </div>
 
@@ -193,44 +171,17 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           </Card>
 
           <Card title="Služby a dodavatelé" action={<Link href="/savings" className="text-xs text-accent">Kde ušetřit →</Link>}>
-            {property.services.length === 0 ? <Empty>Žádné evidované služby.</Empty> : (
-              <table className="table-base">
-                <thead><tr><th>Služba</th><th>Dodavatel</th><th className="num">Měsíčně</th><th>Vázán do</th></tr></thead>
-                <tbody>
-                  {property.services.map((s) => (
-                    <tr key={s.id}>
-                      <td>{SERVICE_TYPES[s.type] ?? s.type}</td>
-                      <td className="text-ink-secondary">{s.provider}</td>
-                      <td className="num">{czk(s.monthlyCost)}</td>
-                      <td className="text-ink-secondary">{s.contractEnd ? dateCz(s.contractEnd) : "volné"}</td>
-                    </tr>
-                  ))}
-                  <tr>
-                    <td colSpan={2} className="font-medium">Celkem</td>
-                    <td className="num font-medium">{czk(a.monthlyServiceCost)}</td>
-                    <td />
-                  </tr>
-                </tbody>
-              </table>
-            )}
+            <ServiceManager propertyId={property.id} services={property.services} canEdit={user.role === "OWNER"} />
           </Card>
         </div>
 
-        <Card title="Poslední pohyby">
-          {recentTx.length === 0 ? <Empty>Žádné transakce.</Empty> : (
-            <table className="table-base">
-              <thead><tr><th>Datum</th><th>Kategorie</th><th>Popis</th><th className="num">Částka</th></tr></thead>
-              <tbody>
-                {recentTx.map((t) => (
-                  <tr key={t.id}>
-                    <td className="tabular-nums text-ink-secondary">{dateCz(t.date)}</td>
-                    <td>{categoryLabel(t.category)}</td>
-                    <td className="text-ink-secondary">{t.description}</td>
-                    <td className={`num font-medium ${t.amount >= 0 ? "text-good" : "text-ink-primary"}`}>{czk(t.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <Card title="Pohyby">
+          <TransactionManager propertyId={property.id} transactions={recentTx} canEdit={user.role === "OWNER"} />
+          {property.transactions.length > recentTx.length && (
+            <p className="mt-3 text-xs text-ink-muted">
+              Zobrazeno posledních {recentTx.length} z {property.transactions.length} pohybů.{" "}
+              <Link href="/cashflow" className="text-accent">Všechny v Cash flow →</Link>
+            </p>
           )}
         </Card>
 

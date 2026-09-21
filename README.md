@@ -65,7 +65,23 @@ Otevři adresu, kterou ti Vercel dal (`neco.vercel.app`). Protože je databáze
 prázdná, aplikace tě sama pustí na stránku **První spuštění** — vyplň e-mail a heslo
 a jsi uvnitř. Jakmile účet vznikne, tahle stránka se zavře a už se k ní nikdo nedostane.
 
-### 5. Účet pro obchodního partnera
+### 5. Zadání dat
+
+Všechno se zadává v aplikaci, žádná příkazová řádka:
+
+1. **Nemovitosti → Přidat nemovitost** — adresa, plocha, pořizovací cena, podíl
+   na pozemku a odpisová skupina.
+2. V **detailu bytu** pak doplníš zbytek. Každá sekce má vlastní formulář:
+   - **Dluh a zajištění** — hypotéky a úvěry. Měsíční splátku nech prázdnou
+     a dopočítá se anuita.
+   - **Nájem a nájemci** — smlouvy. Čisté nájemné drž oddělené od záloh na
+     služby; daní se jen nájemné.
+   - **Služby a dodavatelé** — energie, pojištění, SVJ. Podklad pro hledání úspor.
+   - **Pohyby** — jednotlivé platby. Částku zadáváš kladně, znaménko i daňové
+     zařazení určí kategorie.
+   - **Ocenění** — aktuální tržní hodnota, ručně nebo ze skenu trhu.
+
+### 6. Účet pro obchodního partnera
 
 V aplikaci jdi na **Uživatelé → Přidat účet** a zvol roli **Jen pro čtení**.
 Partner uvidí čísla i reporty, ale nic nezmění a sken trhu nespustí.
@@ -73,7 +89,7 @@ Partner uvidí čísla i reporty, ale nic nezmění a sken trhu nespustí.
 Pak mu pošleš adresu aplikace a přihlašovací údaje — heslo ideálně jinou cestou
 než ten odkaz. Žádné tunely, žádná nastavení routeru, funguje to odkudkoli.
 
-### 6. Měsíční sken trhu
+### 7. Měsíční sken trhu
 
 Sken běží přes GitHub Actions, ne na Vercelu — mezi dotazy záměrně čeká, aby
 portály nezatěžoval, a do časového limitu serverless funkce by se nevešel.
