@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { srealitySource } from "./sreality";
 import type { MarketSource, ScanQuery, ScrapedListing } from "./types";
@@ -66,6 +67,20 @@ export interface ComparableStats {
   p25: number;
   p75: number;
   medianPrice: number;
+  /** Konkretni nabidky, ze kterych medián vznikl — kvuli dolozitelnosti. */
+  listings: SrovnatelnaNabidka[];
+}
+
+/** Snimek jedne nabidky ukladany k oceneni. */
+export interface SrovnatelnaNabidka {
+  disposition: string | null;
+  areaM2: number | null;
+  price: number;
+  pricePerM2: number;
+  district: string | null;
+  url: string | null;
+  source: string;
+  scrapedAt: string;
 }
 
 /** Statistika srovnatelnych nabidek z poslednich skenu. */
@@ -92,7 +107,11 @@ export async function comparableStats(opts: {
       areaM2: { gte: opts.areaM2 - tol, lte: opts.areaM2 + tol },
       pricePerM2: { not: null },
     },
-    select: { pricePerM2: true, price: true },
+    select: {
+      pricePerM2: true, price: true, areaM2: true, disposition: true,
+      district: true, url: true, source: true, scrapedAt: true,
+    },
+    orderBy: { pricePerM2: "asc" },
   });
 
   if (rows.length < 3) return null;
@@ -106,6 +125,16 @@ export async function comparableStats(opts: {
     p25: quantile(perM2, 0.25),
     p75: quantile(perM2, 0.75),
     medianPrice: quantile(prices, 0.5),
+    listings: rows.map((r) => ({
+      disposition: r.disposition,
+      areaM2: r.areaM2,
+      price: r.price,
+      pricePerM2: r.pricePerM2!,
+      district: r.district,
+      url: r.url,
+      source: r.source,
+      scrapedAt: r.scrapedAt.toISOString(),
+    })),
   };
 }
 
@@ -141,6 +170,8 @@ export async function valuateFromMarket(propertyId: string): Promise<{ value: nu
       source: "MARKET_SCAN",
       confidence: stats.count >= 15 ? "HIGH" : stats.count >= 7 ? "MEDIUM" : "LOW",
       sampleSize: stats.count,
+      // Snimek necháváme u oceneni — inzeraty z trhu casem zmizi, doklad musi zustat
+      comparables: stats.listings as unknown as Prisma.InputJsonValue,
       notes: `Medián ${Math.round(stats.medianPricePerM2).toLocaleString("cs-CZ")} Kč/m² z ${stats.count} nabídek (mezikvartilové rozpětí ${Math.round(stats.p25).toLocaleString("cs-CZ")}–${Math.round(stats.p75).toLocaleString("cs-CZ")} Kč/m²). Nabídkové ceny, realizované bývají nižší.`,
     },
   });

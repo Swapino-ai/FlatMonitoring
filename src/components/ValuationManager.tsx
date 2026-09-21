@@ -1,12 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
+import { Fragment, useActionState, useState } from "react";
 import { addValuation, deleteValuation, type ValuationFormState } from "@/lib/valuationActions";
 import { czk, dateCz } from "@/lib/format";
+import { Comparables, type Nabidka } from "./Comparables";
 
 interface Row {
   id: string; date: Date; value: number; pricePerM2: number | null;
   source: string; sampleSize: number | null; notes: string | null;
+  comparables?: unknown;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -22,6 +24,8 @@ export function ValuationManager({ propertyId, valuations, areaM2, canEdit }: {
   areaM2: number;
   canEdit: boolean;
 }) {
+  // Ktere oceneni si uzivatel rozkliknul pro zobrazeni srovnatelnych nabidek
+  const [otevrene, setOtevrene] = useState<string | null>(null);
   const [addState, addAction, adding] = useActionState<ValuationFormState, FormData>(addValuation, {});
   const [delState, delAction] = useActionState<ValuationFormState, FormData>(deleteValuation, {});
 
@@ -46,29 +50,53 @@ export function ValuationManager({ propertyId, valuations, areaM2, canEdit }: {
             <tr><th>Datum</th><th className="num">Hodnota</th><th className="num">Kč/m²</th><th>Zdroj</th>{canEdit && <th />}</tr>
           </thead>
           <tbody>
-            {valuations.map((v, i) => (
-              <tr key={v.id} className={i === 0 ? "bg-accent/5" : ""}>
-                <td className="tabular-nums">
-                  {dateCz(v.date)}
-                  {i === 0 && <span className="ml-1.5 text-xs text-accent">platné</span>}
-                </td>
-                <td className="num font-medium">{czk(v.value)}</td>
-                <td className="num text-ink-secondary">{v.pricePerM2 ? czk(v.pricePerM2) : "—"}</td>
-                <td className="text-ink-secondary">
-                  {SOURCE_LABELS[v.source] ?? v.source}
-                  {v.sampleSize ? <span className="text-xs text-ink-muted"> ({v.sampleSize} nabídek)</span> : null}
-                  {v.notes && <div className="text-xs text-ink-muted">{v.notes}</div>}
-                </td>
-                {canEdit && (
-                  <td className="text-right">
-                    <form action={delAction}>
-                      <input type="hidden" name="id" value={v.id} />
-                      <button type="submit" className="text-xs text-bad hover:underline">Smazat</button>
-                    </form>
-                  </td>
-                )}
-              </tr>
-            ))}
+            {valuations.map((v, i) => {
+              const nabidky = (Array.isArray(v.comparables) ? v.comparables : []) as Nabidka[];
+              const rozbaleno = otevrene === v.id;
+              return (
+                <Fragment key={v.id}>
+                  <tr className={i === 0 ? "bg-accent/5" : ""}>
+                    <td className="tabular-nums">
+                      {dateCz(v.date)}
+                      {i === 0 && <span className="ml-1.5 text-xs text-accent">platné</span>}
+                    </td>
+                    <td className="num font-medium">{czk(v.value)}</td>
+                    <td className="num text-ink-secondary">{v.pricePerM2 ? czk(v.pricePerM2) : "—"}</td>
+                    <td className="text-ink-secondary">
+                      {SOURCE_LABELS[v.source] ?? v.source}
+                      {v.sampleSize ? <span className="text-xs text-ink-muted"> ({v.sampleSize} nabídek)</span> : null}
+                      {v.notes && <div className="text-xs text-ink-muted">{v.notes}</div>}
+                      {nabidky.length > 0 && (
+                        <button onClick={() => setOtevrene(rozbaleno ? null : v.id)}
+                          className="mt-1 block text-xs text-accent hover:underline">
+                          {rozbaleno ? "Skrýt srovnatelné nabídky" : `Podle čeho se počítalo (${nabidky.length}) →`}
+                        </button>
+                      )}
+                    </td>
+                    {canEdit && (
+                      <td className="text-right align-top">
+                        <form action={delAction}>
+                          <input type="hidden" name="id" value={v.id} />
+                          <button type="submit" className="text-xs text-bad hover:underline">Smazat</button>
+                        </form>
+                      </td>
+                    )}
+                  </tr>
+                  {rozbaleno && (
+                    <tr>
+                      <td colSpan={canEdit ? 5 : 4} className="bg-surface-sunken/30 p-4">
+                        <Comparables
+                          nabidky={nabidky}
+                          tvojeKcM2={v.pricePerM2 ?? (areaM2 ? v.value / areaM2 : 0)}
+                          plochaM2={areaM2}
+                          datumOceneni={v.date}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       )}

@@ -197,6 +197,11 @@ Prochází stránky výpisu, dokud nemá patnáct srovnatelných nabídek, nejv�
   **poslední platné ocenění zůstane nedotčené**.
 - Hodnotu můžeš kdykoli **zadat ručně** v detailu bytu. Aplikace je plně použitelná
   i s rozbitým skenem — ber ho jako pohodlí, ne jako základ.
+- U každého ocenění ze skenu zůstane **uložený snímek nabídek**, ze kterých medián
+  vznikl. V detailu bytu na něj vede odkaz *Podle čeho se počítalo* — uvidíš karty
+  konkurenčních bytů s cenou za m², čtvrtí i odkazem na inzerát a to, kde mezi nimi
+  tvůj byt leží. Snímek se ukládá k ocenění, takže zůstane doložitelný i poté, co
+  inzeráty z trhu zmizí.
 
 ### Proč mezi zdroji nejsou Bezrealitky
 

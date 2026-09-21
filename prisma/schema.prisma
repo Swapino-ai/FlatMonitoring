@@ -2,14 +2,14 @@
 // Vse v CZK, castky jako Float (staci pro reporting, ne pro ucetnictvi na halere).
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
   // relationJoins nacte nemovitost i vsechny jeji vazby jednim dotazem pres
   // LATERAL JOIN. Pri latenci pres Atlantik je kazda usetrena cesta ~100 ms.
   previewFeatures = ["relationJoins"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   // Neon: sdruzene pripojeni pres pooler — to pouziva bezici aplikace.
   url       = env("DATABASE_URL")
   // Prime pripojeni — migrace a `prisma db push` pres pooler neprojdou.
@@ -185,7 +185,12 @@ model Valuation {
   source     String // MANUAL | EXPERT | MARKET_SCAN | INDEX
   confidence String? // LOW | MEDIUM | HIGH
   sampleSize Int? // pocet srovnatelnych nabidek u MARKET_SCAN
-  notes      String?
+
+  /// Snimek nabidek, ze kterych median vznikl. Ulozeny primo u oceneni,
+  /// aby zustalo dolozitelne i pote, co inzeraty z trhu zmizi.
+  comparables Json?
+
+  notes String?
 
   createdAt DateTime @default(now())
 }
