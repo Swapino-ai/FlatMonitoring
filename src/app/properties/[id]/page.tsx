@@ -4,6 +4,7 @@ import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { AmortizationChart } from "@/components/charts";
+import { ValuationManager } from "@/components/ValuationManager";
 import { analyzeProperty, loadProperty } from "@/lib/portfolio";
 import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
 import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
@@ -180,6 +181,15 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                 </tbody>
               </table>
             </div>
+          </Card>
+
+          <Card title="Ocenění" action={<Link href="/market" className="text-xs text-accent">Sken trhu →</Link>}>
+            <ValuationManager
+              propertyId={property.id}
+              valuations={property.valuations}
+              areaM2={property.areaM2}
+              canEdit={user.role === "OWNER"}
+            />
           </Card>
 
           <Card title="Služby a dodavatelé" action={<Link href="/savings" className="text-xs text-accent">Kde ušetřit →</Link>}>
