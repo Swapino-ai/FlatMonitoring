@@ -1,13 +1,35 @@
-import * as cheerio from "cheerio";
 import type { MarketSource, ScanQuery, ScrapedListing } from "./types";
-import { normalizeDisposition } from "./types";
-import { filterComparable, sleep } from "./sreality";
+import { filtrujSrovnatelne, nactiNextData, slugMesta, sleep } from "./util";
 
 /**
- * Bezrealitky nemaji verejne API — parsujeme vypis inzeratu.
- * Selektory se obcas meni; pri neuspechu vraci prazdno a sken se ulozi jako PARTIAL.
+ * Bezrealitky bezi na Next.js a inzeraty vklada do Apollo cache pod klice
+ * "Advert:<id>". Neni to pole, ale mapa — proto je hledame podle tvaru klice.
+ *
+ * Dve vaznejsi uskali, obe overena na skutecnych datech:
+ *  - Vypis obsahuje i zahranicni nabidky (napr. byt v Nemecku v EUR), protoze
+ *    filtr mesta v adrese neni spolehlivy. Proto trvame na CZK a shode adresy.
+ *  - Dispozice je v kodech typu "DISP_2_KK".
  */
-const BASE = "https://www.bezrealitky.cz/vyhledat";
+
+interface Advert {
+  id?: string;
+  uri?: string;
+  estateType?: string;
+  offerType?: string;
+  disposition?: string;
+  surface?: number | null;
+  price?: number | null;
+  currency?: string;
+  [klic: string]: unknown;
+}
+
+const DISPOZICE: Record<string, string> = {
+  DISP_1_KK: "1+kk", DISP_1_1: "1+1",
+  DISP_2_KK: "2+kk", DISP_2_1: "2+1",
+  DISP_3_KK: "3+kk", DISP_3_1: "3+1",
+  DISP_4_KK: "4+kk", DISP_4_1: "4+1",
+  DISP_5_KK: "5+kk", DISP_5_1: "5+1",
+};
 
 export const bezrealitkySource: MarketSource = {
   name: "BEZREALITKY",
@@ -15,109 +37,73 @@ export const bezrealitkySource: MarketSource = {
   async fetchListings(query: ScanQuery): Promise<ScrapedListing[]> {
     const out: ScrapedListing[] = [];
     const maxPages = query.maxPages ?? 2;
+    const offerType = query.dealType === "SALE" ? "PRODEJ" : "PRONAJEM";
 
-    for (let page = 1; page <= maxPages; page++) {
+    for (let strana = 1; strana <= maxPages; strana++) {
       const params = new URLSearchParams({
-        offerType: query.dealType === "SALE" ? "PRODEJ" : "PRONAJEM",
+        offerType,
         estateType: "BYT",
-        regionOsmIds: "",
-        page: String(page),
+        location: query.city,
+        page: String(strana),
       });
-      const url = `${BASE}?${params}&location=${encodeURIComponent(query.city)}`;
+      const data = await nactiNextData(`https://www.bezrealitky.cz/vyhledat?${params}`);
 
-      const res = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; FlatMonitoring/0.1; osobni evidence nemovitosti)",
-          "Accept-Language": "cs-CZ,cs;q=0.9",
-        },
-      });
-      if (!res.ok) throw new Error(`Bezrealitky vrátily HTTP ${res.status}`);
+      const inzeraty = najdiInzeraty(data);
+      if (inzeraty.length === 0) break;
 
-      const html = await res.text();
-      const found = parseListings(html, query);
-      if (found.length === 0) break;
-      out.push(...found);
+      for (const a of inzeraty) {
+        const cena = Number(a.price ?? 0);
+        if (!cena || cena <= 0) continue;
 
-      await sleep(1500);
+        // Zahranicni nabidky v jine mene do ceskeho medianu nepatri
+        if (a.currency && a.currency !== "CZK") continue;
+        if (a.estateType && a.estateType !== "BYT") continue;
+
+        const adresa = textAdresy(a);
+        if (!sedíMesto(adresa, query.city)) continue;
+
+        const plocha = Number(a.surface ?? 0) || undefined;
+
+        out.push({
+          source: "BEZREALITKY",
+          externalId: a.id ? String(a.id) : undefined,
+          dealType: query.dealType,
+          city: query.city,
+          district: adresa || query.district,
+          disposition: a.disposition ? DISPOZICE[a.disposition] : undefined,
+          areaM2: plocha,
+          price: cena,
+          pricePerM2: plocha ? cena / plocha : undefined,
+          url: a.uri ? `https://www.bezrealitky.cz/nemovitosti-byty-domy/${a.uri}` : undefined,
+        });
+      }
+
+      if (strana < maxPages) await sleep(2000);
     }
 
-    return filterComparable(out, query);
+    return filtrujSrovnatelne(out, query);
   },
 };
 
-export function parseListings(html: string, query: ScanQuery): ScrapedListing[] {
-  const $ = cheerio.load(html);
-  const out: ScrapedListing[] = [];
+/** Apollo cache klicuje inzeraty jako "Advert:1069391". */
+function najdiInzeraty(data: unknown): Advert[] {
+  const cache = (data as any)?.props?.pageProps?.apolloCache;
+  if (!cache || typeof cache !== "object") return [];
 
-  // Preferovana cesta: Next.js data embedded ve strance
-  const nextData = $("#__NEXT_DATA__").html();
-  if (nextData) {
-    try {
-      const parsed = JSON.parse(nextData);
-      const items = deepFindAdverts(parsed);
-      for (const it of items) {
-        const price = Number(it.price ?? 0);
-        const areaM2 = Number(it.surface ?? it.surfaceLand ?? 0) || undefined;
-        if (!price) continue;
-        out.push({
-          source: "BEZREALITKY",
-          externalId: it.id ? String(it.id) : undefined,
-          dealType: query.dealType,
-          city: query.city,
-          district: it.address ?? query.district,
-          disposition: normalizeDisposition(it.disposition ?? it.title),
-          areaM2,
-          price,
-          pricePerM2: areaM2 ? price / areaM2 : undefined,
-          url: it.uri ? `https://www.bezrealitky.cz/nemovitosti-byty-domy/${it.uri}` : undefined,
-        });
-      }
-      if (out.length) return out;
-    } catch {
-      // spadneme na HTML parsing nize
-    }
-  }
-
-  // Zaloha: HTML selektory
-  $("article, [class*='PropertyCard']").each((_, el) => {
-    const $el = $(el);
-    const text = $el.text();
-    const priceMatch = text.match(/([\d\s ]{4,})\s*Kč/);
-    const areaMatch = text.match(/(\d+(?:[.,]\d+)?)\s*m²/);
-    if (!priceMatch) return;
-    const price = Number(priceMatch[1].replace(/[\s ]/g, ""));
-    const areaM2 = areaMatch ? Number(areaMatch[1].replace(",", ".")) : undefined;
-    if (!price) return;
-    out.push({
-      source: "BEZREALITKY",
-      dealType: query.dealType,
-      city: query.city,
-      district: query.district,
-      disposition: normalizeDisposition(text),
-      areaM2,
-      price,
-      pricePerM2: areaM2 ? price / areaM2 : undefined,
-      url: $el.find("a").first().attr("href") ?? undefined,
-    });
-  });
-
-  return out;
+  return Object.entries(cache as Record<string, unknown>)
+    .filter(([k, v]) => /^Advert:/.test(k) && v && typeof v === "object")
+    .map(([, v]) => v as Advert);
 }
 
-interface AdvertLike {
-  id?: unknown; price?: unknown; surface?: unknown; surfaceLand?: unknown;
-  disposition?: string; title?: string; address?: string; uri?: string;
+/** Adresa je pod klicem s argumenty dotazu, napr. address({"locale":"CS"}). */
+function textAdresy(a: Advert): string {
+  const klic = Object.keys(a).find((k) => k.startsWith("address"));
+  const hodnota = klic ? a[klic] : undefined;
+  return typeof hodnota === "string" ? hodnota : "";
 }
 
-/** Bezrealitky meni tvar payloadu — hledame pole objektu, ktere vypada jako inzeraty. */
-function deepFindAdverts(node: unknown, depth = 0): AdvertLike[] {
-  if (depth > 8 || node == null || typeof node !== "object") return [];
-  if (Array.isArray(node)) {
-    const looksLikeAdverts =
-      node.length > 0 &&
-      node.every((n) => n && typeof n === "object" && "price" in (n as object));
-    if (looksLikeAdverts) return node as AdvertLike[];
-    return node.flatMap((n) => deepFindAdverts(n, depth + 1));
-  }
-  return Object.values(node as Record<string, unknown>).flatMap((v) => deepFindAdverts(v, depth + 1));
+/** Vypis vraci i nabidky mimo hledane mesto — porovname pres slug bez diakritiky. */
+function sedíMesto(adresa: string, mesto: string): boolean {
+  if (!adresa) return false;
+  return slugMesta(adresa).includes(slugMesta(mesto));
 }

@@ -1,16 +1,22 @@
 import type { MarketSource, ScanQuery, ScrapedListing } from "./types";
-import { normalizeDisposition } from "./types";
+import { filtrujSrovnatelne, nactiNextData, plochaZNazvu, slugMesta, sleep } from "./util";
 
 /**
- * Sreality vystavuje verejne JSON API, ktere pohani jejich vlastni frontend.
- * Je stabilnejsi nez parsovani HTML, ale neni verejne dokumentovane — pri zmene
- * struktury sken skonci jako PARTIAL/FAILED a zapise se do logu, aplikace nespadne.
+ * Sreality zrusily verejne JSON API (/api/cs/v2/estates vraci 404).
+ * Data proto bereme ze stranky vypisu, kde je Next.js vklada do __NEXT_DATA__.
+ *
+ * Cesta k inzeratum: props.pageProps.dehydratedState.queries[].state.data.results
+ * Kazdy zaznam nese primo priceCzk i priceCzkPerSqM, takze cenu za m² nedopocitavame.
  */
-const API = "https://www.sreality.cz/api/cs/v2/estates";
 
-const CATEGORY_TYPE = { SALE: 1, RENT: 2 } as const; // prodej / pronajem
-const CATEGORY_MAIN = 1; // byty
-const PER_PAGE = 60;
+interface SrealityZaznam {
+  id?: number;
+  name?: string;
+  priceCzk?: number;
+  priceCzkPerSqM?: number;
+  categorySubCb?: { name?: string };
+  locality?: { city?: string; citySeoName?: string; cityPart?: string; quarter?: string };
+}
 
 export const srealitySource: MarketSource = {
   name: "SREALITY",
@@ -18,92 +24,58 @@ export const srealitySource: MarketSource = {
   async fetchListings(query: ScanQuery): Promise<ScrapedListing[]> {
     const out: ScrapedListing[] = [];
     const maxPages = query.maxPages ?? 3;
+    const typ = query.dealType === "SALE" ? "prodej" : "pronajem";
+    const mesto = slugMesta(query.city);
 
-    for (let page = 1; page <= maxPages; page++) {
-      const params = new URLSearchParams({
-        category_main_cb: String(CATEGORY_MAIN),
-        category_type_cb: String(CATEGORY_TYPE[query.dealType]),
-        locality: query.district ? `${query.city} ${query.district}` : query.city,
-        per_page: String(PER_PAGE),
-        page: String(page),
-        tms: String(Date.now()),
-      });
-      if (query.disposition) {
-        const sub = dispositionToSubCategory(query.disposition);
-        if (sub) params.set("category_sub_cb", String(sub));
-      }
+    for (let strana = 1; strana <= maxPages; strana++) {
+      // Dispozici ve filtru adresy Sreality neprijimaji (vraci 404),
+      // takze si ji odfiltrujeme az z vysledku.
+      const url = `https://www.sreality.cz/hledani/${typ}/byty/${mesto}${strana > 1 ? `?strana=${strana}` : ""}`;
 
-      const res = await fetch(`${API}?${params}`, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; FlatMonitoring/0.1; osobni evidence nemovitosti)",
-          Accept: "application/json",
-        },
-      });
-      if (!res.ok) throw new Error(`Sreality vrátila HTTP ${res.status}`);
+      const data = await nactiNextData(url);
+      const zaznamy = najdiVysledky(data);
+      if (zaznamy.length === 0) break;
 
-      const data = (await res.json()) as SrealityResponse;
-      const estates = data?._embedded?.estates ?? [];
-      if (estates.length === 0) break;
+      for (const z of zaznamy) {
+        // priceCzk === 0 znamena "cena na vyzadani" — do medianu takovou nabidku nepustime
+        const cena = Number(z.priceCzk ?? 0);
+        if (!cena || cena <= 0) continue;
 
-      for (const e of estates) {
-        const areaM2 = extractArea(e.name);
-        const price = Number(e.price ?? e.price_czk?.value_raw ?? 0);
-        if (!price || price <= 0) continue;
+        const zaM2 = Number(z.priceCzkPerSqM ?? 0) || undefined;
+        // Plochu dopocitame z ceny, kde to jde — je presnejsi nez zaokrouhleny udaj v nazvu
+        const plocha = zaM2 ? Math.round((cena / zaM2) * 10) / 10 : plochaZNazvu(z.name);
 
         out.push({
           source: "SREALITY",
-          externalId: e.hash_id ? String(e.hash_id) : undefined,
+          externalId: z.id ? String(z.id) : undefined,
           dealType: query.dealType,
-          city: query.city,
-          district: e.locality ?? query.district,
-          disposition: normalizeDisposition(e.name),
-          areaM2,
-          price,
-          pricePerM2: areaM2 ? price / areaM2 : undefined,
-          url: e.hash_id ? `https://www.sreality.cz/detail/${query.dealType === "SALE" ? "prodej" : "pronajem"}/byt/x/x/${e.hash_id}` : undefined,
+          city: z.locality?.city ?? query.city,
+          district: z.locality?.cityPart ?? z.locality?.quarter ?? query.district,
+          disposition: z.categorySubCb?.name,
+          areaM2: plocha,
+          price: cena,
+          pricePerM2: zaM2 ?? (plocha ? cena / plocha : undefined),
+          url: z.id ? `https://www.sreality.cz/detail/${typ}/byt/x/x/${z.id}` : undefined,
         });
       }
 
-      if (estates.length < PER_PAGE) break;
-      await sleep(1200); // ohleduplne tempo — nechceme dodavatele zatezovat
+      if (strana < maxPages) await sleep(1500); // ohleduplne tempo
     }
 
-    return filterComparable(out, query);
+    return filtrujSrovnatelne(out, query);
   },
 };
 
-/** "Prodej bytu 2+kk 56 m²" → 56 */
-function extractArea(name: string | undefined): number | undefined {
-  if (!name) return undefined;
-  const m = name.match(/(\d+(?:[.,]\d+)?)\s*m²/);
-  return m ? Number(m[1].replace(",", ".")) : undefined;
-}
+/** Inzeraty jsou v dehydratovanem stavu React Query, index dotazu se meni. */
+function najdiVysledky(data: unknown): SrealityZaznam[] {
+  const queries = (data as any)?.props?.pageProps?.dehydratedState?.queries;
+  if (!Array.isArray(queries)) return [];
 
-function dispositionToSubCategory(d: string): number | null {
-  const map: Record<string, number> = {
-    "1+kk": 2, "1+1": 3, "2+kk": 4, "2+1": 5, "3+kk": 6, "3+1": 7, "4+kk": 8, "4+1": 9,
-  };
-  return map[d] ?? null;
-}
-
-export function filterComparable(listings: ScrapedListing[], query: ScanQuery): ScrapedListing[] {
-  if (!query.areaM2) return listings;
-  const tol = query.toleranceM2 ?? Math.max(10, query.areaM2 * 0.25);
-  return listings.filter((l) => l.areaM2 != null && Math.abs(l.areaM2 - query.areaM2!) <= tol);
-}
-
-export function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-interface SrealityResponse {
-  _embedded?: {
-    estates?: {
-      hash_id?: number;
-      name?: string;
-      locality?: string;
-      price?: number;
-      price_czk?: { value_raw?: number };
-    }[];
-  };
+  for (const q of queries) {
+    const results = q?.state?.data?.results;
+    if (Array.isArray(results) && results.length > 0 && "priceCzk" in results[0]) {
+      return results as SrealityZaznam[];
+    }
+  }
+  return [];
 }
