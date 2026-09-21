@@ -3,44 +3,65 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { runScan, valuateFromMarket } from "@/lib/market";
 
-export const maxDuration = 300;
+// Jeden dotaz na portal trva 15-20 s, protoze se strankuje do hloubky,
+// nez se nasbira dost srovnatelnych nabidek. Proto kazdy pozadavek resi
+// jedinou kombinaci nemovitost + typ obchodu a klient je vola postupne.
+// Cely sken v jednom pozadavku by na serverless funkci vyprsel.
+export const maxDuration = 60;
 
-/**
- * Spusti sken trhu pro vsechny evidovane nemovitosti a prepocita odhady hodnot.
- * Vola se z UI tlacitkem nebo mesicnim cronem (scripts/market-scan.ts).
- */
-export async function POST() {
+interface Telo {
+  propertyId?: string;
+  dealType?: "SALE" | "RENT";
+}
+
+export async function POST(request: Request) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: "Nepřihlášen" }, { status: 401 });
   if (user.role !== "OWNER") return NextResponse.json({ error: "Jen majitel může spustit sken" }, { status: 403 });
 
-  const properties = await prisma.property.findMany({ where: { status: { not: "SOLD" } } });
-  const results = [];
+  const telo = (await request.json().catch(() => ({}))) as Telo;
 
-  // Jeden sken na kombinaci mesto+dispozice — neopakujeme dotaz pro stejnou lokalitu
-  const queries = new Map<string, { city: string; district: string | null; disposition: string; areaM2: number }>();
-  for (const p of properties) {
-    queries.set(`${p.city}|${p.disposition}`, { city: p.city, district: p.district, disposition: p.disposition, areaM2: p.areaM2 });
-  }
-
-  for (const q of queries.values()) {
-    for (const dealType of ["SALE", "RENT"] as const) {
-      const r = await runScan({
-        city: q.city,
-        district: q.district ?? undefined,
-        disposition: q.disposition,
-        areaM2: q.areaM2,
+  // Bez parametru vracime seznam kroku, ktere ma klient projit
+  if (!telo.propertyId) {
+    const properties = await prisma.property.findMany({
+      where: { status: { not: "SOLD" } },
+      select: { id: true, name: true, city: true, disposition: true },
+      orderBy: { name: "asc" },
+    });
+    const kroky = properties.flatMap((p) =>
+      (["SALE", "RENT"] as const).map((dealType) => ({
+        propertyId: p.id,
         dealType,
-      });
-      results.push(...r.map((x) => ({ ...x, city: q.city, dealType })));
-    }
+        popis: `${p.name} — ${dealType === "SALE" ? "prodejní" : "nájemní"} ceny`,
+      })),
+    );
+    return NextResponse.json({ kroky });
   }
 
-  const valuations = [];
-  for (const p of properties) {
-    const v = await valuateFromMarket(p.id);
-    if (v) valuations.push({ property: p.name, value: v.value, sample: v.stats.count });
+  const property = await prisma.property.findUnique({ where: { id: telo.propertyId } });
+  if (!property) return NextResponse.json({ error: "Nemovitost neexistuje" }, { status: 404 });
+
+  const dealType = telo.dealType ?? "SALE";
+
+  const results = await runScan({
+    city: property.city,
+    district: property.district ?? undefined,
+    disposition: property.disposition,
+    areaM2: property.areaM2,
+    dealType,
+  });
+
+  // Prodejni ceny urcuji odhad hodnoty — po nich rovnou precenime
+  let valuation: { value: number; sample: number } | null = null;
+  if (dealType === "SALE") {
+    const v = await valuateFromMarket(property.id);
+    if (v) valuation = { value: v.value, sample: v.stats.count };
   }
 
-  return NextResponse.json({ results, valuations });
+  return NextResponse.json({
+    property: property.name,
+    dealType,
+    results,
+    valuation,
+  });
 }

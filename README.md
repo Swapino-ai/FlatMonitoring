@@ -139,17 +139,41 @@ podnikání, dílčí základy se sčítají a slevu na poplatníka lze uplatnit
 
 ## Sken trhu — na co si dát pozor
 
-Sken stahuje nabídky ze Sreality a Bezrealitek, spočítá medián ceny za m² u
-srovnatelných bytů (stejné město, dispozice, plocha ±25 %) a z něj odhadne
-hodnotu tvých bytů.
+Sken stahuje nabídky ze **Sreality**, spočítá medián ceny za m² u srovnatelných
+bytů (stejné město, dispozice, plocha ±25 %) a z něj odhadne hodnotu tvých bytů.
+Prochází stránky výpisu, dokud nemá patnáct srovnatelných nabídek, nejvýš deset stránek.
 
 - Jde o **nabídkové** ceny. Realizované bývají o 5–10 % nižší — ber odhad jako horní hranici.
 - Při méně než třech srovnatelných nabídkách se odhad nepočítá. Raději žádné číslo než nedůvěryhodné.
-- Portály nemají veřejné API a mění strukturu stránek. Když se sken rozbije, uloží se
-  jako `FAILED` s popisem chyby (vidíš to v sekci Trh) a **poslední platné ocenění
-  zůstane nedotčené**.
-- Portály občas blokují požadavky z datových center. Když sken z GitHubu nic nevrátí,
-  spusť ho ze svého počítače, nebo zadej hodnotu ručně jako ocenění typu `MANUAL`.
+- Jeden dotaz trvá 15–20 sekund. Tlačítko v sekci Trh proto skenuje po jedné
+  nemovitosti a ukazuje postup — celý sken v jednom požadavku by na serverless
+  funkci vypršel.
+- Sreality nemají veřejné API (to původní zrušily) a strukturu stránek občas mění.
+  Když se sken rozbije, uloží se jako `FAILED` i s adresou, která selhala, a
+  **poslední platné ocenění zůstane nedotčené**.
+- Hodnotu můžeš kdykoli **zadat ručně** v detailu bytu. Aplikace je plně použitelná
+  i s rozbitým skenem — ber ho jako pohodlí, ne jako základ.
+
+### Proč mezi zdroji nejsou Bezrealitky
+
+Jejich výpis se skládá až v prohlížeči z mapy. Server vrací pod každou adresou
+tutéž sadu zahraničních nabídek v eurech (ověřeno pěti variantami dotazu —
+`location`, dvě podoby `regionOsmIds`, město v cestě i bez filtru; v datech
+stránky stojí `location: "fromMap"` a prázdné `regionOsmIds`). Z HTML se z nich
+české nabídky získat nedají.
+
+### Když se sken rozbije
+
+V repozitáři jsou diagnostické skripty. Spusť v záložce **Actions** workflow
+**Sonda portálů** — otestuje scrapery proti živým webům a při selhání rovnou
+vypíše skutečnou strukturu dat, takže není potřeba hádat:
+
+```
+scripts/test-scrapers.ts    spustí scrapery a zkontroluje kvalitu výsledků
+scripts/probe-market.ts     dostupnost adres a hlaviček
+scripts/probe-structure.ts  kde v __NEXT_DATA__ leží inzeráty
+scripts/probe-fields.ts     přesné tvary polí, stránkování, filtry
+```
 
 ---
 
