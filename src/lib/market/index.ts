@@ -1,9 +1,13 @@
 import { prisma } from "../db";
 import { srealitySource } from "./sreality";
-import { bezrealitkySource } from "./bezrealitky";
 import type { MarketSource, ScanQuery, ScrapedListing } from "./types";
 
-export const SOURCES: MarketSource[] = [srealitySource, bezrealitkySource];
+/**
+ * Bezrealitky mezi zdroji nejsou zamerne. Jejich vypis se sklada az v prohlizeci
+ * z mapy — server vraci pod kazdou adresou tychz patnact zahranicnich nabidek
+ * v eurech (overeno peti variantami dotazu). Z HTML z nich ceske nabidky nedostaneme.
+ */
+export const SOURCES: MarketSource[] = [srealitySource];
 
 export interface ScanResult {
   source: string;

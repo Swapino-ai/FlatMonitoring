@@ -18,9 +18,6 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - name: Sonda Bezrealitek
-        run: npx tsx scripts/probe-bezrealitky.ts
-
       - name: Test scraperů proti živým portálům
         run: npx tsx scripts/test-scrapers.ts
 

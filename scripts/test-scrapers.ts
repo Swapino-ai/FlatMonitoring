@@ -3,14 +3,13 @@
  * Spousti se z GitHub Actions, kde je otevreny internet.
  */
 import { srealitySource } from "../src/lib/market/sreality";
-import { bezrealitkySource } from "../src/lib/market/bezrealitky";
 import type { ScanQuery } from "../src/lib/market/types";
 
 const PRIPADY: { nazev: string; query: ScanQuery }[] = [
-  { nazev: "Praha 2+kk 54 m² prodej", query: { city: "Praha", disposition: "2+kk", areaM2: 54, dealType: "SALE", maxPages: 2 } },
-  { nazev: "Praha 2+kk 54 m² pronájem", query: { city: "Praha", disposition: "2+kk", areaM2: 54, dealType: "RENT", maxPages: 2 } },
-  { nazev: "Brno 3+1 76 m² prodej", query: { city: "Brno", disposition: "3+1", areaM2: 76, dealType: "SALE", maxPages: 2 } },
-  { nazev: "Ostrava 1+kk 32 m² prodej", query: { city: "Ostrava", disposition: "1+kk", areaM2: 32, dealType: "SALE", maxPages: 2 } },
+  { nazev: "Praha 2+kk 54 m² prodej", query: { city: "Praha", disposition: "2+kk", areaM2: 54, dealType: "SALE" } },
+  { nazev: "Praha 2+kk 54 m² pronájem", query: { city: "Praha", disposition: "2+kk", areaM2: 54, dealType: "RENT" } },
+  { nazev: "Brno 3+1 76 m² prodej", query: { city: "Brno", disposition: "3+1", areaM2: 76, dealType: "SALE" } },
+  { nazev: "Ostrava 1+kk 32 m² prodej", query: { city: "Ostrava", disposition: "1+kk", areaM2: 32, dealType: "SALE" } },
 ];
 
 function median(xs: number[]): number {
@@ -26,7 +25,7 @@ async function main() {
     console.log("\n" + "=".repeat(70));
     console.log(`### ${p.nazev}`);
 
-    for (const zdroj of [srealitySource, bezrealitkySource]) {
+    for (const zdroj of [srealitySource]) {
       const t0 = Date.now();
       try {
         const n = await zdroj.fetchListings(p.query);

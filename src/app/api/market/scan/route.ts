@@ -31,7 +31,6 @@ export async function POST() {
         disposition: q.disposition,
         areaM2: q.areaM2,
         dealType,
-        maxPages: 2,
       });
       results.push(...r.map((x) => ({ ...x, city: q.city, dealType })));
     }

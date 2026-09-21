@@ -34,7 +34,7 @@ async function main() {
     for (const dealType of ["SALE", "RENT"] as const) {
       const results = await runScan({
         city: q.city, district: q.district ?? undefined,
-        disposition: q.disposition, areaM2: q.areaM2, dealType, maxPages: 2,
+        disposition: q.disposition, areaM2: q.areaM2, dealType,
       });
       for (const r of results) {
         console.log(`  ${q.city} ${q.disposition} ${dealType} · ${r.source}: ${r.status} (${r.count})${r.message ? " — " + r.message : ""}`);
