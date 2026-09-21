@@ -18,6 +18,9 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Sonda lokalit
+        run: npx tsx scripts/probe-locality.ts
+
       - name: Test scraperů proti živým portálům
         run: npx tsx scripts/test-scrapers.ts
 
