@@ -18,8 +18,8 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - name: Sonda portálů s pronájmy
-        run: npx tsx scripts/probe-rentals.ts
+      - name: Sonda odkazů na detail
+        run: npx tsx scripts/probe-odkazy.ts
 
       - name: Test scraperů proti živým portálům
         run: npx tsx scripts/test-scrapers.ts
