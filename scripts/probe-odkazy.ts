@@ -23,13 +23,19 @@ async function main() {
     console.log(`    ${nabidky.length} nabídek, z toho ${bezOdkazu} bez odkazu`);
     if (bezOdkazu > 0) chyb++;
 
-    // Peti odkazum se podivame na zoubek — vic uz by portal jen zatezovalo
+    // Presmerovani vyhodnocujeme rucne: Sreality posilaji holy pozadavek
+    // do smycky pres ?noredirect=1, takze "follow" skonci chybou i u zive
+    // stranky. Zajima nas prvni odpoved — 200, nebo kam nas posila.
     for (const n of nabidky.filter((x: { url?: string }) => x.url).slice(0, 5)) {
-      const r = await fetch(n.url!, { headers: HLAVICKY_PROHLIZECE, redirect: "follow" });
-      await r.text();
-      const ok = r.status === 200;
+      const r = await fetch(n.url!, { headers: HLAVICKY_PROHLIZECE, redirect: "manual" });
+      await r.text().catch(() => "");
+      const kam = r.headers.get("location") ?? "";
+      // Skok na tutez cestu s ?noredirect=1 je jen obrana portalu, ne rozbity odkaz
+      const obrana = kam.includes("noredirect=1");
+      const ok = r.status === 200 || (r.status >= 300 && r.status < 400 && obrana);
       if (!ok) chyb++;
-      console.log(`    ${ok ? "OK " : "!! "} HTTP ${r.status} · ${n.url}`);
+      console.log(`    ${ok ? "OK " : "!! "} HTTP ${r.status}${kam ? ` → ${kam}` : ""}`);
+      console.log(`        ${n.url}`);
       await new Promise((s) => setTimeout(s, 1200));
     }
     console.log();
