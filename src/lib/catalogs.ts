@@ -90,31 +90,40 @@ export interface TypNemovitosti {
   odpisovaSkupina: number | null;
   /** Ma smysl evidovat dispozici (2+kk apod.)? */
   maDispozici: boolean;
-  /** Da se pro nej hledat srovnani na Sreality v kategorii bytu? */
-  skenovatelny: boolean;
+  /**
+   * Cesta v adrese Sreality, napr. "byty" nebo "garaze" — vklada se do
+   * /hledani/<prodej|pronajem>/<cesta>/<mesto>. Overeno sondou proti zivemu
+   * webu (scripts/probe-kategorie.ts); bez ni se nemovitost neskenuje.
+   */
+  srealityCesta?: string;
+  /**
+   * Podkategorie, na kterou se vysledek jeste zuzi. Cesta "ostatni" vraci
+   * garaze, garazova stani i pudni prostory dohromady.
+   */
+  srealityPodkategorie?: string;
   upozorneni?: string;
 }
 
 export const TYPY_NEMOVITOSTI: TypNemovitosti[] = [
-  { klic: "BYT", nazev: "Byt", odpisovaSkupina: 5, maDispozici: true, skenovatelny: true },
+  { klic: "BYT", nazev: "Byt", odpisovaSkupina: 5, maDispozici: true, srealityCesta: "byty" },
   {
-    klic: "DRUZSTEVNI_BYT", nazev: "Družstevní byt", odpisovaSkupina: null, maDispozici: true, skenovatelny: true,
+    klic: "DRUZSTEVNI_BYT", nazev: "Družstevní byt", odpisovaSkupina: null, maDispozici: true, srealityCesta: "byty",
     popis: "Nevlastníš nemovitost, ale podíl v bytovém družstvu s právem nájmu.",
     upozorneni: "Družstevní podíl je movitá věc, ne nemovitost — neodepisuje se a při prodeji platí časový test pět let podle § 4 odst. 1 písm. s) ZDP, ne deset. Banky na něj zpravidla nedají klasickou hypotéku.",
   },
-  { klic: "RODINNY_DUM", nazev: "Rodinný dům", odpisovaSkupina: 5, maDispozici: true, skenovatelny: false },
-  { klic: "BYTOVY_DUM", nazev: "Bytový dům", odpisovaSkupina: 5, maDispozici: false, skenovatelny: false, popis: "Celý dům s více bytovými jednotkami." },
-  { klic: "CHATA", nazev: "Chata nebo rekreační objekt", odpisovaSkupina: 5, maDispozici: true, skenovatelny: false },
-  { klic: "GARAZ", nazev: "Garáž", odpisovaSkupina: 5, maDispozici: false, skenovatelny: false },
-  { klic: "PARKOVACI_STANI", nazev: "Parkovací stání", odpisovaSkupina: 5, maDispozici: false, skenovatelny: false, popis: "Samostatná jednotka nebo podíl na společné garáži." },
-  { klic: "NEBYTOVY_PROSTOR", nazev: "Nebytový prostor", odpisovaSkupina: 5, maDispozici: false, skenovatelny: false, popis: "Kancelář, ordinace, ateliér." },
-  { klic: "OBCHOD", nazev: "Obchodní prostor", odpisovaSkupina: 5, maDispozici: false, skenovatelny: false },
-  { klic: "SKLAD", nazev: "Sklad nebo hala", odpisovaSkupina: 4, maDispozici: false, skenovatelny: false, upozorneni: "Lehké budovy a haly patří do 4. odpisové skupiny, tedy 20 let místo 30." },
+  { klic: "RODINNY_DUM", nazev: "Rodinný dům", odpisovaSkupina: 5, maDispozici: true },
+  { klic: "BYTOVY_DUM", nazev: "Bytový dům", odpisovaSkupina: 5, maDispozici: false, popis: "Celý dům s více bytovými jednotkami." },
+  { klic: "CHATA", nazev: "Chata nebo rekreační objekt", odpisovaSkupina: 5, maDispozici: true },
+  { klic: "GARAZ", nazev: "Garáž", odpisovaSkupina: 5, maDispozici: false, srealityCesta: "garaze" },
+  { klic: "PARKOVACI_STANI", nazev: "Parkovací stání", odpisovaSkupina: 5, maDispozici: false, popis: "Samostatná jednotka nebo podíl na společné garáži." },
+  { klic: "NEBYTOVY_PROSTOR", nazev: "Nebytový prostor", odpisovaSkupina: 5, maDispozici: false, srealityCesta: "komercni/kancelare", popis: "Kancelář, ordinace, ateliér." },
+  { klic: "OBCHOD", nazev: "Obchodní prostor", odpisovaSkupina: 5, maDispozici: false },
+  { klic: "SKLAD", nazev: "Sklad nebo hala", odpisovaSkupina: 4, maDispozici: false, srealityCesta: "komercni/sklady", upozorneni: "Lehké budovy a haly patří do 4. odpisové skupiny, tedy 20 let místo 30." },
   {
-    klic: "POZEMEK", nazev: "Pozemek", odpisovaSkupina: null, maDispozici: false, skenovatelny: false,
+    klic: "POZEMEK", nazev: "Pozemek", odpisovaSkupina: null, maDispozici: false,
     upozorneni: "Pozemek se neodepisuje, protože se neopotřebovává. Odpisový plán proto u tohoto typu nedává smysl.",
   },
-  { klic: "JINY", nazev: "Jiná nemovitost", odpisovaSkupina: 5, maDispozici: false, skenovatelny: false },
+  { klic: "JINY", nazev: "Jiná nemovitost", odpisovaSkupina: 5, maDispozici: false },
 ];
 
 export const NEMOVITOST_MAP = new Map(TYPY_NEMOVITOSTI.map((t) => [t.klic, t]));

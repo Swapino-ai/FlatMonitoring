@@ -275,6 +275,9 @@ model MarketListing {
   source      String
   externalId  String?
   dealType    String // SALE | RENT
+  /// Kategorie nemovitosti (BYT, GARAZ, ...) — bez ni by se do mediánu bytu
+  /// dostala garáž podobné plochy.
+  category    String  @default("BYT")
   city        String
   district    String?
   disposition String?
@@ -286,6 +289,7 @@ model MarketListing {
   scrapedAt DateTime @default(now())
 
   @@index([city, district, dealType, disposition])
+  @@index([category, city, dealType])
 }
 
 /// Makro ukazatele pro indexaci a kontext (CNB repo sazba, index cen CSU)

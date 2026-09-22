@@ -6,7 +6,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { runScan, valuateFromMarket } from "../src/lib/market";
-import { NEMOVITOST_MAP } from "../src/lib/catalogs";
+import { NEMOVITOST_MAP, nazevNemovitosti } from "../src/lib/catalogs";
 
 const prisma = new PrismaClient();
 
@@ -21,11 +21,12 @@ async function main() {
   }
 
   // Jeden dotaz na kombinaci mesto+dispozice — nechceme portaly zbytecne zatezovat
-  const queries = new Map<string, { city: string; district: string | null; disposition: string | null; areaM2: number }>();
+  const queries = new Map<string, { city: string; district: string | null; disposition: string | null; areaM2: number; type: string }>();
   for (const p of properties) {
-    if (!(NEMOVITOST_MAP.get(p.type)?.skenovatelny ?? true)) continue;
-    queries.set(`${p.city}|${p.disposition}`, {
-      city: p.city, district: p.district, disposition: p.disposition, areaM2: p.areaM2,
+    if (!NEMOVITOST_MAP.get(p.type)?.srealityCesta) continue;
+    // Typ musi byt v klici — garaz a byt v jednom meste nejsou tentyz dotaz
+    queries.set(`${p.type}|${p.city}|${p.disposition}`, {
+      city: p.city, district: p.district, disposition: p.disposition, areaM2: p.areaM2, type: p.type,
     });
   }
 
@@ -36,10 +37,11 @@ async function main() {
     for (const dealType of ["SALE", "RENT"] as const) {
       const results = await runScan({
         city: q.city, district: q.district ?? undefined,
-        disposition: q.disposition ?? undefined, areaM2: q.areaM2, dealType,
+        disposition: q.disposition ?? undefined, areaM2: q.areaM2,
+        category: q.type, dealType,
       });
       for (const r of results) {
-        console.log(`  ${q.city} ${q.disposition} ${dealType} · ${r.source}: ${r.status} (${r.count})${r.message ? " — " + r.message : ""}`);
+        console.log(`  ${nazevNemovitosti(q.type)} ${q.city} ${q.disposition ?? ""} ${dealType} · ${r.source}: ${r.status} (${r.count})${r.message ? " — " + r.message : ""}`);
         r.status === "FAILED" ? failed++ : ok++;
       }
     }

@@ -1,5 +1,6 @@
 import type { MarketSource, ScanQuery, ScrapedListing } from "./types";
 import { filtrujSrovnatelne, nactiStranku, odkazyZVypisu, plochaZNazvu, slugMesta, sleep } from "./util";
+import { NEMOVITOST_MAP } from "../catalogs";
 
 /**
  * Sreality zrusily verejne JSON API (/api/cs/v2/estates vraci 404).
@@ -29,11 +30,17 @@ export const srealitySource: MarketSource = {
     const maxPages = query.maxPages ?? 10;
     const typ = query.dealType === "SALE" ? "prodej" : "pronajem";
     const mesto = slugMesta(query.city);
+    const kategorie = query.category ?? "BYT";
+    const druh = NEMOVITOST_MAP.get(kategorie);
+    // Bez overene cesty nemovitost neskenujeme — hadat tvar adresy se nevyplaci
+    if (!druh?.srealityCesta) return [];
+    const cesta = druh.srealityCesta;
+    const podkategorie = druh.srealityPodkategorie;
 
     for (let strana = 1; strana <= maxPages; strana++) {
       // Dispozici ve filtru adresy Sreality neprijimaji (vraci 404),
       // takze si ji odfiltrujeme az z vysledku.
-      const url = `https://www.sreality.cz/hledani/${typ}/byty/${mesto}${strana > 1 ? `?strana=${strana}` : ""}`;
+      const url = `https://www.sreality.cz/hledani/${typ}/${cesta}/${mesto}${strana > 1 ? `?strana=${strana}` : ""}`;
 
       const { data, html } = await nactiStranku(url);
       // Odkaz na detail se z dat stranky poskladat neda — v ceste je slug ulice,
@@ -47,6 +54,9 @@ export const srealitySource: MarketSource = {
         const cena = Number(z.priceCzk ?? 0);
         if (!cena || cena <= 0) continue;
 
+        // Cesta "ostatni" michá garáže, garážová stání i půdní prostory
+        if (podkategorie && z.categorySubCb?.name !== podkategorie) continue;
+
         const zaM2 = Number(z.priceCzkPerSqM ?? 0) || undefined;
         // Plochu dopocitame z ceny, kde to jde — je presnejsi nez zaokrouhleny udaj v nazvu
         const plocha = zaM2 ? Math.round((cena / zaM2) * 10) / 10 : plochaZNazvu(z.name);
@@ -55,6 +65,7 @@ export const srealitySource: MarketSource = {
           source: "SREALITY",
           externalId: z.id ? String(z.id) : undefined,
           dealType: query.dealType,
+          category: kategorie,
           city: z.locality?.city ?? query.city,
           district: z.locality?.cityPart ?? z.locality?.quarter ?? query.district,
           disposition: z.categorySubCb?.name,

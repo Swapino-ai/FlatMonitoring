@@ -48,6 +48,7 @@ async function persist(source: string, status: string, listings: ScrapedListing[
           source: l.source,
           externalId: l.externalId,
           dealType: l.dealType,
+          category: l.category,
           city: l.city,
           district: l.district,
           disposition: l.disposition,
@@ -88,6 +89,8 @@ export async function comparableStats(opts: {
   city: string;
   district?: string | null;
   dealType: "SALE" | "RENT";
+  /** Bez ni by se do mediánu bytu dostala garáž podobné plochy. */
+  category?: string;
   areaM2: number;
   disposition?: string | null;
   sinceDays?: number;
@@ -101,6 +104,7 @@ export async function comparableStats(opts: {
     where: {
       city: opts.city,
       dealType: opts.dealType,
+      category: opts.category ?? "BYT",
       scrapedAt: { gte: since },
       ...(opts.district ? { district: { contains: opts.district } } : {}),
       ...(opts.disposition ? { disposition: opts.disposition } : {}),
@@ -155,6 +159,7 @@ export async function valuateFromMarket(propertyId: string): Promise<{ value: nu
     city: p.city,
     district: p.district,
     dealType: "SALE",
+    category: p.type,
     areaM2: p.areaM2,
     disposition: p.disposition ?? undefined,
   });
@@ -202,6 +207,7 @@ export async function odhadniNajemPriZmene(
     city: p.city,
     district: p.district,
     dealType: "RENT",
+    category: p.type,
     areaM2: p.areaM2,
     disposition: p.disposition ?? undefined,
     sinceDays: 30, // najem se meni rychleji nez prodejni cena

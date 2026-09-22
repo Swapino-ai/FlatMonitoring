@@ -2,6 +2,8 @@ export interface ScrapedListing {
   source: "SREALITY" | "BEZREALITKY";
   externalId?: string;
   dealType: "SALE" | "RENT";
+  /** Klic z TYPY_NEMOVITOSTI — BYT, GARAZ, SKLAD, ... */
+  category: string;
   city: string;
   district?: string;
   disposition?: string;
@@ -15,6 +17,11 @@ export interface ScanQuery {
   city: string;
   district?: string;
   dealType: "SALE" | "RENT";
+  /**
+   * Klic z TYPY_NEMOVITOSTI. Urcuje cestu v adrese Sreality a drzi kategorie
+   * oddelene — garaz 20 m² a byt 22 m² by se jinak potkaly v jednom medianu.
+   */
+  category?: string;
   /** Filtrovani na srovnatelnou velikost: +/- toleranceM2 od cilove plochy */
   areaM2?: number;
   toleranceM2?: number;

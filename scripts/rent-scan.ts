@@ -11,7 +11,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { runScan, odhadniNajemPriZmene } from "../src/lib/market";
-import { NEMOVITOST_MAP } from "../src/lib/catalogs";
+import { NEMOVITOST_MAP, nazevNemovitosti } from "../src/lib/catalogs";
 
 const prisma = new PrismaClient();
 
@@ -20,17 +20,18 @@ async function main() {
   console.log(`[${started.toISOString()}] Noční sken nájemního trhu`);
 
   const properties = await prisma.property.findMany({ where: { status: { not: "SOLD" } } });
-  const skenovatelne = properties.filter((p) => NEMOVITOST_MAP.get(p.type)?.skenovatelny ?? true);
+  const skenovatelne = properties.filter((p) => NEMOVITOST_MAP.get(p.type)?.srealityCesta);
   if (skenovatelne.length === 0) {
     console.log("Žádná nemovitost ke skenování. Končím.");
     return;
   }
 
   // Jeden dotaz na kombinaci mesto+dispozice — portaly zbytecne nezatezujeme
-  const dotazy = new Map<string, { city: string; district: string | null; disposition: string | null; areaM2: number }>();
+  const dotazy = new Map<string, { city: string; district: string | null; disposition: string | null; areaM2: number; type: string }>();
   for (const p of skenovatelne) {
-    dotazy.set(`${p.city}|${p.disposition}`, {
-      city: p.city, district: p.district, disposition: p.disposition, areaM2: p.areaM2,
+    // Typ musi byt v klici — garaz a byt v jednom meste nejsou tentyz dotaz
+    dotazy.set(`${p.type}|${p.city}|${p.disposition}`, {
+      city: p.city, district: p.district, disposition: p.disposition, areaM2: p.areaM2, type: p.type,
     });
   }
 
@@ -42,10 +43,11 @@ async function main() {
       district: q.district ?? undefined,
       disposition: q.disposition ?? undefined,
       areaM2: q.areaM2,
+      category: q.type,
       dealType: "RENT",
     });
     for (const r of results) {
-      console.log(`  ${q.city} ${q.disposition ?? ""} · ${r.source}: ${r.status} (${r.count})${r.message ? " — " + r.message : ""}`);
+      console.log(`  ${nazevNemovitosti(q.type)} ${q.city} ${q.disposition ?? ""} · ${r.source}: ${r.status} (${r.count})${r.message ? " — " + r.message : ""}`);
       r.status === "FAILED" ? failed++ : ok++;
     }
   }

@@ -29,8 +29,8 @@ export async function POST(request: Request) {
       select: { id: true, name: true, city: true, disposition: true, type: true },
       orderBy: { name: "asc" },
     });
-    // Garaz ani pozemek na Sreality v kategorii bytu nenajdeme
-    const skenovatelne = properties.filter((p) => NEMOVITOST_MAP.get(p.type)?.skenovatelny ?? true);
+    // Bez ověřené cesty na Sreality nemovitost skenovat neumíme
+    const skenovatelne = properties.filter((p) => NEMOVITOST_MAP.get(p.type)?.srealityCesta);
     const kroky = skenovatelne.flatMap((p) =>
       (["SALE", "RENT"] as const).map((dealType) => ({
         propertyId: p.id,
@@ -51,6 +51,7 @@ export async function POST(request: Request) {
     district: property.district ?? undefined,
     disposition: property.disposition ?? undefined,
     areaM2: property.areaM2,
+    category: property.type,
     dealType,
   });
 
