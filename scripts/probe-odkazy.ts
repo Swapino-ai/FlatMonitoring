@@ -30,11 +30,14 @@ async function main() {
       const r = await fetch(n.url!, { headers: HLAVICKY_PROHLIZECE, redirect: "manual" });
       await r.text().catch(() => "");
       const kam = r.headers.get("location") ?? "";
-      // Skok na tutez cestu s ?noredirect=1 je jen obrana portalu, ne rozbity odkaz
-      const obrana = kam.includes("noredirect=1");
-      const ok = r.status === 200 || (r.status >= 300 && r.status < 400 && obrana);
+      // Klienta bez cookies posila Seznam na autologin a v return_url nese
+      // puvodni adresu — to je SSO odskok, ne rozbity odkaz. Rozbita adresa
+      // vraci 404 (overeno na starem tvaru se zastupnym /x/x/).
+      const odskok = kam.includes("noredirect=1")
+        || (kam.includes("login.seznam.cz") && decodeURIComponent(kam).includes(n.url!));
+      const ok = r.status === 200 || (r.status >= 300 && r.status < 400 && odskok);
       if (!ok) chyb++;
-      console.log(`    ${ok ? "OK " : "!! "} HTTP ${r.status}${kam ? ` → ${kam}` : ""}`);
+      console.log(`    ${ok ? "OK " : "!! "} HTTP ${r.status}${kam ? ` → ${kam.slice(0, 60)}…` : ""}`);
       console.log(`        ${n.url}`);
       await new Promise((s) => setTimeout(s, 1200));
     }
@@ -46,7 +49,7 @@ async function main() {
     console.log(`Odkazy NEFUNGUJÍ — ${chyb} problémů.`);
     process.exitCode = 1;
   } else {
-    console.log("Všechny ověřené odkazy vracejí HTTP 200.");
+    console.log("Všechny ověřené odkazy vedou na živý inzerát.");
   }
 }
 

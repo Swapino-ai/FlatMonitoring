@@ -22,8 +22,9 @@ jobs:
         run: npx tsx scripts/probe-odkazy.ts
 
       - name: Test scraperů proti živým portálům
+        id: test
         run: npx tsx scripts/test-scrapers.ts
 
       - name: Sonda polí a filtrů (jen při selhání testu)
-        if: failure()
+        if: failure() && steps.test.conclusion == 'failure'
         run: npx tsx scripts/probe-fields.ts
