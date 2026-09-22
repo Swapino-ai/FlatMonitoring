@@ -1,0 +1,40 @@
+# Noční sken nájemního trhu.
+#
+# Nájemné reaguje na sezonu i na nabídku ve čtvrti rychleji než prodejní cena,
+# proto se sleduje denně. Do historie se zapíše jen změna — shodné odhady se
+# nezapisují, aby se v nich historie neztratila.
+#
+# Neběží na Vercelu: Sreality odmítá dotazy z datových center a sken mezi
+# dotazy záměrně čeká, takže by se do limitu serverless funkce nevešel.
+#
+# Nastavení: Settings → Secrets and variables → Actions → New repository secret
+#   DATABASE_URL  — pooled řetězec z Neonu
+#   DIRECT_URL    — direct řetězec z Neonu
+
+name: Noční sken nájmů
+
+on:
+  schedule:
+    - cron: "40 1 * * *" # každý den v 1:40 UTC (3:40 SELČ)
+  workflow_dispatch: # ruční spuštění tlačítkem v záložce Actions
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Sken nájmů a zápis odhadů
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npm run rent:scan

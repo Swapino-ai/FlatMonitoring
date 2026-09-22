@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { runScan, valuateFromMarket } from "@/lib/market";
+import { runScan, valuateFromMarket, odhadniNajemPriZmene } from "@/lib/market";
 import { NEMOVITOST_MAP } from "@/lib/catalogs";
 
 // Jeden dotaz na portal trva 15-20 s, protoze se strankuje do hloubky,
@@ -61,10 +61,18 @@ export async function POST(request: Request) {
     if (v) valuation = { value: v.value, sample: v.stats.count };
   }
 
+  // Najemni ceny plni stejnou historii jako nocni sken — rucni sken ji nepreskakuje
+  let rent: { monthlyRent: number; zapsano: boolean; duvod: string } | null = null;
+  if (dealType === "RENT") {
+    const r = await odhadniNajemPriZmene(property.id);
+    if (r) rent = { monthlyRent: r.monthlyRent, zapsano: r.zapsano, duvod: r.duvod };
+  }
+
   return NextResponse.json({
     property: property.name,
     dealType,
     results,
     valuation,
+    rent,
   });
 }

@@ -9,6 +9,7 @@ import { ValuationManager } from "@/components/ValuationManager";
 import { Napoveda } from "@/components/Napoveda";
 import { LoanManager } from "@/components/LoanManager";
 import { LeaseManager } from "@/components/LeaseManager";
+import { RentHistory } from "@/components/RentHistory";
 import { ServiceManager } from "@/components/ServiceManager";
 import { TransactionManager } from "@/components/TransactionManager";
 import { analyzeProperty, loadProperty } from "@/lib/portfolio";
@@ -53,6 +54,15 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     method: property.depreciationMethod as "STRAIGHT" | "ACCELERATED",
     startYear: property.depreciationStart ?? new Date(property.purchaseDate).getFullYear(),
   });
+
+  // Odhady najmu z nocniho skenu — vlastni dotaz, at je loadProperty lehky
+  const odhadyNajmu = await prisma.rentEstimate.findMany({
+    where: { propertyId: property.id },
+    orderBy: { date: "desc" },
+    take: 60,
+  });
+  // Proti trhu porovnavame cely najem, ne jen podil prihlaseneho vlastnika
+  const smluvniNajem = property.leases.find((l) => l.isActive)?.rentMonthly ?? 0;
 
   const recentTx = [...property.transactions]
     .sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime())
@@ -167,6 +177,11 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             </div>
           </Card>
         </div>
+
+        <Card title="Tržní nájem — noční sken trhu"
+          action={<Link href="/market" className="text-xs text-accent">Sken trhu →</Link>}>
+          <RentHistory odhady={odhadyNajmu} smluvniNajem={smluvniNajem} areaM2={property.areaM2} />
+        </Card>
 
         {amortByYear.length > 0 && (
           <Card title="Umořování úvěru — kolik jde na jistinu a kolik bance">

@@ -89,12 +89,13 @@ model Property {
 
   notes String?
 
-  loans        Loan[]
-  leases       Lease[]
-  transactions Transaction[]
-  services     Service[]
-  valuations   Valuation[]
-  owners       PropertyOwner[]
+  loans         Loan[]
+  leases        Lease[]
+  transactions  Transaction[]
+  services      Service[]
+  valuations    Valuation[]
+  owners        PropertyOwner[]
+  rentEstimates RentEstimate[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -223,6 +224,36 @@ model Valuation {
   notes String?
 
   createdAt DateTime @default(now())
+}
+
+/// Odhad trzniho najemneho. Vede se zvlast od oceneni, protoze najem se sleduje
+/// denne a ma jinou dynamiku nez prodejni cena.
+model RentEstimate {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  date DateTime @default(now())
+
+  /// Median mesicniho najmu srovnatelnych bytu
+  monthlyRent Float
+  /// Median najmu za m² — porovnatelne napric velikostmi
+  rentPerM2   Float?
+  p25         Float?
+  p75         Float?
+
+  source     String // MARKET_SCAN | MANUAL
+  sampleSize Int?
+  confidence String? // LOW | MEDIUM | HIGH
+
+  /// Snimek nabidek, ze kterych median vznikl
+  comparables Json?
+
+  notes String?
+
+  createdAt DateTime @default(now())
+
+  @@index([propertyId, date])
 }
 
 /// Jeden beh mesicniho skenu trhu

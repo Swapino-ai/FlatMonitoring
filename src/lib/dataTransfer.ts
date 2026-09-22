@@ -22,6 +22,7 @@ export async function exportujVse(): Promise<Zaloha> {
       transaction: await prisma.transaction.findMany(),
       service: await prisma.service.findMany(),
       valuation: await prisma.valuation.findMany(),
+      rentEstimate: await prisma.rentEstimate.findMany(),
       marketScan: await prisma.marketScan.findMany(),
       marketListing: await prisma.marketListing.findMany(),
       marketIndex: await prisma.marketIndex.findMany(),
@@ -55,6 +56,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.marketListing.deleteMany();
     await tx.marketScan.deleteMany();
     await tx.marketIndex.deleteMany();
+    await tx.rentEstimate.deleteMany();
     await tx.valuation.deleteMany();
     await tx.propertyOwner.deleteMany();
     await tx.service.deleteMany();
@@ -147,6 +149,18 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       comparables: x.comparables ?? undefined, notes: s(x.notes),
     }));
     if (valuations.length) obnoveno.valuation = (await tx.valuation.createMany({ data: valuations })).count;
+
+    const rentEstimates = (t.rentEstimate as any[] ?? []).map((x) => ({
+      id: String(x.id), propertyId: String(x.propertyId), date: dPovinne(x.date),
+      monthlyRent: c(x.monthlyRent),
+      rentPerM2: x.rentPerM2 == null ? null : c(x.rentPerM2),
+      p25: x.p25 == null ? null : c(x.p25),
+      p75: x.p75 == null ? null : c(x.p75),
+      source: String(x.source), confidence: s(x.confidence),
+      sampleSize: x.sampleSize == null ? null : Math.round(c(x.sampleSize)),
+      comparables: x.comparables ?? undefined, notes: s(x.notes),
+    }));
+    if (rentEstimates.length) obnoveno.rentEstimate = (await tx.rentEstimate.createMany({ data: rentEstimates })).count;
 
     return { obnoveno, smazano: true };
   }, { timeout: 120_000 });

@@ -180,3 +180,70 @@ export async function valuateFromMarket(propertyId: string): Promise<{ value: nu
 }
 
 export type { ScanQuery, ScrapedListing } from "./types";
+
+
+/**
+ * Odhad trzniho najemneho ze srovnatelnych nabidek a jeho zapis do historie.
+ *
+ * Najem se sleduje denne, protoze na rozdil od prodejni ceny reaguje rychle
+ * — sezonne i na zmeny nabidky ve ctvrti.
+ *
+ * Zapisuje se jen pri zmene — jinak by denni sken za rok vyrobil 365 shodnych
+ * radku a historie by se v nich ztratila.
+ */
+export async function odhadniNajemPriZmene(
+  propertyId: string,
+  tolerancePct = 1,
+): Promise<{ monthlyRent: number; stats: ComparableStats; zapsano: boolean; duvod: string } | null> {
+  const p = await prisma.property.findUnique({ where: { id: propertyId } });
+  if (!p) return null;
+
+  const stats = await comparableStats({
+    city: p.city,
+    district: p.district,
+    dealType: "RENT",
+    areaM2: p.areaM2,
+    disposition: p.disposition ?? undefined,
+    sinceDays: 30, // najem se meni rychleji nez prodejni cena
+  });
+  if (!stats) return null;
+
+  // Median za m² nasobime plochou — je stabilnejsi nez median celkoveho najmu,
+  // protoze srovnatelne byty se ve velikosti stejne lisi
+  const monthlyRent = Math.round(stats.medianPricePerM2 * p.areaM2);
+
+  const posledni = await prisma.rentEstimate.findFirst({
+    where: { propertyId, source: "MARKET_SCAN" },
+    orderBy: { date: "desc" },
+  });
+
+  if (posledni) {
+    const zmena = Math.abs((monthlyRent - posledni.monthlyRent) / posledni.monthlyRent) * 100;
+    const stejnyDen = posledni.date.toDateString() === new Date().toDateString();
+    if (stejnyDen || zmena < tolerancePct) {
+      return {
+        monthlyRent,
+        stats,
+        zapsano: false,
+        duvod: stejnyDen ? "dnes už zapsáno" : `změna jen ${zmena.toFixed(2)} %`,
+      };
+    }
+  }
+
+  await prisma.rentEstimate.create({
+    data: {
+      propertyId: p.id,
+      monthlyRent,
+      rentPerM2: stats.medianPricePerM2,
+      p25: stats.p25,
+      p75: stats.p75,
+      source: "MARKET_SCAN",
+      sampleSize: stats.count,
+      confidence: stats.count >= 15 ? "HIGH" : stats.count >= 7 ? "MEDIUM" : "LOW",
+      comparables: stats.listings as unknown as Prisma.InputJsonValue,
+      notes: `Medián ${Math.round(stats.medianPricePerM2).toLocaleString("cs-CZ")} Kč/m² měsíčně z ${stats.count} nabídek.`,
+    },
+  });
+
+  return { monthlyRent, stats, zapsano: true, duvod: posledni ? "změna nad tolerancí" : "první odhad" };
+}

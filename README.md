@@ -267,6 +267,43 @@ Prochází stránky výpisu, dokud nemá patnáct srovnatelných nabídek, nejv�
   tvůj byt leží. Snímek se ukládá k ocenění, takže zůstane doložitelný i poté, co
   inzeráty z trhu zmizí.
 
+### Noční sken nájmů
+
+Nájemné reaguje na sezonu i na změnu nabídky ve čtvrti mnohem rychleji než
+prodejní cena, proto se skenuje **každou noc** (workflow *Noční sken nájmů*,
+1:40 UTC), zatímco prodejní ceny jednou měsíčně. Odhad vzniká stejně jako
+u prodejní ceny — medián Kč/m² ze srovnatelných nabídek krát tvoje plocha —
+a ukládá se do vlastní historie se snímkem nabídek, ze kterých vznikl.
+
+Do historie se zapíše **jen změna**: shodný odhad nebo pohyb pod 1 % se
+zahodí, jinak by za rok vzniklo 365 skoro stejných řádků a vývoj by se v nich
+ztratil. V detailu bytu je karta *Tržní nájem*, která odhad porovná s tvým
+smluvním nájmem a vyčíslí, kolik ročně necháváš na stole (nebo o kolik jsi nad
+trhem a riskuješ odchod nájemníka).
+
+### Které portály jde na nájmy skenovat
+
+Ověřeno sondou proti živým webům (`scripts/probe-rentals.ts`, workflow
+*Sonda portálů*):
+
+| Portál | Výsledek |
+| --- | --- |
+| **Sreality** | HTTP 200, inzeráty strukturovaně v `__NEXT_DATA__` (20 na stránku) — **jediný použitelný zdroj**, vrací 17 srovnatelných nájemních nabídek |
+| iDNES Reality | HTTP 200, ceny jen v HTML (25×), žádná strukturovaná data — šlo by parsovat HTML, které se ale mění bez varování |
+| Reality.cz | HTTP 200, ceny jen v HTML (25×) — totéž |
+| Bezrealitky | HTTP 200, ale v datech stránky žádné rozpoznatelné inzeráty (skládá se v prohlížeči) |
+| UlovDomov | HTTP 200, žádné inzeráty v datech stránky |
+| RE/MAX | HTTP 200, 0 cen v HTML — vykresluje se až v prohlížeči |
+| RealityMix | HTTP 404 |
+| Bazoš reality | HTTP 404 |
+| Century 21 | HTTP 429 (omezuje četnost dotazů) |
+| M&M Reality | HTTP 403 (blokuje roboty) |
+
+Proto zůstává jediným zdrojem Sreality — se 17 srovnatelnými nabídkami na dotaz
+je medián dost podložený. Přidání druhého zdroje by znamenalo parsovat HTML
+iDNES nebo Reality.cz, což se tiše rozbije při každém redesignu; kdyby Sreality
+vypadly, je to záložní cesta, ne věc, kterou je teď potřeba udržovat.
+
 ### Proč mezi zdroji nejsou Bezrealitky
 
 Jejich výpis se skládá až v prohlížeči z mapy. Server vrací pod každou adresou
