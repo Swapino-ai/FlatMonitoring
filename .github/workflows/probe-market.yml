@@ -21,6 +21,9 @@ jobs:
       - name: Ověření odkazů na detail inzerátu
         run: npx tsx scripts/probe-odkazy.ts
 
+      - name: Sonda kategorií
+        run: npx tsx scripts/probe-kategorie.ts
+
       - name: Test scraperů proti živým portálům
         id: test
         run: npx tsx scripts/test-scrapers.ts
