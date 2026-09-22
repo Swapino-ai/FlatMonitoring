@@ -299,6 +299,23 @@ Ověřeno sondou proti živým webům (`scripts/probe-rentals.ts`, workflow
 | Century 21 | HTTP 429 (omezuje četnost dotazů) |
 | M&M Reality | HTTP 403 (blokuje roboty) |
 
+#### Bazoš
+
+Bazoš je čitelný — `reality.bazos.cz/pronajmu/byt/` vrací HTTP 200 se dvaceti
+inzeráty v serverem vykresleném HTML včetně ceny i lokality. Použitelný ale
+není: jeho `robots.txt` zakazuje `/search.php`, `/*hledat=`, `/*hlokalita=`,
+`/*humkreis`, `/*cenaod=` i `/*cenado=`, tedy přesně filtr podle lokality,
+okruhu a ceny. Město v cestě neexistuje (`/pronajmu/byt/praha/` → 404), RSS
+také ne. Povolený je jedině celostátní nefiltrovaný výpis řazený podle data.
+
+Scraper obcházející robots.txt tu vědomě není. Kdyby Sreality vypadly, cesta
+vede přes jeden noční průchod povolených stránek `/pronajmu/byt/` s filtrem až
+u nás — jeden crawl pro všechny byty, žádný zakázaný parametr. Data z Bazoše
+budou ale vždy špinavější: velký podíl soukromých podnájmů, kde cena často
+nezahrnuje energie nebo je „dohodou".
+
+Ověřeno `scripts/probe-bazos.ts` (spouští se ručně, nic nemění).
+
 Proto zůstává jediným zdrojem Sreality — se 17 srovnatelnými nabídkami na dotaz
 je medián dost podložený. Přidání druhého zdroje by znamenalo parsovat HTML
 iDNES nebo Reality.cz, což se tiše rozbije při každém redesignu; kdyby Sreality
@@ -323,6 +340,8 @@ scripts/test-scrapers.ts    spustí scrapery a zkontroluje kvalitu výsledků
 scripts/probe-market.ts     dostupnost adres a hlaviček
 scripts/probe-structure.ts  kde v __NEXT_DATA__ leží inzeráty
 scripts/probe-fields.ts     přesné tvary polí, stránkování, filtry
+scripts/probe-rentals.ts    které portály jdou číst na pronájmy
+scripts/probe-bazos.ts      tvary adres Bazoše a co dovoluje robots.txt
 ```
 
 ---
