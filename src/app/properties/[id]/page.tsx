@@ -10,6 +10,7 @@ import { Napoveda } from "@/components/Napoveda";
 import { LoanManager } from "@/components/LoanManager";
 import { LeaseManager } from "@/components/LeaseManager";
 import { RentHistory } from "@/components/RentHistory";
+import { RentScanButton } from "@/components/RentScanButton";
 import { ServiceManager } from "@/components/ServiceManager";
 import { TransactionManager } from "@/components/TransactionManager";
 import { analyzeProperty, loadProperty } from "@/lib/portfolio";
@@ -181,6 +182,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
         <Card title="Tržní nájem — noční sken trhu"
           action={<Link href="/market" className="text-xs text-accent">Sken trhu →</Link>}>
           <RentHistory odhady={odhadyNajmu} smluvniNajem={smluvniNajem} areaM2={property.areaM2} />
+          {user.role === "OWNER" && <RentScanButton propertyId={property.id} />}
         </Card>
 
         {amortByYear.length > 0 && (
