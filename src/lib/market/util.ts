@@ -40,7 +40,12 @@ export function slugMesta(mesto: string): string {
 }
 
 /** Vytahne __NEXT_DATA__ ze stranky. Oba portaly bezi na Next.js. */
-export async function nactiNextData(url: string): Promise<unknown> {
+/**
+ * Vrati vedle rozparsovanych dat i puvodni HTML — odkazy na detail inzeratu
+ * se z dat stranky poskladat nedaji (chybi v nich slug ulice), takze je
+ * bereme primo z odkazu ve vypisu.
+ */
+export async function nactiStranku(url: string): Promise<{ data: unknown; html: string }> {
   const res = await fetch(url, { headers: HLAVICKY_PROHLIZECE, redirect: "follow" });
 
   if (!res.ok) {
@@ -55,7 +60,23 @@ export async function nactiNextData(url: string): Promise<unknown> {
   const m = html.match(/<script[^>]+id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
   if (!m) throw new Error("Na stránce chybí __NEXT_DATA__ — patrně se změnila struktura webu.");
 
-  return JSON.parse(m[1]);
+  return { data: JSON.parse(m[1]), html };
+}
+
+export async function nactiNextData(url: string): Promise<unknown> {
+  return (await nactiStranku(url)).data;
+}
+
+/**
+ * Mapa id inzeratu → adresa detailu, vytazena z odkazu ve vypisu.
+ * Tvar cesty je /detail/<typ>/<druh>/<dispozice>/<slug-lokality>/<id>.
+ */
+export function odkazyZVypisu(html: string): Map<string, string> {
+  const mapa = new Map<string, string>();
+  for (const m of html.matchAll(/\/detail\/[a-z-]+\/[a-z-]+\/[^"'\\ ]*?\/(\d+)(?=["'\\ ]|$)/g)) {
+    if (!mapa.has(m[1])) mapa.set(m[1], `https://www.sreality.cz${m[0]}`);
+  }
+  return mapa;
 }
 
 /** "Prodej bytu 2+kk 43 m²" → 43 */

@@ -15,6 +15,14 @@ export interface Nabidka {
 }
 
 /**
+ * Starsi snimky nesou adresu se zastupnym /x/x/, kterou Sreality nikdy
+ * neprepsaly — takovy odkaz vede na 404, radsi ho nenabizime vubec.
+ */
+function pouzitelnyOdkaz(url: string | null | undefined): boolean {
+  return !!url && !url.includes("/x/x/");
+}
+
+/**
  * Nabidky, ze kterych medián vznikl. Bez nich je ocenění černá skříňka —
  * tohle ukáže, s čím přesně se byt porovnával.
  */
@@ -117,9 +125,13 @@ export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni }: {
                 <span className={`text-xs tabular-nums ${rozdil > 0 ? "text-good" : "text-warn"}`}>
                   {rozdil > 0 ? "+" : ""}{rozdil.toFixed(0)} % proti tvému
                 </span>
-                {n.url && (
-                  <a href={n.url} target="_blank" rel="noreferrer noopener"
+                {pouzitelnyOdkaz(n.url) ? (
+                  <a href={n.url!} target="_blank" rel="noreferrer noopener"
                     className="text-xs text-accent hover:underline">inzerát →</a>
+                ) : (
+                  <span className="text-xs text-ink-muted" title="Snímek vznikl dřív, než se odkazy ukládaly ve funkčním tvaru.">
+                    bez odkazu
+                  </span>
                 )}
               </div>
             </div>

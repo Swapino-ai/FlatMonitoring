@@ -1,5 +1,5 @@
 import type { MarketSource, ScanQuery, ScrapedListing } from "./types";
-import { filtrujSrovnatelne, nactiNextData, plochaZNazvu, slugMesta, sleep } from "./util";
+import { filtrujSrovnatelne, nactiStranku, odkazyZVypisu, plochaZNazvu, slugMesta, sleep } from "./util";
 
 /**
  * Sreality zrusily verejne JSON API (/api/cs/v2/estates vraci 404).
@@ -35,7 +35,10 @@ export const srealitySource: MarketSource = {
       // takze si ji odfiltrujeme az z vysledku.
       const url = `https://www.sreality.cz/hledani/${typ}/byty/${mesto}${strana > 1 ? `?strana=${strana}` : ""}`;
 
-      const data = await nactiNextData(url);
+      const { data, html } = await nactiStranku(url);
+      // Odkaz na detail se z dat stranky poskladat neda — v ceste je slug ulice,
+      // ktery v nich neni. Bereme ho tedy primo z odkazu ve vypisu.
+      const odkazy = odkazyZVypisu(html);
       const zaznamy = najdiVysledky(data);
       if (zaznamy.length === 0) break;
 
@@ -58,7 +61,7 @@ export const srealitySource: MarketSource = {
           areaM2: plocha,
           price: cena,
           pricePerM2: zaM2 ?? (plocha ? cena / plocha : undefined),
-          url: z.id ? `https://www.sreality.cz/detail/${typ}/byt/x/x/${z.id}` : undefined,
+          url: z.id ? odkazy.get(String(z.id)) : undefined,
         });
       }
 
