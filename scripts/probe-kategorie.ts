@@ -8,11 +8,14 @@
  */
 import { nactiStranku } from "../src/lib/market/util";
 
+// Overene v predchozim behu: byty, ostatni, garaze, komercni/sklady,
+// komercni/kancelare. Ted dobirame zbytek a najemni variantu — garaz se
+// pronajima castoji nez prodava, takze nocni sken ji potrebuje.
 const CESTY = [
-  "byty", "domy", "pozemky", "komercni", "ostatni",
-  // Uzsi tvary, kdyby se kategorie delila dal
-  "ostatni/garaz", "ostatni/garaze", "garaze",
-  "komercni/sklady", "komercni/kancelare",
+  "prodej/domy", "prodej/pozemky", "prodej/komercni",
+  "prodej/komercni/obchodni-prostory", "prodej/komercni/obchodni",
+  "prodej/ostatni/garazove-stani", "prodej/garazova-stani",
+  "pronajem/garaze", "pronajem/komercni/kancelare", "pronajem/domy",
 ];
 
 function najdiVysledky(uzel: unknown, hloubka = 0): any[] {
@@ -32,7 +35,7 @@ async function main() {
   console.log(`Sonda kategorií Sreality — ${new Date().toISOString()}\n${"=".repeat(74)}\n`);
 
   for (const cesta of CESTY) {
-    const url = `https://www.sreality.cz/hledani/prodej/${cesta}/praha`;
+    const url = `https://www.sreality.cz/hledani/${cesta}/praha`;
     console.log(`### ${cesta}`);
     console.log(`    ${url}`);
     try {
