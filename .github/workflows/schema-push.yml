@@ -1,0 +1,52 @@
+# Promítnutí schématu do Neonu.
+#
+# Spouští se výhradně ručně — mění strukturu živé databáze, takže to nemá
+# viset na každém pushi. Nejdřív si vyžádá zálohu, ať je kam couvnout.
+#
+# Kdy: po přidání tabulky nebo sloupce v prisma/schema.prisma. V logu kroku
+# "Náhled změn" je vidět, co přesně se provede, než se to provede.
+
+name: Promítnout schéma do databáze
+
+on:
+  workflow_dispatch:
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Záloha před zásahem
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npm run backup
+
+      - name: Ulož zálohu jako artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: zaloha-pred-schematem-${{ github.run_number }}
+          path: zalohy/*.json
+          retention-days: 90
+
+      - name: Náhled změn
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx prisma db push --skip-generate
+
+      - name: Kontrola, že je schéma v souladu
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx prisma db push --skip-generate

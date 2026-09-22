@@ -267,6 +267,31 @@ Prochází stránky výpisu, dokud nemá patnáct srovnatelných nabídek, nejv�
   tvůj byt leží. Snímek se ukládá k ocenění, takže zůstane doložitelný i poté, co
   inzeráty z trhu zmizí.
 
+### Které typy nemovitostí se skenují
+
+Sreality mají pro každý druh vlastní cestu v adrese, ne jen `byty`. Ověřeno
+sondou `scripts/probe-kategorie.ts` proti živému webu:
+
+| Typ v aplikaci | Cesta na Sreality | Nabídek s Kč/m² |
+| --- | --- | --- |
+| Byt, družstevní byt | `byty` | 18/20 |
+| Rodinný dům | `domy` (podkategorie Rodinný) | 21/22 |
+| Bytový dům | `komercni` (podkategorie Činžovní dům) | 17/20 |
+| Garáž | `garaze` | 20/20 |
+| Parkovací stání | `garazova-stani` | 18/20 |
+| Nebytový prostor | `komercni/kancelare` | 16/20 |
+| Obchodní prostor | `komercni/obchodni-prostory` | 18/20 |
+| Sklad nebo hala | `komercni/sklady` | 18/20 |
+| Pozemek | `pozemky` | 18/20 |
+
+Chata a „jiná nemovitost“ se zatím neskenují. Chaty na Sreality spadají pod
+`domy`, ale přesný název podkategorie sonda nepotvrdila — lepší neskenovat než
+míchat chatu s vilou. `ostatni/garaz` ani `komercni/obchodni` neexistují
+(404); správné tvary jsou v tabulce.
+
+Každá uložená nabídka nese kategorii, takže se druhy nepotkají: garáž 20 m²
+a byt 22 m² ve stejném městě by si jinak navzájem zamořily medián.
+
 ### Noční sken nájmů
 
 Nájemné reaguje na sezonu i na změnu nabídky ve čtvrti mnohem rychleji než
@@ -342,6 +367,8 @@ scripts/probe-structure.ts  kde v __NEXT_DATA__ leží inzeráty
 scripts/probe-fields.ts     přesné tvary polí, stránkování, filtry
 scripts/probe-rentals.ts    které portály jdou číst na pronájmy
 scripts/probe-bazos.ts      tvary adres Bazoše a co dovoluje robots.txt
+scripts/probe-kategorie.ts  které kategorie nemovitostí jdou skenovat
+scripts/probe-odkazy.ts     že odkazy na inzeráty vedou na živou stránku
 ```
 
 ---

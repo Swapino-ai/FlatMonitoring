@@ -111,16 +111,20 @@ export const TYPY_NEMOVITOSTI: TypNemovitosti[] = [
     popis: "Nevlastníš nemovitost, ale podíl v bytovém družstvu s právem nájmu.",
     upozorneni: "Družstevní podíl je movitá věc, ne nemovitost — neodepisuje se a při prodeji platí časový test pět let podle § 4 odst. 1 písm. s) ZDP, ne deset. Banky na něj zpravidla nedají klasickou hypotéku.",
   },
-  { klic: "RODINNY_DUM", nazev: "Rodinný dům", odpisovaSkupina: 5, maDispozici: true },
-  { klic: "BYTOVY_DUM", nazev: "Bytový dům", odpisovaSkupina: 5, maDispozici: false, popis: "Celý dům s více bytovými jednotkami." },
-  { klic: "CHATA", nazev: "Chata nebo rekreační objekt", odpisovaSkupina: 5, maDispozici: true },
+  { klic: "RODINNY_DUM", nazev: "Rodinný dům", odpisovaSkupina: 5, maDispozici: true, srealityCesta: "domy", srealityPodkategorie: "Rodinný" },
+  { klic: "BYTOVY_DUM", nazev: "Bytový dům", odpisovaSkupina: 5, maDispozici: false, srealityCesta: "komercni", srealityPodkategorie: "Činžovní dům", popis: "Celý dům s více bytovými jednotkami." },
+  {
+    klic: "CHATA", nazev: "Chata nebo rekreační objekt", odpisovaSkupina: 5, maDispozici: true,
+    // Chaty na Sreality spadaji pod "domy", ale nazev podkategorie sonda
+    // nepotvrdila — radsi neskenujeme nez abychom michali chatu s vilou.
+  },
   { klic: "GARAZ", nazev: "Garáž", odpisovaSkupina: 5, maDispozici: false, srealityCesta: "garaze" },
-  { klic: "PARKOVACI_STANI", nazev: "Parkovací stání", odpisovaSkupina: 5, maDispozici: false, popis: "Samostatná jednotka nebo podíl na společné garáži." },
+  { klic: "PARKOVACI_STANI", nazev: "Parkovací stání", odpisovaSkupina: 5, maDispozici: false, srealityCesta: "garazova-stani", popis: "Samostatná jednotka nebo podíl na společné garáži." },
   { klic: "NEBYTOVY_PROSTOR", nazev: "Nebytový prostor", odpisovaSkupina: 5, maDispozici: false, srealityCesta: "komercni/kancelare", popis: "Kancelář, ordinace, ateliér." },
-  { klic: "OBCHOD", nazev: "Obchodní prostor", odpisovaSkupina: 5, maDispozici: false },
+  { klic: "OBCHOD", nazev: "Obchodní prostor", odpisovaSkupina: 5, maDispozici: false, srealityCesta: "komercni/obchodni-prostory" },
   { klic: "SKLAD", nazev: "Sklad nebo hala", odpisovaSkupina: 4, maDispozici: false, srealityCesta: "komercni/sklady", upozorneni: "Lehké budovy a haly patří do 4. odpisové skupiny, tedy 20 let místo 30." },
   {
-    klic: "POZEMEK", nazev: "Pozemek", odpisovaSkupina: null, maDispozici: false,
+    klic: "POZEMEK", nazev: "Pozemek", odpisovaSkupina: null, maDispozici: false, srealityCesta: "pozemky",
     upozorneni: "Pozemek se neodepisuje, protože se neopotřebovává. Odpisový plán proto u tohoto typu nedává smysl.",
   },
   { klic: "JINY", nazev: "Jiná nemovitost", odpisovaSkupina: 5, maDispozici: false },
