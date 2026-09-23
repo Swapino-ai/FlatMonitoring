@@ -70,3 +70,6 @@ for (const p of PRIPADY) {
 }
 console.log(chyb === 0 ? "\nUvolnění dispozice funguje." : `\n${chyb} případů neprošlo.`);
 process.exitCode = chyb === 0 ? 0 : 1;
+
+// Samostatny modul — jinak by se promenne srazely s ostatnimi skripty
+export {};

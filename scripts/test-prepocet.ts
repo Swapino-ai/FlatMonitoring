@@ -60,3 +60,6 @@ kontrola("snímek zůstává celý", SNIMEK.length, 5);
 
 console.log(chyb === 0 ? "\nPřepočet po vyřazení funguje." : `\n${chyb} případů neprošlo.`);
 process.exitCode = chyb === 0 ? 0 : 1;
+
+// Samostatny modul — jinak by se promenne srazely s ostatnimi skripty
+export {};
