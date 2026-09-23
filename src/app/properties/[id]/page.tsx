@@ -11,6 +11,7 @@ import { LoanManager } from "@/components/LoanManager";
 import { LeaseManager } from "@/components/LeaseManager";
 import { RentHistory } from "@/components/RentHistory";
 import { RentScanButton } from "@/components/RentScanButton";
+import { Mapa } from "@/components/Mapa";
 import { ServiceManager } from "@/components/ServiceManager";
 import { TransactionManager } from "@/components/TransactionManager";
 import { analyzeProperty, loadProperty } from "@/lib/portfolio";
@@ -24,6 +25,7 @@ import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
 import { categoryLabel, SERVICE_TYPES } from "@/lib/categories";
 import { czk, czkCompact, dateCz, num, pct, STATUS_LABELS } from "@/lib/format";
 import { NEMOVITOST_MAP, nazevNemovitosti } from "@/lib/catalogs";
+import { okruhProTyp } from "@/lib/geo";
 
 export const dynamic = "force-dynamic";
 
@@ -178,6 +180,18 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             </div>
           </Card>
         </div>
+
+        {property.latitude != null && property.longitude != null && (
+          <Card title="Poloha" action={
+            <a href={`https://mapy.cz/zakladni?x=${property.longitude}&y=${property.latitude}&z=17`}
+              target="_blank" rel="noreferrer noopener" className="text-xs text-accent">Otevřít v Mapy.cz →</a>
+          }>
+            <Mapa latitude={property.latitude} longitude={property.longitude} vyska={300} />
+            <p className="mt-2 text-xs text-ink-muted">
+              Podle téhle polohy se hledají srovnatelné nabídky v okruhu {okruhProTyp(property.type)} km.
+            </p>
+          </Card>
+        )}
 
         <Card title="Tržní nájem — noční sken trhu"
           action={<Link href="/market" className="text-xs text-accent">Sken trhu →</Link>}>

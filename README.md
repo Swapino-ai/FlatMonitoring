@@ -284,6 +284,15 @@ Proč zrovna Mapy.cz: na dotaz „Masarykova 5, Brno“ nabídl OpenStreetMap
 Vranovice, Hrušovany u Brna a Zbýšov. Google Places je kvalitou srovnatelný,
 ale chce účet s platební kartou.
 
+Pod adresou je **mapa**. Výběr z našeptávače na ni rovnou posune značku a
+klepnutím do mapy polohu upřesníš — našeptávač zná dům, ne který vchod. Ze
+souřadnic se adresa dotáhne zpátky, ale platí ta poloha, kam jsi klepl.
+V detailu nemovitosti je pak mapa jen k prohlížení, s odkazem do Mapy.cz.
+
+Dlaždice mapy si prohlížeč tahá přes `/api/mapa/dlazdice/...`, ne přímo
+z Mapy.cz — v adrese dlaždice je klíč a ten by si z požadavku kdokoli přečetl.
+Je to jeden skok navíc, což u aplikace pro dva lidi nevadí.
+
 **Srovnatelné nabídky se pak hledají podle vzdušné vzdálenosti**, ne podle
 shody názvu čtvrti. Byt na hranici Vinohrad a Žižkova má blíž k nabídkám za
 rohem než k druhému konci „své“ čtvrti, a sousední obec za hranicí města je

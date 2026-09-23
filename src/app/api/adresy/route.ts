@@ -40,11 +40,48 @@ function rozeber(p: MapyPolozka) {
   };
 }
 
+/** Opacny smer: z bodu na mape udelej adresu. */
+async function zeSouradnic(lat: number, lon: number) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return NextResponse.json({ navrh: null, poznamka: "Neplatné souřadnice." });
+  }
+  const klic = process.env.MAPY_API_KEY;
+  if (!klic) return NextResponse.json({ navrh: null, poznamka: "Mapa není nastavená (chybí MAPY_API_KEY)." });
+
+  const url = "https://api.mapy.cz/v1/rgeocode?" + new URLSearchParams({
+    lat: String(lat), lon: String(lon), lang: "cs", apikey: klic,
+  });
+
+  try {
+    const r = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!r.ok) return NextResponse.json({ navrh: null, poznamka: `Mapy.cz vrátily HTTP ${r.status}.` });
+    const data = (await r.json()) as { items?: MapyPolozka[] };
+    const prvni = data.items?.[0];
+    if (!prvni) return NextResponse.json({ navrh: null, poznamka: "Na tomhle místě žádná adresa není." });
+
+    const navrh = rozeber(prvni);
+    // Zpetne hledani nekdy vrati bod bez presnych souradnic — pak platí ten,
+    // kam uzivatel klikl
+    return NextResponse.json({
+      navrh: { ...navrh, latitude: navrh.latitude ?? lat, longitude: navrh.longitude ?? lon },
+    });
+  } catch {
+    return NextResponse.json({ navrh: null, poznamka: "Mapa je dočasně nedostupná." });
+  }
+}
+
 export async function GET(request: Request) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: "Nepřihlášen" }, { status: 401 });
 
-  const dotaz = new URL(request.url).searchParams.get("q")?.trim() ?? "";
+  const params = new URL(request.url).searchParams;
+
+  // Kliknuti do mapy: ze souradnic zpatky adresu
+  const lat = params.get("lat");
+  const lon = params.get("lon");
+  if (lat && lon) return zeSouradnic(Number(lat), Number(lon));
+
+  const dotaz = params.get("q")?.trim() ?? "";
   if (dotaz.length < 3) return NextResponse.json({ navrhy: [] });
 
   const klic = process.env.MAPY_API_KEY;

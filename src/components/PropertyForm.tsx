@@ -8,6 +8,7 @@ import { Card } from "./Stat";
 import { Pole } from "./form";
 import { NEMOVITOST_MAP, TYPY_NEMOVITOSTI } from "@/lib/catalogs";
 import { AdresaNaseptavac, type Navrh } from "./AdresaNaseptavac";
+import { Mapa } from "./Mapa";
 
 type Values = Partial<{
   type: string;
@@ -47,6 +48,26 @@ export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik 
       district: n.cast || adresa.district,
       latitude: n.latitude, longitude: n.longitude,
     });
+  }
+
+  // Klepnuti do mapy: ze souradnic dotahneme adresu zpatky
+  async function zMapy(lat: number, lon: number) {
+    setAdresa((a) => ({ ...a, latitude: lat, longitude: lon }));
+    try {
+      const r = await fetch(`/api/adresy?lat=${lat}&lon=${lon}`);
+      const d = await r.json();
+      if (!d.navrh) return;
+      setAdresa((a) => ({
+        // Souradnice drzi to, kam uzivatel klepl — presnejsi nez stred domu
+        ...a, latitude: lat, longitude: lon,
+        street: d.navrh.ulice || a.street,
+        city: d.navrh.mesto || a.city,
+        zip: d.navrh.psc || a.zip,
+        district: d.navrh.cast || a.district,
+      }));
+    } catch {
+      // Adresa se nedotahla — souradnice ale platí a to je pro okruh podstatné
+    }
   }
 
   const zmen = (pole: keyof typeof adresa) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -92,6 +113,15 @@ export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik 
 
           <input type="hidden" name="latitude" value={adresa.latitude ?? ""} />
           <input type="hidden" name="longitude" value={adresa.longitude ?? ""} />
+
+          <div className="sm:col-span-2">
+            <Mapa latitude={adresa.latitude} longitude={adresa.longitude} onZmena={zMapy} />
+            <p className="mt-1 text-xs text-ink-muted">
+              {adresa.latitude != null
+                ? `Poloha uložena (${adresa.latitude.toFixed(5)}, ${adresa.longitude!.toFixed(5)}) — podle ní se hledají srovnatelné nabídky v okruhu.`
+                : "Bez polohy se srovnání hledá jen podle města a čtvrti, což je hrubší."}
+            </p>
+          </div>
           <Field label="Číslo jednotky v KN" name="cadastralNo" defaultValue={v.cadastralNo ?? ""} errors={state.fieldErrors} />
         </div>
       </Card>

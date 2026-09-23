@@ -26,6 +26,7 @@
     "bcryptjs": "^2.4.3",
     "date-fns": "^4.1.0",
     "jose": "^5.9.6",
+    "leaflet": "^1.9.4",
     "next": "^15.5.25",
     "react": "19.0.0",
     "react-dom": "19.0.0",
@@ -34,6 +35,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/leaflet": "^1.9.12",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
