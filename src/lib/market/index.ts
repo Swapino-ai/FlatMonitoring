@@ -183,6 +183,143 @@ export async function prepocitejPoVyrazeni(propertyId: string): Promise<{
   return vysledek;
 }
 
+/**
+ * Nabidky z okoli k nahlednuti, kdyz na odhad nestacily.
+ *
+ * Filtry jsou zamerne volnejsi nez u odhadu — dispozice se neresi a plocha ma
+ * dvojnasobnou toleranci. Do vypoctu nevstupuji, jde jen o to videt, co na trhu
+ * je: "neni dost srovnatelnych nabidek" bez seznamu je tvrzeni, ktere si nejde
+ * overit.
+ */
+export async function nabidkyVOkoli(
+  propertyId: string,
+  dealType: "SALE" | "RENT" = "SALE",
+  limit = 12,
+): Promise<SrovnatelnaNabidka[]> {
+  const p = await prisma.property.findUnique({ where: { id: propertyId } });
+  if (!p) return [];
+
+  const since = new Date();
+  since.setDate(since.getDate() - (dealType === "RENT" ? 30 : 60));
+  const tol = Math.max(20, p.areaM2 * 0.5);
+  const stred = p.latitude != null && p.longitude != null
+    ? { latitude: p.latitude, longitude: p.longitude }
+    : null;
+  const obalka = stred ? obalkaOkruhu(stred, MAX_OKRUH_KM) : null;
+
+  const rows = await prisma.marketListing.findMany({
+    where: {
+      dealType,
+      category: p.type,
+      scrapedAt: { gte: since },
+      areaM2: { gte: p.areaM2 - tol, lte: p.areaM2 + tol },
+      pricePerM2: { not: null },
+      ...(obalka
+        ? { latitude: { gte: obalka.latMin, lte: obalka.latMax }, longitude: { gte: obalka.lonMin, lte: obalka.lonMax } }
+        : p.region
+          ? { OR: [{ city: p.city }, { region: p.region }] }
+          : { city: p.city }),
+    },
+    select: {
+      externalId: true, pricePerM2: true, price: true, areaM2: true, disposition: true,
+      district: true, url: true, source: true, scrapedAt: true, latitude: true, longitude: true,
+    },
+    orderBy: { scrapedAt: "desc" },
+  });
+
+  const videne = new Set<string>();
+  const vychozi = okruhyProTyp(p.type)[0];
+
+  return rows
+    .filter((r) => {
+      const klic = r.externalId ? `${r.source}|${r.externalId}` : `${r.source}|${r.price}|${r.areaM2}`;
+      if (videne.has(klic)) return false;
+      videne.add(klic);
+      return true;
+    })
+    .map((r) => {
+      const km = stred && r.latitude != null && r.longitude != null
+        ? vzdalenostKm(stred, { latitude: r.latitude, longitude: r.longitude })
+        : null;
+      return {
+        disposition: r.disposition,
+        areaM2: r.areaM2,
+        price: r.price,
+        pricePerM2: r.pricePerM2!,
+        district: r.district,
+        url: r.url,
+        source: r.source,
+        scrapedAt: r.scrapedAt.toISOString(),
+        klic: r.externalId ? `${r.source}|${r.externalId}` : null,
+        vzdalenostKm: km == null ? null : Math.round(km * 10) / 10,
+        zLokality: km != null && km <= vychozi,
+      };
+    })
+    // Nejblizsi napred; bez souradnic az za nimi
+    .sort((a, b) => (a.vzdalenostKm ?? 1e9) - (b.vzdalenostKm ?? 1e9))
+    .slice(0, limit);
+}
+
+export interface KrokDiagnostiky {
+  popis: string;
+  pocet: number;
+  /** Tady se vzorek ztratil — krok, po kterem uz nezbyly tri nabidky. */
+  zlom: boolean;
+}
+
+/**
+ * Proc u teto nemovitosti nevzniklo oceneni.
+ *
+ * Misto obecneho "malo nabidek" ukaze, kolik jich zbyva po kazdem filtru —
+ * z toho je hned videt, jestli vadi plocha, dispozice, stari dat nebo to, ze
+ * sken v obci nic nenasel.
+ */
+export async function diagnostikaOceneni(propertyId: string, dealType: "SALE" | "RENT" = "SALE"): Promise<KrokDiagnostiky[]> {
+  const p = await prisma.property.findUnique({ where: { id: propertyId } });
+  if (!p) return [];
+
+  const since = new Date();
+  since.setDate(since.getDate() - (dealType === "RENT" ? 30 : 60));
+  const tol = Math.max(10, p.areaM2 * 0.25);
+  const vyloucene = await nactiVyloucene(propertyId);
+
+  const zaklad = { dealType, category: p.type };
+  const kroky: KrokDiagnostiky[] = [];
+  const pridej = async (popis: string, where: Prisma.MarketListingWhereInput) => {
+    kroky.push({ popis, pocet: await prisma.marketListing.count({ where }), zlom: false });
+  };
+
+  await pridej(`Nabídky v kategorii ${p.type}`, zaklad);
+  await pridej(`…z posledních ${dealType === "RENT" ? 30 : 60} dnů`, { ...zaklad, scrapedAt: { gte: since } });
+
+  const mistni: Prisma.MarketListingWhereInput = {
+    ...zaklad, scrapedAt: { gte: since },
+    ...(p.latitude != null ? {} : p.region ? { OR: [{ city: p.city }, { region: p.region }] } : { city: p.city }),
+  };
+  await pridej(p.latitude != null ? "…se souřadnicemi (okruh se řeší až v paměti)" : `…z ${p.city}${p.region ? ` nebo kraje` : ""}`, mistni);
+
+  await pridej(`…s plochou ${Math.round(p.areaM2 - tol)}–${Math.round(p.areaM2 + tol)} m²`, {
+    ...mistni, areaM2: { gte: p.areaM2 - tol, lte: p.areaM2 + tol }, pricePerM2: { not: null },
+  });
+
+  if (p.disposition) {
+    await pridej(`…s dispozicí ${p.disposition}`, {
+      ...mistni, areaM2: { gte: p.areaM2 - tol, lte: p.areaM2 + tol },
+      pricePerM2: { not: null }, disposition: p.disposition,
+    });
+  }
+
+  if (vyloucene.size > 0) {
+    kroky.push({ popis: `…mínus ${vyloucene.size} vyřazených`, pocet: -1, zlom: false });
+  }
+
+  // Zlom je prvni krok, po kterem uz nezbyly tri nabidky
+  const i = kroky.findIndex((k) => k.pocet >= 0 && k.pocet < 3);
+  if (i >= 0) kroky[i].zlom = true;
+
+  return kroky;
+}
+
 /** Nabidky, ktere uzivatel u teto nemovitosti z odhadu vyradil. */
 export async function nactiVyloucene(propertyId: string): Promise<Set<string>> {
   const r = await prisma.excludedListing.findMany({

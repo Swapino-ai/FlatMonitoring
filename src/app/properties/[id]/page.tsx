@@ -14,6 +14,7 @@ import { RentScanButton } from "@/components/RentScanButton";
 import { Mapa } from "@/components/Mapa";
 import { Hero, Kondice, type Kontrola } from "@/components/Kondice";
 import { VyrazeneNabidky } from "@/components/VyrazeneNabidky";
+import { NabidkyVOkoli } from "@/components/NabidkyVOkoli";
 import { ServiceManager } from "@/components/ServiceManager";
 import { TransactionManager } from "@/components/TransactionManager";
 import { analyzeProperty, loadProperty } from "@/lib/portfolio";
@@ -28,6 +29,7 @@ import { categoryLabel, SERVICE_TYPES } from "@/lib/categories";
 import { czk, czkCompact, dateCz, num, pct, STATUS_LABELS } from "@/lib/format";
 import { NEMOVITOST_MAP, nazevNemovitosti } from "@/lib/catalogs";
 import { okruhProTyp } from "@/lib/geo";
+import { diagnostikaOceneni, nabidkyVOkoli } from "@/lib/market";
 
 export const dynamic = "force-dynamic";
 
@@ -89,8 +91,9 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
       return `Nabídky jsou jen z okolí kraje (${vKraji}), ne přímo z obce. Bez souřadnic je k nemovitosti nepřiřadíme — `
         + "vyber adresu z našeptávače a spusť sken znovu.";
     }
-    return `V okolí je ${vObci + vKraji} nabídek, ale po zúžení na srovnatelnou plochu a dispozici jich zbylo míň než tři. `
-      + "Odhad z toho nedělám — radši žádný než klamavý.";
+    return `Sken proběhl a v okolí je ${vObci + vKraji} nabídek, ale po zúžení na srovnatelnou plochu `
+      + "a dispozici jich zbyly míň než tři. Medián z toho nedělám — radši žádný odhad než klamavý. "
+      + "Co se našlo, si můžeš prohlédnout níž.";
   })();
 
   // Nejnovejsi odhad najmu — patri nahoru vedle hodnoty, ne az pod finance
@@ -127,6 +130,12 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
       detail: `u ${a.fixationAlert.lender} končí za ${Math.round(a.fixationAlert.monthsLeft)} měsíců — poptej refinancování`,
     });
   }
+
+  // Když odhad nevznikl, ať je aspoň vidět, co sken našel — "málo srovnatelných
+  // nabídek" bez seznamu je tvrzení, které si nejde ověřit
+  const okoli = property.valuations.length > 0
+    ? { nabidky: [], kroky: [] }
+    : { nabidky: await nabidkyVOkoli(property.id), kroky: await diagnostikaOceneni(property.id) };
 
   const vyrazene = await prisma.excludedListing.findMany({
     where: { propertyId: property.id },
@@ -360,7 +369,10 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             />
             <VyrazeneNabidky propertyId={property.id} polozky={vyrazene} canEdit={user.role === "OWNER"} />
             {duvodBezOceneni && (
-              <p className="mt-3 rounded-lg bg-warn/10 px-3 py-2.5 text-sm text-warn">{duvodBezOceneni}</p>
+              <>
+                <p className="mt-3 rounded-lg bg-warn/10 px-3 py-2.5 text-sm text-warn">{duvodBezOceneni}</p>
+                <NabidkyVOkoli nabidky={okoli.nabidky} kroky={okoli.kroky} />
+              </>
             )}
           </Card>
 
