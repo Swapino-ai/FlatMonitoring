@@ -28,7 +28,7 @@ export default async function MarketPage() {
       const p = a.property;
       const spolecne = {
         city: p.city, district: p.district, category: p.type,
-        latitude: p.latitude, longitude: p.longitude,
+        latitude: p.latitude, longitude: p.longitude, region: p.region,
         areaM2: p.areaM2, disposition: p.disposition,
       };
       const sale = await comparableStats({ ...spolecne, dealType: "SALE" as const });

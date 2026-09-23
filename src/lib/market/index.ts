@@ -26,11 +26,11 @@ export async function runScan(query: ScanQuery): Promise<ScanResult[]> {
     try {
       const listings = await source.fetchListings(query);
       const status = listings.length === 0 ? "PARTIAL" : "OK";
-      await persist(source.name, status, listings, listings.length === 0 ? "Zdroj nevrátil žádné nabídky — v této obci a kategorii buď nic není, nebo se změnila struktura webu." : undefined);
+      await persist(source.name, status, listings, listings.length === 0 ? "Zdroj nevrátil žádné nabídky — v této obci a kategorii buď nic není, nebo se změnila struktura webu." : undefined, query.region);
       results.push({ source: source.name, status, count: listings.length });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      await persist(source.name, "FAILED", [], message);
+      await persist(source.name, "FAILED", [], message, query.region);
       results.push({ source: source.name, status: "FAILED", count: 0, message });
     }
   }
@@ -38,7 +38,7 @@ export async function runScan(query: ScanQuery): Promise<ScanResult[]> {
   return results;
 }
 
-async function persist(source: string, status: string, listings: ScrapedListing[], message?: string) {
+async function persist(source: string, status: string, listings: ScrapedListing[], message?: string, region?: string) {
   await prisma.marketScan.create({
     data: {
       source,
@@ -51,6 +51,7 @@ async function persist(source: string, status: string, listings: ScrapedListing[
           dealType: l.dealType,
           category: l.category,
           city: l.city,
+          region: region ?? null,
           district: l.district,
           disposition: l.disposition,
           areaM2: l.areaM2,
@@ -114,6 +115,8 @@ export async function comparableStats(opts: {
    */
   latitude?: number | null;
   longitude?: number | null;
+  /** Kraj — záchrana pro nemovitost bez souřadnic, když se skenoval kraj. */
+  region?: string | null;
   okruhKm?: number;
   /**
    * Kolik nabidek staci, aby se okruh dal prestat rozsirovat. Sken zacne
@@ -151,10 +154,14 @@ export async function comparableStats(opts: {
             latitude: { gte: obalka.latMin, lte: obalka.latMax },
             longitude: { gte: obalka.lonMin, lte: obalka.lonMax },
           }
-        : {
-            city: opts.city,
-            ...(opts.district ? { district: { contains: opts.district } } : {}),
-          }),
+        : opts.region
+          // Kdyz se stahoval kraj misto obce, nabidky nesou jina mesta nez
+          // nemovitost — shoda mesta by je vsechny zahodila.
+          ? { OR: [{ city: opts.city }, { region: opts.region }] }
+          : {
+              city: opts.city,
+              ...(opts.district ? { district: { contains: opts.district } } : {}),
+            }),
       ...(opts.disposition ? { disposition: opts.disposition } : {}),
       areaM2: { gte: opts.areaM2 - tol, lte: opts.areaM2 + tol },
       pricePerM2: { not: null },
@@ -252,6 +259,7 @@ export async function valuateFromMarket(propertyId: string): Promise<{ value: nu
     category: p.type,
     latitude: p.latitude,
     longitude: p.longitude,
+    region: p.region,
     areaM2: p.areaM2,
     disposition: p.disposition ?? undefined,
   });
@@ -323,6 +331,7 @@ export async function odhadniNajemPriZmene(
     category: p.type,
     latitude: p.latitude,
     longitude: p.longitude,
+    region: p.region,
     areaM2: p.areaM2,
     disposition: p.disposition ?? undefined,
     sinceDays: 30, // najem se meni rychleji nez prodejni cena

@@ -58,6 +58,39 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     startYear: property.depreciationStart ?? new Date(property.purchaseDate).getFullYear(),
   });
 
+  // Když ocenění chybí, chceme umět říct proč — hádat "asi málo nabídek" je
+  // k ničemu, když skutečná příčina je chybějící poloha nebo kraj.
+  const duvodBezOceneni = property.valuations.length > 0 ? null : await (async () => {
+    const maPolohu = property.latitude != null && property.longitude != null;
+    if (!NEMOVITOST_MAP.get(property.type)?.srealityCesta) {
+      return `Tenhle druh nemovitosti se na Sreality neskenuje — hodnotu zadej ručně.`;
+    }
+    const od = new Date();
+    od.setDate(od.getDate() - 60);
+    const vObci = await prisma.marketListing.count({
+      where: { dealType: "SALE", category: property.type, scrapedAt: { gte: od }, city: property.city },
+    });
+    const vKraji = property.region
+      ? await prisma.marketListing.count({
+          where: { dealType: "SALE", category: property.type, scrapedAt: { gte: od }, region: property.region },
+        })
+      : 0;
+
+    if (vObci + vKraji === 0) {
+      return "Sken zatím pro tenhle druh nemovitosti nic nenašel. Spusť sken trhu, nebo zadej hodnotu ručně.";
+    }
+    if (!maPolohu && !property.region) {
+      return `Nabídky v databázi jsou (${vObci + vKraji}), ale nejde je spárovat: nemovitost nemá uloženou polohu ani kraj. `
+        + "Otevři úpravy, vyber adresu z našeptávače — doplní se obojí.";
+    }
+    if (!maPolohu && vKraji > 0 && vObci === 0) {
+      return `Nabídky jsou jen z okolí kraje (${vKraji}), ne přímo z obce. Bez souřadnic je k nemovitosti nepřiřadíme — `
+        + "vyber adresu z našeptávače a spusť sken znovu.";
+    }
+    return `V okolí je ${vObci + vKraji} nabídek, ale po zúžení na srovnatelnou plochu a dispozici jich zbylo míň než tři. `
+      + "Odhad z toho nedělám — radši žádný než klamavý.";
+  })();
+
   // Odhady najmu z nocniho skenu — vlastni dotaz, at je loadProperty lehky
   const odhadyNajmu = await prisma.rentEstimate.findMany({
     where: { propertyId: property.id },
@@ -262,6 +295,9 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
               areaM2={property.areaM2}
               canEdit={user.role === "OWNER"}
             />
+            {duvodBezOceneni && (
+              <p className="mt-3 rounded-lg bg-warn/10 px-3 py-2.5 text-sm text-warn">{duvodBezOceneni}</p>
+            )}
           </Card>
 
           <Card title="Služby a dodavatelé" action={<Link href="/savings" className="text-xs text-accent">Kde ušetřit →</Link>}>

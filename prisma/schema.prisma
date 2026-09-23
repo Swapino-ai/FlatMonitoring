@@ -290,6 +290,10 @@ model MarketListing {
   /// dostala garáž podobné plochy.
   category    String  @default("BYT")
   city        String
+  /// Kraj, ve kterem se skenovalo. Pro nemovitost bez souradnic je to jediny
+  /// zpusob, jak najit srovnani, kdyz se stahoval kraj misto obce — nabidky
+  /// pak nesou jina mesta nez ta nemovitost.
+  region      String?
   district    String?
   disposition String?
   areaM2      Float?
