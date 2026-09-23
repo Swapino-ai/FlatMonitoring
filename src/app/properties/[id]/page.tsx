@@ -12,6 +12,7 @@ import { LeaseManager } from "@/components/LeaseManager";
 import { RentHistory } from "@/components/RentHistory";
 import { RentScanButton } from "@/components/RentScanButton";
 import { Mapa } from "@/components/Mapa";
+import { Hero, Kondice, type Kontrola } from "@/components/Kondice";
 import { VyrazeneNabidky } from "@/components/VyrazeneNabidky";
 import { ServiceManager } from "@/components/ServiceManager";
 import { TransactionManager } from "@/components/TransactionManager";
@@ -92,6 +93,41 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
       + "Odhad z toho nedělám — radši žádný než klamavý.";
   })();
 
+  // Nejnovejsi odhad najmu — patri nahoru vedle hodnoty, ne az pod finance
+  const nejnovejsiNajem = await prisma.rentEstimate.findFirst({
+    where: { propertyId: property.id },
+    orderBy: { date: "desc" },
+  });
+
+  // Kondice: par tvrdych otazek, na ktere chce clovek odpoved bez pocitani
+  const kontroly: Kontrola[] = [];
+  kontroly.push(a.metrics.cashFlowAnnual >= 0
+    ? { nazev: "Cash flow", stav: "dobra", detail: `kladné, ${czk(a.metrics.cashFlowAnnual / 12)} měsíčně` }
+    : { nazev: "Cash flow", stav: "spatna", detail: `záporné, doplácíš ${czk(Math.abs(a.metrics.cashFlowAnnual) / 12)} měsíčně` });
+
+  if (a.currentDebt > 0) {
+    kontroly.push(a.metrics.dscr >= 1.2
+      ? { nazev: "Krytí splátky", stav: "dobra", detail: `DSCR ${a.metrics.dscr.toFixed(2)} — nájem splátku pokrývá s rezervou` }
+      : a.metrics.dscr >= 1
+        ? { nazev: "Krytí splátky", stav: "pozor", detail: `DSCR ${a.metrics.dscr.toFixed(2)} — bez rezervy, výpadek nájmu zabolí` }
+        : { nazev: "Krytí splátky", stav: "spatna", detail: `DSCR ${a.metrics.dscr.toFixed(2)} — nájem na splátku nestačí` });
+    kontroly.push(a.metrics.ltv <= 80
+      ? { nazev: "Zadlužení", stav: "dobra", detail: `LTV ${pct(a.metrics.ltv)}` }
+      : { nazev: "Zadlužení", stav: "pozor", detail: `LTV ${pct(a.metrics.ltv)} — nad 80 % je refinancování dražší` });
+  }
+
+  kontroly.push(property.status === "RENTED"
+    ? { nazev: "Obsazenost", stav: "dobra", detail: "pronajato" }
+    : { nazev: "Obsazenost", stav: property.status === "VACANT" ? "spatna" : "pozor",
+        detail: STATUS_LABELS[property.status].toLowerCase() + " — bez nájmu běží náklady dál" });
+
+  if (a.fixationAlert) {
+    kontroly.push({
+      nazev: "Fixace", stav: a.fixationAlert.monthsLeft <= 6 ? "spatna" : "pozor",
+      detail: `u ${a.fixationAlert.lender} končí za ${Math.round(a.fixationAlert.monthsLeft)} měsíců — poptej refinancování`,
+    });
+  }
+
   const vyrazene = await prisma.excludedListing.findMany({
     where: { propertyId: property.id },
     orderBy: { createdAt: "desc" },
@@ -140,22 +176,79 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           </div>
         </div>
 
-        {/* Klíčová čísla a poloha vedle sebe — dlaždice roztažené přes celou
-            šířku působí prázdně a mapa patří k adrese, ne až pod finance. */}
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
+        {/* Dvě čísla, kvůli kterým se sem chodí: co to má cenu a co to nese.
+            Hero je jen jedno — dvě stejně velká by spolu soupeřila. */}
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <Hero
+            label="Odhadní tržní hodnota"
+            hodnota={czkCompact(a.currentValue)}
+            tone={a.valueGain >= 0 ? "good" : "bad"}
+            doplnek={<>
+              {czk(a.currentValue / property.areaM2)}/m² · zdroj {valuationSourceLabel(a.valuationSource)}
+              <span className="ml-2 font-medium text-ink-primary">
+                {a.valueGain >= 0 ? "+" : ""}{czkCompact(a.valueGain)} ({pct(a.valueGainPct)}) za {a.yearsHeld.toFixed(1)} roku
+              </span>
+            </>}
+          />
+
+          <div className="card">
+            <div className="label">Tržní nájem</div>
+            <div className="mt-1 text-3xl font-semibold leading-none tracking-tight">
+              {nejnovejsiNajem ? `${czk(nejnovejsiNajem.monthlyRent)}/měs.` : "—"}
+            </div>
+            {nejnovejsiNajem ? (
+              <div className="mt-2 text-sm text-ink-secondary">
+                {smluvniNajem > 0 ? (
+                  <>
+                    Tvůj {czk(smluvniNajem)}
+                    {(() => {
+                      const r = ((smluvniNajem - nejnovejsiNajem.monthlyRent) / nejnovejsiNajem.monthlyRent) * 100;
+                      if ((nejnovejsiNajem.sampleSize ?? 0) < 3) return " · odhad z málo nabídek, neporovnávej";
+                      if (r < -8) return ` · ${pct(Math.abs(r), 0)} pod trhem, ročně ${czk((nejnovejsiNajem.monthlyRent - smluvniNajem) * 12)}`;
+                      if (r > 8) return ` · ${pct(r, 0)} nad trhem`;
+                      return " · odpovídá trhu";
+                    })()}
+                  </>
+                ) : "Zatím nepronajato"}
+                <span className="block text-xs text-ink-muted">
+                  {nejnovejsiNajem.sampleSize} nabídek · {dateCz(nejnovejsiNajem.date)}
+                </span>
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-ink-secondary">
+                Odhad zatím nevznikl. Sken běží každou noc; ručně ho pustíš níž u tržního nájmu.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Výkonnost a kondice vedle sebe — čísla i verdikt na jedné obrazovce */}
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <div className="grid grid-cols-2 gap-3 content-start">
-            <Stat label="Tržní hodnota" value={czkCompact(a.currentValue)}
-              sub={`${czk(a.currentValue / property.areaM2)}/m² · zdroj ${valuationSourceLabel(a.valuationSource)}`}
-              tone={a.valueGain >= 0 ? "good" : "bad"} />
-            <Stat label="Zhodnocení" value={`${a.valueGain >= 0 ? "+" : ""}${czkCompact(a.valueGain)}`}
-              sub={`${pct(a.valueGainPct)} za ${a.yearsHeld.toFixed(1)} roku`}
-              tone={a.valueGain >= 0 ? "good" : "bad"} />
             <Stat label="Čistý výnos" term="cistyVynos" value={pct(a.metrics.netYield)}
-              sub={`Hrubý ${pct(a.metrics.grossYield)} · cap rate ${pct(a.metrics.capRate)}`} />
+              sub={`Hrubý ${pct(a.metrics.grossYield)} · cap rate ${pct(a.metrics.capRate)}`}
+              tone={a.metrics.netYield >= 4 ? "good" : a.metrics.netYield >= 2 ? "neutral" : "warn"} />
             <Stat label="IRR od pořízení" term="irr" value={a.irr != null ? pct(a.irr) : "—"}
               sub={a.estimatedYears.length ? `${a.estimatedYears.length} let odhadnuto z modelu` : "Ze skutečných toků"}
               tone={(a.irr ?? 0) >= 5 ? "good" : "neutral"} />
+            <Stat label="Cash flow / rok" term="cashFlow" value={czkCompact(a.metrics.cashFlowAnnual)}
+              sub={`${czk(a.metrics.cashFlowAnnual / 12)} měsíčně`}
+              tone={a.metrics.cashFlowAnnual >= 0 ? "good" : "bad"} />
+            <Stat label="Vlastní kapitál" value={czkCompact(a.metrics.equity)}
+              sub={a.currentDebt > 0 ? `LTV ${pct(a.metrics.ltv)} · dluh ${czkCompact(a.currentDebt)}` : "Bez dluhu"}
+              tone={a.metrics.ltv > 80 ? "warn" : "good"} />
           </div>
+
+          <Kondice kontroly={kontroly} />
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+          <Card title="Vývoj tržního nájmu"
+            action={<Link href="/market" className="text-xs text-accent">Sken trhu →</Link>}>
+            <RentHistory odhady={odhadyNajmu} smluvniNajem={smluvniNajem} areaM2={property.areaM2}
+              propertyId={property.id} vyrazene={vyrazeneKlice} canEdit={user.role === "OWNER"} />
+            {user.role === "OWNER" && <RentScanButton propertyId={property.id} />}
+          </Card>
 
           <Card title="Poloha" action={
             property.latitude != null && property.longitude != null ? (
@@ -250,13 +343,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           </Card>
         </div>
 
-        <Card title="Tržní nájem — noční sken trhu"
-          action={<Link href="/market" className="text-xs text-accent">Sken trhu →</Link>}>
-          <RentHistory odhady={odhadyNajmu} smluvniNajem={smluvniNajem} areaM2={property.areaM2}
-            propertyId={property.id} vyrazene={vyrazeneKlice} canEdit={user.role === "OWNER"} />
-          {user.role === "OWNER" && <RentScanButton propertyId={property.id} />}
-        </Card>
-
         {amortByYear.length > 0 && (
           <Card title="Umořování úvěru — kolik jde na jistinu a kolik bance">
             <AmortizationChart data={amortByYear} />
@@ -264,38 +350,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
         )}
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card title={lzeOdepisovat
-            ? `Odpisový plán — ${property.depreciationMethod === "STRAIGHT" ? "rovnoměrné" : "zrychlené"} odpisování, ${property.depreciationGroup}. skupina`
-            : "Odpisy"}>
-            {!lzeOdepisovat && (
-              <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
-                {NEMOVITOST_MAP.get(property.type)?.upozorneni
-                  ?? "Tenhle druh nemovitosti se neodepisuje."}
-              </p>
-            )}
-            {lzeOdepisovat && (<>
-            <p className="mb-3 text-xs text-ink-secondary">
-              Vstupní cena {czk(depreciationInputPrice(property))} (bez podílu na pozemku). Uplatňuje se jen při
-              skutečných výdajích, ne při paušálu.
-            </p>
-            <div className="max-h-64 overflow-y-auto">
-              <table className="table-base">
-                <thead><tr><th>Rok</th><th className="num">Odpis</th><th className="num">Odepsáno</th><th className="num">Zůstatková cena</th></tr></thead>
-                <tbody>
-                  {depSchedule.slice(0, 12).map((r) => (
-                    <tr key={r.year} className={r.year === year ? "bg-accent/5" : ""}>
-                      <td>{r.year}{r.year === year && <span className="ml-1.5 text-xs text-accent">letos</span>}</td>
-                      <td className="num">{czk(r.amount)}</td>
-                      <td className="num text-ink-secondary">{czk(r.cumulative)}</td>
-                      <td className="num text-ink-secondary">{czk(r.residual)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            </>)}
-          </Card>
-
           <Card title="Ocenění" action={<Link href="/market" className="text-xs text-accent">Sken trhu →</Link>}>
             <ValuationManager
               propertyId={property.id}
@@ -324,6 +378,50 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             </p>
           )}
         </Card>
+
+        {/* Odpisy jsou daňová administrativa, ne výkonnost — patří dozadu
+            a sbalené. Kdo je zrovna řeší, rozklikne si je. */}
+        <details className="card group">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+            <span className="text-sm font-medium">
+              {lzeOdepisovat
+                ? `Odpisy — ${property.depreciationMethod === "STRAIGHT" ? "rovnoměrné" : "zrychlené"}, ${property.depreciationGroup}. skupina`
+                : "Odpisy"}
+            </span>
+            <span className="text-xs text-ink-muted">
+              {lzeOdepisovat ? `letos ${czk(a.depreciationThisYear)} · rozbalit` : "rozbalit"}
+            </span>
+          </summary>
+
+          <div className="mt-3 border-t border-line pt-3">
+            {!lzeOdepisovat ? (
+              <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
+                {NEMOVITOST_MAP.get(property.type)?.upozorneni
+                  ?? "Tenhle druh nemovitosti se neodepisuje."}
+              </p>
+            ) : (<>
+              <p className="mb-3 text-xs text-ink-secondary">
+                Vstupní cena {czk(depreciationInputPrice(property))} (bez podílu na pozemku). Uplatňuje se jen při
+                skutečných výdajích, ne při paušálu.
+              </p>
+              <div className="table-scroll max-h-64 overflow-y-auto">
+                <table className="table-base">
+                  <thead><tr><th>Rok</th><th className="num">Odpis</th><th className="num">Odepsáno</th><th className="num">Zůstatková cena</th></tr></thead>
+                  <tbody>
+                    {depSchedule.slice(0, 12).map((r) => (
+                      <tr key={r.year} className={r.year === year ? "bg-accent/5" : ""}>
+                        <td>{r.year}{r.year === year && <span className="ml-1.5 text-xs text-accent">letos</span>}</td>
+                        <td className="num">{czk(r.amount)}</td>
+                        <td className="num text-ink-secondary">{czk(r.cumulative)}</td>
+                        <td className="num text-ink-secondary">{czk(r.residual)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>)}
+          </div>
+        </details>
 
         {property.notes && (
           <Card title="Poznámky"><p className="text-sm text-ink-secondary">{property.notes}</p></Card>
