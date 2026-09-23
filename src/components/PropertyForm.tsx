@@ -7,6 +7,7 @@ import { saveProperty, type FormState } from "@/lib/actions";
 import { Card } from "./Stat";
 import { Pole } from "./form";
 import { NEMOVITOST_MAP, TYPY_NEMOVITOSTI } from "@/lib/catalogs";
+import { AdresaNaseptavac, type Navrh } from "./AdresaNaseptavac";
 
 type Values = Partial<{
   type: string;
@@ -16,6 +17,7 @@ type Values = Partial<{
   purchaseDate: string | Date; purchasePrice: number; acquisitionCosts: number;
   renovationCosts: number; landShareValue: number; depreciationGroup: number;
   depreciationMethod: string; status: string; notes: string | null;
+  latitude: number | null; longitude: number | null;
 }>;
 
 export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik }: {
@@ -30,6 +32,27 @@ export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik 
 
   const v = values;
   const [typ, setTyp] = useState(v.type ?? "BYT");
+
+  // Adresu drzime ve stavu, aby ji naseptavac mohl vyplnit — a uzivatel
+  // kdykoli prepsat rucne.
+  const [adresa, setAdresa] = useState({
+    street: v.street ?? "", city: v.city ?? "", zip: v.zip ?? "", district: v.district ?? "",
+    latitude: v.latitude ?? null as number | null, longitude: v.longitude ?? null as number | null,
+  });
+
+  function prevezmi(n: Navrh) {
+    setAdresa({
+      street: n.ulice, city: n.mesto, zip: n.psc,
+      // Naseptavac nemusi cast znat; co uz je vyplnene, nemazeme
+      district: n.cast || adresa.district,
+      latitude: n.latitude, longitude: n.longitude,
+    });
+  }
+
+  const zmen = (pole: keyof typeof adresa) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    // Rucni zasah do adresy zneplatnuje souradnice — jinak by okruh hledal
+    // kolem mista, ktere uz v poli nestoji
+    setAdresa((a) => ({ ...a, [pole]: e.target.value, latitude: null, longitude: null }));
   const katalog = NEMOVITOST_MAP.get(typ);
   const dateValue = v.purchaseDate ? new Date(v.purchaseDate).toISOString().slice(0, 10) : "";
 
@@ -54,13 +77,21 @@ export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik 
             ["RENTED", "Pronajato"], ["VACANT", "Volné"], ["RENOVATION", "Rekonstrukce"],
             ["FOR_SALE", "Na prodej"], ["SOLD", "Prodáno"],
           ]} />
-          <Field label="Ulice a číslo" name="street" defaultValue={v.street} required errors={state.fieldErrors} />
+          <AdresaNaseptavac onVybrano={prevezmi} />
+
+          <Field label="Ulice a číslo" name="street" value={adresa.street} onChange={zmen("street")}
+            required errors={state.fieldErrors} />
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Město" name="city" defaultValue={v.city} required errors={state.fieldErrors} />
-            <Field label="PSČ" name="zip" defaultValue={v.zip} required errors={state.fieldErrors} />
+            <Field label="Město" name="city" value={adresa.city} onChange={zmen("city")}
+              required errors={state.fieldErrors} />
+            <Field label="PSČ" name="zip" value={adresa.zip} onChange={zmen("zip")}
+              required errors={state.fieldErrors} />
           </div>
-          <Field label="Městská část / katastr" name="district" defaultValue={v.district ?? ""}
+          <Field label="Městská část / katastr" name="district" value={adresa.district} onChange={zmen("district")}
             hint="Používá se pro srovnání s trhem" errors={state.fieldErrors} />
+
+          <input type="hidden" name="latitude" value={adresa.latitude ?? ""} />
+          <input type="hidden" name="longitude" value={adresa.longitude ?? ""} />
           <Field label="Číslo jednotky v KN" name="cadastralNo" defaultValue={v.cadastralNo ?? ""} errors={state.fieldErrors} />
         </div>
       </Card>

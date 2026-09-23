@@ -68,7 +68,14 @@ model Property {
   hasCellar   Boolean @default(false)
   hasParking  Boolean @default(false)
   buildYear   Int?
-  cadastralNo String? // cislo jednotky v KN
+  cadastralNo String?
+
+  /// Souradnice z naseptavace adres. Diky nim hledame srovnatelne nabidky
+  /// podle vzdusne vzdalenosti misto shody nazvu ctvrti — byt na hranici
+  /// Vinohrad a Zizkova ma bliz k nabidkam za rohem nez k druhemu konci
+  /// "sve" ctvrti.
+  latitude    Float?
+  longitude   Float? // cislo jednotky v KN
 
   // --- Porizeni ---
   purchaseDate     DateTime
@@ -285,6 +292,8 @@ model MarketListing {
   price       Float
   pricePerM2  Float?
   url         String?
+  latitude    Float?
+  longitude   Float?
 
   scrapedAt DateTime @default(now())
 

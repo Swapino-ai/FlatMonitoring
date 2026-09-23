@@ -26,8 +26,13 @@ export default async function MarketPage() {
   const rows = await Promise.all(
     analyses.map(async (a) => {
       const p = a.property;
-      const sale = await comparableStats({ city: p.city, district: p.district, dealType: "SALE", areaM2: p.areaM2, disposition: p.disposition });
-      const rent = await comparableStats({ city: p.city, district: p.district, dealType: "RENT", areaM2: p.areaM2, disposition: p.disposition });
+      const spolecne = {
+        city: p.city, district: p.district, category: p.type,
+        latitude: p.latitude, longitude: p.longitude,
+        areaM2: p.areaM2, disposition: p.disposition,
+      };
+      const sale = await comparableStats({ ...spolecne, dealType: "SALE" as const });
+      const rent = await comparableStats({ ...spolecne, dealType: "RENT" as const });
 
       const myPricePerM2 = a.totalInvestment / p.areaM2;
       const myRentPerM2 = a.monthlyRent / p.areaM2;

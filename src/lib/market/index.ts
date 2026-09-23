@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db";
+import { obalkaOkruhu, okruhProTyp, vzdalenostKm } from "../geo";
 import { srealitySource } from "./sreality";
 import type { MarketSource, ScanQuery, ScrapedListing } from "./types";
 
@@ -56,6 +57,8 @@ async function persist(source: string, status: string, listings: ScrapedListing[
           price: l.price,
           pricePerM2: l.pricePerM2,
           url: l.url,
+          latitude: l.latitude,
+          longitude: l.longitude,
         })),
       },
     },
@@ -100,19 +103,44 @@ export async function comparableStats(opts: {
    * prokliknout. Kdo snizi prah, musi vysledek podle toho i oznacit.
    */
   minVzorek?: number;
+  /**
+   * Souradnice nemovitosti. Kdyz je mame, hledame v okruhu misto podle nazvu
+   * ctvrti — byt na hranici dvou ctvrti ma bliz k nabidkam za rohem nez
+   * k druhemu konci "sve" ctvrti.
+   */
+  latitude?: number | null;
+  longitude?: number | null;
+  okruhKm?: number;
 }): Promise<ComparableStats | null> {
   const since = new Date();
   since.setDate(since.getDate() - (opts.sinceDays ?? 60));
 
   const tol = Math.max(10, opts.areaM2 * 0.25);
 
+  // Hledani v okruhu: nejdriv hrubý předvýběr obdélníkem v databázi, přesný
+  // kruh se dofiltruje až v paměti. Město ani čtvrť se pak nefiltrují —
+  // sousední obec za hranicí je srovnatelnější než druhý konec toho samého
+  // města.
+  const stred = opts.latitude != null && opts.longitude != null
+    ? { latitude: opts.latitude, longitude: opts.longitude }
+    : null;
+  const okruhKm = opts.okruhKm ?? okruhProTyp(opts.category ?? "BYT");
+  const obalka = stred ? obalkaOkruhu(stred, okruhKm) : null;
+
   const rows = await prisma.marketListing.findMany({
     where: {
-      city: opts.city,
       dealType: opts.dealType,
       category: opts.category ?? "BYT",
       scrapedAt: { gte: since },
-      ...(opts.district ? { district: { contains: opts.district } } : {}),
+      ...(obalka
+        ? {
+            latitude: { gte: obalka.latMin, lte: obalka.latMax },
+            longitude: { gte: obalka.lonMin, lte: obalka.lonMax },
+          }
+        : {
+            city: opts.city,
+            ...(opts.district ? { district: { contains: opts.district } } : {}),
+          }),
       ...(opts.disposition ? { disposition: opts.disposition } : {}),
       areaM2: { gte: opts.areaM2 - tol, lte: opts.areaM2 + tol },
       pricePerM2: { not: null },
@@ -120,15 +148,22 @@ export async function comparableStats(opts: {
     select: {
       externalId: true, pricePerM2: true, price: true, areaM2: true, disposition: true,
       district: true, url: true, source: true, scrapedAt: true,
+      latitude: true, longitude: true,
     },
     orderBy: { scrapedAt: "desc" },
   });
+
+  // Obdelnik je o neco vetsi nez kruh — rohy odrizneme az tady
+  const vOkruhu = stred
+    ? rows.filter((r) => r.latitude != null && r.longitude != null
+        && vzdalenostKm(stred, { latitude: r.latitude, longitude: r.longitude }) <= okruhKm)
+    : rows;
 
   // Kazdy sken uklada nove radky, takze tataz nabidka lezi v tabulce tolikrat,
   // kolikrat sken bezel — a do medianu by vstupovala tolikrat taky. Bereme
   // z kazde nabidky jen nejnovejsi zaznam (dotaz je razeny od nejnovejsiho).
   const videne = new Set<string>();
-  const unikatni = rows.filter((r) => {
+  const unikatni = vOkruhu.filter((r) => {
     // Bez externalId nezbyva nez identita podle ceny, plochy a ctvrti
     const klic = r.externalId
       ? `${r.source}|${r.externalId}`
@@ -180,6 +215,8 @@ export async function valuateFromMarket(propertyId: string): Promise<{ value: nu
     district: p.district,
     dealType: "SALE",
     category: p.type,
+    latitude: p.latitude,
+    longitude: p.longitude,
     areaM2: p.areaM2,
     disposition: p.disposition ?? undefined,
   });
@@ -236,6 +273,8 @@ export async function odhadniNajemPriZmene(
     district: p.district,
     dealType: "RENT",
     category: p.type,
+    latitude: p.latitude,
+    longitude: p.longitude,
     areaM2: p.areaM2,
     disposition: p.disposition ?? undefined,
     sinceDays: 30, // najem se meni rychleji nez prodejni cena

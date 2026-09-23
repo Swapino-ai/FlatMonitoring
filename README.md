@@ -267,6 +267,35 @@ Prochází stránky výpisu, dokud nemá patnáct srovnatelných nabídek, nejv�
   tvůj byt leží. Snímek se ukládá k ocenění, takže zůstane doložitelný i poté, co
   inzeráty z trhu zmizí.
 
+### Zadávání adresy a hledání v okruhu
+
+Adresa se nevyplňuje po polích. Napiš do řádku *Najít adresu* například
+„Korunní 15 Praha“ a ulice, město, PSČ i městská část se doplní samy —
+a s nimi souřadnice. Pole pod tím jdou kdykoli přepsat ručně; ruční zásah
+souřadnice zahodí, aby okruh nehledal kolem místa, které už v poli nestojí.
+
+Našeptávač jede přes **Mapy.cz** a potřebuje klíč — zdarma a bez karty na
+`developer.mapy.cz`. Ulož ho jako proměnnou `MAPY_API_KEY` (ve Vercelu
+*Settings → Environment Variables*). Bez klíče formulář funguje dál, jen se
+adresa vyplňuje ručně. Dotazy jdou přes vlastní `/api/adresy`, takže klíč
+zůstává na serveru — v prohlížeči by se dal přečíst a zneužít.
+
+Proč zrovna Mapy.cz: na dotaz „Masarykova 5, Brno“ nabídl OpenStreetMap
+Vranovice, Hrušovany u Brna a Zbýšov. Google Places je kvalitou srovnatelný,
+ale chce účet s platební kartou.
+
+**Srovnatelné nabídky se pak hledají podle vzdušné vzdálenosti**, ne podle
+shody názvu čtvrti. Byt na hranici Vinohrad a Žižkova má blíž k nabídkám za
+rohem než k druhému konci „své“ čtvrti, a sousední obec za hranicí města je
+srovnatelnější než druhý konec toho samého města. Okruh se řídí druhem
+nemovitosti: byt 3 km, garáž nebo parkovací stání 5 km, rodinný dům 8 km,
+pozemek 10 km, bytový dům a sklad 15 km — u řidšího trhu je potřeba širší
+záběr, aby se vůbec našel vzorek.
+
+U nemovitosti bez souřadnic (založené dřív, nebo s ručně psanou adresou) se
+srovnává postaru podle města a čtvrti. Stačí ji otevřít v úpravách a adresu
+vybrat z našeptávače.
+
 ### Které typy nemovitostí se skenují
 
 Sreality mají pro každý druh vlastní cestu v adrese, ne jen `byty`. Ověřeno

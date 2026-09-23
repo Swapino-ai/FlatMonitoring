@@ -16,7 +16,10 @@ interface SrealityZaznam {
   priceCzk?: number;
   priceCzkPerSqM?: number;
   categorySubCb?: { name?: string };
-  locality?: { city?: string; citySeoName?: string; cityPart?: string; quarter?: string };
+  locality?: {
+    city?: string; citySeoName?: string; cityPart?: string; quarter?: string;
+    latitude?: number; longitude?: number;
+  };
 }
 
 export const srealitySource: MarketSource = {
@@ -84,6 +87,9 @@ export const srealitySource: MarketSource = {
           price: cena,
           pricePerM2: zaM2 ?? (plocha ? cena / plocha : undefined),
           url: z.id ? odkazy.get(String(z.id)) : undefined,
+          // Podle souradnic pak hledame srovnani v okruhu, ne podle nazvu ctvrti
+          latitude: z.locality?.latitude,
+          longitude: z.locality?.longitude,
         });
       }
 

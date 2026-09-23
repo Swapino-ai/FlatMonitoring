@@ -11,6 +11,8 @@ export interface ScrapedListing {
   price: number;
   pricePerM2?: number;
   url?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface ScanQuery {
