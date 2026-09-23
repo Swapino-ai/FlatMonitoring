@@ -52,7 +52,9 @@ export function VyrazeneNabidky({ propertyId, polozky, canEdit }: {
         })}
       </ul>
       <p className="mt-2 text-xs text-ink-muted">
-        Vyřazené nabídky do odhadu nevstupují. Projeví se to při nejbližším skenu.
+        Vyřazené nabídky do odhadu nevstupují a hodnota se přepočítá hned.
+        Když by po vyřazení zbyly míň než tři nabídky, zůstane původní — z dvou
+        nabídek se medián počítat nedá.
       </p>
     </div>
   );

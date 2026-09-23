@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "./db";
 import { getSession } from "./auth";
+import { prepocitejPoVyrazeni } from "./market";
 
 const numberish = (fallback = 0) =>
   z.preprocess((v) => {
@@ -163,5 +164,11 @@ export async function prepniVyrazeni(
     });
   }
 
+  // Prepocitame hned — cekat na nocni sken by u rucniho zasahu bylo pozde.
+  // Snimek zustava netknuty, meni se jen zaver.
+  await prepocitejPoVyrazeni(propertyId);
+
   revalidatePath(`/properties/${propertyId}`);
+  revalidatePath("/");
+  revalidatePath("/properties");
 }

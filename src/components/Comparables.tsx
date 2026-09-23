@@ -244,7 +244,8 @@ export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznam
       {vyrazenoLokalne.length > 0 && (
         <p className="text-xs text-ink-muted">
           {vyrazenoLokalne.length === 1 ? "Jedna nabídka je" : `${vyrazenoLokalne.length} nabídek je`} z odhadu
-          vyřazená — projeví se to při nejbližším skenu. Tenhle snímek zůstává, jak vznikl.
+          vyřazená. Hodnota nemovitosti se přepočítala hned; snímek zůstává celý,
+          protože je to doklad, z čeho odhad vznikl.
         </p>
       )}
 

@@ -87,6 +87,102 @@ export interface ComparableStats {
   vychoziOkruhKm: number | null;
 }
 
+/**
+ * Prepocita nejnovejsi oceneni a odhad najmu z jejich snimku bez vyrazenych
+ * nabidek.
+ *
+ * Snimek zustava netknuty — je to doklad, ze ceho odhad vznikl, a prepisovat
+ * ho zpetne by znamenalo menit historii. Meni se jen zaver: hodnota, cena za
+ * m², velikost vzorku a spolehlivost.
+ *
+ * Bez toho by se vyrazeni projevilo az pri pristim skenu, coz je u rucniho
+ * zasahu pozde — uzivatel chce videt dopad hned.
+ */
+export async function prepocitejPoVyrazeni(propertyId: string): Promise<{
+  hodnota: number | null;
+  najem: number | null;
+  vyrazeno: number;
+}> {
+  const vyloucene = await nactiVyloucene(propertyId);
+  const p = await prisma.property.findUnique({
+    where: { id: propertyId },
+    select: { areaM2: true },
+  });
+  if (!p) return { hodnota: null, najem: null, vyrazeno: vyloucene.size };
+
+  /** Z snimku vytahne ceny za m² nabidek, ktere uzivatel nevyradil. */
+  function zbyleCeny(comparables: unknown): number[] {
+    if (!Array.isArray(comparables)) return [];
+    return comparables
+      .filter((n) => {
+        const x = n as { klic?: string | null; url?: string | null; source?: string };
+        // Starsi snimky klic nemaji, ale id inzeratu je na konci adresy
+        const klic = x.klic
+          ?? (typeof x.url === "string"
+            ? (() => { const m = x.url.match(/\/(\d+)\/?$/); return m ? `${x.source ?? "SREALITY"}|${m[1]}` : null; })()
+            : null);
+        return !klic || !vyloucene.has(klic);
+      })
+      .map((n) => Number((n as { pricePerM2?: number }).pricePerM2))
+      .filter((c) => Number.isFinite(c) && c > 0)
+      .sort((a, b) => a - b);
+  }
+
+  const vysledek: { hodnota: number | null; najem: number | null; vyrazeno: number } = {
+    hodnota: null, najem: null, vyrazeno: vyloucene.size,
+  };
+
+  const oceneni = await prisma.valuation.findFirst({
+    where: { propertyId, source: "MARKET_SCAN" },
+    orderBy: { date: "desc" },
+  });
+  if (oceneni) {
+    const ceny = zbyleCeny(oceneni.comparables);
+    // Pod tri nabidky uz by odhad nic nevazil — radsi nechame puvodni
+    if (ceny.length >= 3) {
+      const zaM2 = quantile(ceny, 0.5);
+      const hodnota = Math.round(zaM2 * p.areaM2);
+      await prisma.valuation.update({
+        where: { id: oceneni.id },
+        data: {
+          value: hodnota,
+          pricePerM2: zaM2,
+          sampleSize: ceny.length,
+          confidence: spolehlivost(ceny.length),
+          // Snimek zamerne nechavame, jak byl — je to doklad
+          notes: `${oceneni.notes?.split(" Přepočítáno")[0] ?? ""} Přepočítáno bez ${vyloucene.size} vyřazených nabídek.`.trim(),
+        },
+      });
+      vysledek.hodnota = hodnota;
+    }
+  }
+
+  const najem = await prisma.rentEstimate.findFirst({
+    where: { propertyId, source: "MARKET_SCAN" },
+    orderBy: { date: "desc" },
+  });
+  if (najem) {
+    const ceny = zbyleCeny(najem.comparables);
+    if (ceny.length >= 1) {
+      const zaM2 = quantile(ceny, 0.5);
+      const mesicne = Math.round(zaM2 * p.areaM2);
+      await prisma.rentEstimate.update({
+        where: { id: najem.id },
+        data: {
+          monthlyRent: mesicne,
+          rentPerM2: zaM2,
+          sampleSize: ceny.length,
+          confidence: spolehlivost(ceny.length),
+          notes: `${najem.notes?.split(" Přepočítáno")[0] ?? ""} Přepočítáno bez ${vyloucene.size} vyřazených nabídek.`.trim(),
+        },
+      });
+      vysledek.najem = mesicne;
+    }
+  }
+
+  return vysledek;
+}
+
 /** Nabidky, ktere uzivatel u teto nemovitosti z odhadu vyradil. */
 export async function nactiVyloucene(propertyId: string): Promise<Set<string>> {
   const r = await prisma.excludedListing.findMany({
