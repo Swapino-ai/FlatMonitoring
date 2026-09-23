@@ -100,19 +100,48 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           </div>
         </div>
 
-        <StatGrid>
-          <Stat label="Tržní hodnota" value={czkCompact(a.currentValue)}
-            sub={`${czk(a.currentValue / property.areaM2)}/m² · zdroj ${valuationSourceLabel(a.valuationSource)}`}
-            tone={a.valueGain >= 0 ? "good" : "bad"} />
-          <Stat label="Zhodnocení" value={`${a.valueGain >= 0 ? "+" : ""}${czkCompact(a.valueGain)}`}
-            sub={`${pct(a.valueGainPct)} za ${a.yearsHeld.toFixed(1)} roku`}
-            tone={a.valueGain >= 0 ? "good" : "bad"} />
-          <Stat label="Čistý výnos" term="cistyVynos" value={pct(a.metrics.netYield)}
-            sub={`Hrubý ${pct(a.metrics.grossYield)} · cap rate ${pct(a.metrics.capRate)}`} />
-          <Stat label="IRR od pořízení" term="irr" value={a.irr != null ? pct(a.irr) : "—"}
-            sub={a.estimatedYears.length ? `${a.estimatedYears.length} let odhadnuto z modelu` : "Ze skutečných toků"}
-            tone={(a.irr ?? 0) >= 5 ? "good" : "neutral"} />
-        </StatGrid>
+        {/* Klíčová čísla a poloha vedle sebe — dlaždice roztažené přes celou
+            šířku působí prázdně a mapa patří k adrese, ne až pod finance. */}
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
+          <div className="grid grid-cols-2 gap-3 content-start">
+            <Stat label="Tržní hodnota" value={czkCompact(a.currentValue)}
+              sub={`${czk(a.currentValue / property.areaM2)}/m² · zdroj ${valuationSourceLabel(a.valuationSource)}`}
+              tone={a.valueGain >= 0 ? "good" : "bad"} />
+            <Stat label="Zhodnocení" value={`${a.valueGain >= 0 ? "+" : ""}${czkCompact(a.valueGain)}`}
+              sub={`${pct(a.valueGainPct)} za ${a.yearsHeld.toFixed(1)} roku`}
+              tone={a.valueGain >= 0 ? "good" : "bad"} />
+            <Stat label="Čistý výnos" term="cistyVynos" value={pct(a.metrics.netYield)}
+              sub={`Hrubý ${pct(a.metrics.grossYield)} · cap rate ${pct(a.metrics.capRate)}`} />
+            <Stat label="IRR od pořízení" term="irr" value={a.irr != null ? pct(a.irr) : "—"}
+              sub={a.estimatedYears.length ? `${a.estimatedYears.length} let odhadnuto z modelu` : "Ze skutečných toků"}
+              tone={(a.irr ?? 0) >= 5 ? "good" : "neutral"} />
+          </div>
+
+          <Card title="Poloha" action={
+            property.latitude != null && property.longitude != null ? (
+              <a href={`https://mapy.cz/zakladni?x=${property.longitude}&y=${property.latitude}&z=17`}
+                target="_blank" rel="noreferrer noopener" className="text-xs text-accent">Otevřít v Mapy.cz →</a>
+            ) : user.role === "OWNER" ? (
+              <Link href={`/properties/${property.id}/edit`} className="text-xs text-accent">Doplnit adresu →</Link>
+            ) : null
+          }>
+            {property.latitude != null && property.longitude != null ? (
+              <>
+                <Mapa latitude={property.latitude} longitude={property.longitude} vyskaTrida="h-48 lg:h-56" />
+                <p className="mt-2 text-xs text-ink-muted">
+                  Podle téhle polohy se hledá srovnání — od {okruhProTyp(property.type)} km dál,
+                  dokud není dost nabídek.
+                </p>
+              </>
+            ) : (
+              <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
+                Nemovitost nemá uloženou polohu — byla založená dřív, než přibyl našeptávač adres.
+                Otevři úpravy, vyber adresu z našeptávače a srovnání se pak bude hledat
+                podle vzdálenosti místo podle názvu čtvrti.
+              </p>
+            )}
+          </Card>
+        </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
           <Card title="Pořizovací kalkulace">
@@ -180,30 +209,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             </div>
           </Card>
         </div>
-
-        <Card title="Poloha" action={
-          property.latitude != null && property.longitude != null ? (
-            <a href={`https://mapy.cz/zakladni?x=${property.longitude}&y=${property.latitude}&z=17`}
-              target="_blank" rel="noreferrer noopener" className="text-xs text-accent">Otevřít v Mapy.cz →</a>
-          ) : user.role === "OWNER" ? (
-            <Link href={`/properties/${property.id}/edit`} className="text-xs text-accent">Doplnit adresu →</Link>
-          ) : null
-        }>
-          {property.latitude != null && property.longitude != null ? (
-            <>
-              <Mapa latitude={property.latitude} longitude={property.longitude} />
-              <p className="mt-2 text-xs text-ink-muted">
-                Podle téhle polohy se hledají srovnatelné nabídky v okruhu {okruhProTyp(property.type)} km.
-              </p>
-            </>
-          ) : (
-            <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
-              Nemovitost nemá uloženou polohu — byla založená dřív, než přibyl našeptávač adres.
-              Otevři úpravy, vyber adresu z našeptávače a srovnání se pak bude hledat
-              v okruhu {okruhProTyp(property.type)} km místo podle názvu čtvrti.
-            </p>
-          )}
-        </Card>
 
         <Card title="Tržní nájem — noční sken trhu"
           action={<Link href="/market" className="text-xs text-accent">Sken trhu →</Link>}>
