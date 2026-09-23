@@ -81,6 +81,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       zip: String(x.zip), district: s(x.district), country: String(x.country ?? "CZ"),
       latitude: x.latitude == null ? null : c(x.latitude),
       longitude: x.longitude == null ? null : c(x.longitude),
+      region: s(x.region),
       disposition: s(x.disposition), areaM2: c(x.areaM2),
       floor: x.floor == null ? null : Math.round(c(x.floor)),
       hasBalcony: !!x.hasBalcony, hasCellar: !!x.hasCellar, hasParking: !!x.hasParking,

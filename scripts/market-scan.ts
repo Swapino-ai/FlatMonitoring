@@ -21,12 +21,12 @@ async function main() {
   }
 
   // Jeden dotaz na kombinaci mesto+dispozice — nechceme portaly zbytecne zatezovat
-  const queries = new Map<string, { city: string; district: string | null; disposition: string | null; areaM2: number; type: string }>();
+  const queries = new Map<string, { city: string; district: string | null; disposition: string | null; areaM2: number; type: string; region: string | null }>();
   for (const p of properties) {
     if (!NEMOVITOST_MAP.get(p.type)?.srealityCesta) continue;
     // Typ musi byt v klici — garaz a byt v jednom meste nejsou tentyz dotaz
     queries.set(`${p.type}|${p.city}|${p.disposition}`, {
-      city: p.city, district: p.district, disposition: p.disposition, areaM2: p.areaM2, type: p.type,
+      city: p.city, district: p.district, disposition: p.disposition, areaM2: p.areaM2, type: p.type, region: p.region,
     });
   }
 
@@ -38,7 +38,7 @@ async function main() {
       const results = await runScan({
         city: q.city, district: q.district ?? undefined,
         disposition: q.disposition ?? undefined, areaM2: q.areaM2,
-        category: q.type, dealType,
+        category: q.type, region: q.region ?? undefined, dealType,
       });
       for (const r of results) {
         console.log(`  ${nazevNemovitosti(q.type)} ${q.city} ${q.disposition ?? ""} ${dealType} · ${r.source}: ${r.status} (${r.count})${r.message ? " — " + r.message : ""}`);

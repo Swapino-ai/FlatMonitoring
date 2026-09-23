@@ -27,6 +27,8 @@ function rozeber(p: MapyPolozka) {
   const mesto = najdi("regional.municipality") ?? najdi("regional.region") ?? "";
   const cast = najdi("regional.municipality_part") ?? "";
   const ulice = najdi("regional.street") ?? "";
+  // Kraj je zaloha pro male obce, ktere na Sreality vlastni vypis nemaji
+  const kraj = najdi("regional.region") ?? "";
 
   return {
     // p.name u adresy nese "Korunní 734/15" i s cislem popisnym
@@ -34,6 +36,7 @@ function rozeber(p: MapyPolozka) {
     mesto,
     cast,
     psc: p.zip ?? "",
+    kraj,
     latitude: p.position?.lat ?? null,
     longitude: p.position?.lon ?? null,
     popis: p.label ?? p.location ?? "",

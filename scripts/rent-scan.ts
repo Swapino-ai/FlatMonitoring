@@ -27,11 +27,11 @@ async function main() {
   }
 
   // Jeden dotaz na kombinaci mesto+dispozice — portaly zbytecne nezatezujeme
-  const dotazy = new Map<string, { city: string; district: string | null; disposition: string | null; areaM2: number; type: string }>();
+  const dotazy = new Map<string, { city: string; district: string | null; disposition: string | null; areaM2: number; type: string; region: string | null }>();
   for (const p of skenovatelne) {
     // Typ musi byt v klici — garaz a byt v jednom meste nejsou tentyz dotaz
     dotazy.set(`${p.type}|${p.city}|${p.disposition}`, {
-      city: p.city, district: p.district, disposition: p.disposition, areaM2: p.areaM2, type: p.type,
+      city: p.city, district: p.district, disposition: p.disposition, areaM2: p.areaM2, type: p.type, region: p.region,
     });
   }
 
@@ -44,6 +44,7 @@ async function main() {
       disposition: q.disposition ?? undefined,
       areaM2: q.areaM2,
       category: q.type,
+      region: q.region ?? undefined,
       dealType: "RENT",
     });
     for (const r of results) {

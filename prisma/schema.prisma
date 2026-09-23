@@ -68,14 +68,18 @@ model Property {
   hasCellar   Boolean @default(false)
   hasParking  Boolean @default(false)
   buildYear   Int?
-  cadastralNo String?
+  cadastralNo String? // cislo jednotky v KN
 
   /// Souradnice z naseptavace adres. Diky nim hledame srovnatelne nabidky
   /// podle vzdusne vzdalenosti misto shody nazvu ctvrti — byt na hranici
   /// Vinohrad a Zizkova ma bliz k nabidkam za rohem nez k druhemu konci
   /// "sve" ctvrti.
   latitude    Float?
-  longitude   Float? // cislo jednotky v KN
+  longitude   Float?
+  /// Kraj ve tvaru pro adresu Sreality, napr. "ustecky-kraj". Zaloha pro male
+  /// obce, ktere na Sreality vlastni vypis nemaji (Bohusovice nad Ohri vraci
+  /// 404). Okres neexistuje v zadnem tvaru — overeno sondou.
+  region      String?
 
   // --- Porizeni ---
   purchaseDate     DateTime

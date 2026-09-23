@@ -24,6 +24,11 @@ export interface ScanQuery {
    * oddelene — garaz 20 m² a byt 22 m² by se jinak potkaly v jednom medianu.
    */
   category?: string;
+  /**
+   * Kraj ve tvaru pro adresu Sreality ("ustecky-kraj"). Pouzije se, kdyz obec
+   * vlastni vypis nema — mala obec vraci 404 hned na prvni strance.
+   */
+  region?: string;
   /** Filtrovani na srovnatelnou velikost: +/- toleranceM2 od cilove plochy */
   areaM2?: number;
   toleranceM2?: number;

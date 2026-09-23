@@ -18,7 +18,7 @@ type Values = Partial<{
   purchaseDate: string | Date; purchasePrice: number; acquisitionCosts: number;
   renovationCosts: number; landShareValue: number; depreciationGroup: number;
   depreciationMethod: string; status: string; notes: string | null;
-  latitude: number | null; longitude: number | null;
+  latitude: number | null; longitude: number | null; region: string | null;
 }>;
 
 export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik }: {
@@ -39,6 +39,7 @@ export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik 
   const [adresa, setAdresa] = useState({
     street: v.street ?? "", city: v.city ?? "", zip: v.zip ?? "", district: v.district ?? "",
     latitude: v.latitude ?? null as number | null, longitude: v.longitude ?? null as number | null,
+    region: v.region ?? "",
   });
 
   function prevezmi(n: Navrh) {
@@ -47,6 +48,7 @@ export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik 
       // Naseptavac nemusi cast znat; co uz je vyplnene, nemazeme
       district: n.cast || adresa.district,
       latitude: n.latitude, longitude: n.longitude,
+      region: n.kraj || adresa.region,
     });
   }
 
@@ -113,6 +115,7 @@ export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik 
 
           <input type="hidden" name="latitude" value={adresa.latitude ?? ""} />
           <input type="hidden" name="longitude" value={adresa.longitude ?? ""} />
+          <input type="hidden" name="region" value={adresa.region} />
 
           <div className="sm:col-span-2">
             <Mapa latitude={adresa.latitude} longitude={adresa.longitude} onZmena={zMapy} />

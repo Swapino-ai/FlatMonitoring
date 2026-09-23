@@ -31,6 +31,8 @@ const propertySchema = z.object({
   // Souradnice plni naseptavac adres; rucne vyplnena adresa je nema
   latitude: optionalNumber,
   longitude: optionalNumber,
+  // Kraj — zaloha pro obce, ktere na Sreality vlastni vypis nemaji
+  region: optionalString,
   disposition: optionalString,
   areaM2: numberish().refine((v) => v > 0, "Plocha musí být větší než nula"),
   floor: optionalNumber,
@@ -88,7 +90,7 @@ export async function saveProperty(id: string | null, _prev: FormState, formData
   const data = {
     type: d.type,
     name: d.name, street: d.street, city: d.city, zip: d.zip, district: d.district,
-    latitude: d.latitude, longitude: d.longitude,
+    latitude: d.latitude, longitude: d.longitude, region: d.region,
     disposition: d.disposition, areaM2: d.areaM2, floor: d.floor, buildYear: d.buildYear,
     cadastralNo: d.cadastralNo, hasBalcony: d.hasBalcony, hasCellar: d.hasCellar, hasParking: d.hasParking,
     purchaseDate: new Date(d.purchaseDate),

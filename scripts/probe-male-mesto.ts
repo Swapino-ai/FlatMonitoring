@@ -7,14 +7,16 @@
  */
 import { srealitySource } from "../src/lib/market/sreality";
 
-const PRIPADY: { city: string; category: string; dealType: "SALE" | "RENT"; areaM2: number }[] = [
+const PRIPADY: { city: string; category: string; dealType: "SALE" | "RENT"; areaM2: number; region?: string }[] = [
   { city: "Litoměřice", category: "GARAZ", dealType: "SALE", areaM2: 18 },
   { city: "Litoměřice", category: "GARAZ", dealType: "RENT", areaM2: 18 },
   { city: "Litoměřice", category: "BYT", dealType: "SALE", areaM2: 60 },
   { city: "Litoměřice", category: "BYT", dealType: "RENT", areaM2: 60 },
   // Okolni vetsi mesta — kdyby mela byt zdrojem, az v obci nic neni
   { city: "Ústí nad Labem", category: "GARAZ", dealType: "SALE", areaM2: 18 },
-  { city: "Bohušovice nad Ohří", category: "BYT", dealType: "SALE", areaM2: 60 },
+  // Obec bez vlastniho vypisu — bez kraje musi selhat, s krajem projit
+  { city: "Bohušovice nad Ohří", category: "BYT", dealType: "SALE", areaM2: 60, region: "ustecky-kraj" },
+  { city: "Terezín", category: "BYT", dealType: "SALE", areaM2: 60, region: "ustecky-kraj" },
 ];
 
 async function main() {
@@ -22,7 +24,7 @@ async function main() {
 
   let chyb = 0;
   for (const p of PRIPADY) {
-    const popis = `${p.city} ${p.category} ${p.dealType === "SALE" ? "prodej" : "pronájem"}`;
+    const popis = `${p.city} ${p.category} ${p.dealType === "SALE" ? "prodej" : "pronájem"}${p.region ? ` (záloha ${p.region})` : ""}`;
     try {
       const n = await srealitySource.fetchListings({ ...p });
       // Nula nabidek je legitimni vysledek — v Litomericich se garaze

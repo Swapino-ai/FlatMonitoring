@@ -40,10 +40,16 @@ export const srealitySource: MarketSource = {
     const cesta = druh.srealityCesta;
     const podkategorie = druh.srealityPodkategorie;
 
+    // Male obce na Sreality vlastni vypis nemaji a vraci 404 hned na prvni
+    // strance. Zalohou je kraj — okres neexistuje v zadnem tvaru (overeno).
+    // Z sirsiho zaberu pak vybere, co je opravdu blizko, okruh podle souradnic.
+    const oblasti = [mesto, ...(query.region ? [query.region] : [])];
+    let oblastIndex = 0;
+
     for (let strana = 1; strana <= maxPages; strana++) {
       // Dispozici ve filtru adresy Sreality neprijimaji (vraci 404),
       // takze si ji odfiltrujeme az z vysledku.
-      const url = `https://www.sreality.cz/hledani/${typ}/${cesta}/${mesto}${strana > 1 ? `?strana=${strana}` : ""}`;
+      const url = `https://www.sreality.cz/hledani/${typ}/${cesta}/${oblasti[oblastIndex]}${strana > 1 ? `?strana=${strana}` : ""}`;
 
       // V malem meste je garazi par a druha stranka vubec neexistuje — portal
       // na ni vraci 404. To neni porucha: jen uz nic dalsiho neni. Chybu proto
@@ -53,8 +59,14 @@ export const srealitySource: MarketSource = {
       try {
         stranka = await nactiStranku(url);
       } catch (e) {
-        if (strana === 1) throw e;
-        break;
+        if (strana > 1) break; // dalsi stranka uz neexistuje, konec vysledku
+        // Obec vypis nema — zkusime kraj, nez to vzdame
+        if (oblastIndex + 1 < oblasti.length) {
+          oblastIndex++;
+          strana = 0; // po inkrementu cyklu zacneme znovu od prvni stranky
+          continue;
+        }
+        throw e;
       }
       const { data, html } = stranka;
       // Odkaz na detail se z dat stranky poskladat neda — v ceste je slug ulice,

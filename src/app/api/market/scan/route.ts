@@ -52,6 +52,7 @@ export async function POST(request: Request) {
     disposition: property.disposition ?? undefined,
     areaM2: property.areaM2,
     category: property.type,
+    region: property.region ?? undefined,
     dealType,
   });
 

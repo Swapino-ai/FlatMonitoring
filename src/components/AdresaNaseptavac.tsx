@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 export interface Navrh {
-  ulice: string; mesto: string; cast: string; psc: string;
+  ulice: string; mesto: string; cast: string; psc: string; kraj: string;
   latitude: number | null; longitude: number | null; popis: string;
 }
 
