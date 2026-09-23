@@ -181,17 +181,29 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           </Card>
         </div>
 
-        {property.latitude != null && property.longitude != null && (
-          <Card title="Poloha" action={
+        <Card title="Poloha" action={
+          property.latitude != null && property.longitude != null ? (
             <a href={`https://mapy.cz/zakladni?x=${property.longitude}&y=${property.latitude}&z=17`}
               target="_blank" rel="noreferrer noopener" className="text-xs text-accent">Otevřít v Mapy.cz →</a>
-          }>
-            <Mapa latitude={property.latitude} longitude={property.longitude} vyska={300} />
-            <p className="mt-2 text-xs text-ink-muted">
-              Podle téhle polohy se hledají srovnatelné nabídky v okruhu {okruhProTyp(property.type)} km.
+          ) : user.role === "OWNER" ? (
+            <Link href={`/properties/${property.id}/edit`} className="text-xs text-accent">Doplnit adresu →</Link>
+          ) : null
+        }>
+          {property.latitude != null && property.longitude != null ? (
+            <>
+              <Mapa latitude={property.latitude} longitude={property.longitude} />
+              <p className="mt-2 text-xs text-ink-muted">
+                Podle téhle polohy se hledají srovnatelné nabídky v okruhu {okruhProTyp(property.type)} km.
+              </p>
+            </>
+          ) : (
+            <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
+              Nemovitost nemá uloženou polohu — byla založená dřív, než přibyl našeptávač adres.
+              Otevři úpravy, vyber adresu z našeptávače a srovnání se pak bude hledat
+              v okruhu {okruhProTyp(property.type)} km místo podle názvu čtvrti.
             </p>
-          </Card>
-        )}
+          )}
+        </Card>
 
         <Card title="Tržní nájem — noční sken trhu"
           action={<Link href="/market" className="text-xs text-accent">Sken trhu →</Link>}>

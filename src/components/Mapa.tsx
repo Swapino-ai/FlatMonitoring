@@ -10,12 +10,13 @@ import "leaflet/dist/leaflet.css";
  *
  * Leaflet sahá na window, takze se nacita az v prohlizeci.
  */
-export function Mapa({ latitude, longitude, onZmena, vyska = 260, zoom = 17 }: {
+export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72", zoom = 17 }: {
   latitude: number | null;
   longitude: number | null;
   /** Kdyz je zadana, jde do mapy klepnout a posunout znacku. */
   onZmena?: (lat: number, lon: number) => void;
-  vyska?: number;
+  /** Vyska jako trida, at je na telefonu nizsi nez na monitoru. */
+  vyskaTrida?: string;
   zoom?: number;
 }) {
   const uzel = useRef<HTMLDivElement>(null);
@@ -23,6 +24,10 @@ export function Mapa({ latitude, longitude, onZmena, vyska = 260, zoom = 17 }: {
   const znacka = useRef<Marker | null>(null);
   const zmenaRef = useRef(onZmena);
   const [chyba, setChyba] = useState("");
+  // Na dotykovem zarizeni mapa nejdriv nereaguje — jinak by pri scrollovani
+  // stranky chytila prst a uzivatel by uvizl uprostred mapy.
+  const [aktivni, setAktivni] = useState(false);
+  const [dotykove, setDotykove] = useState(false);
 
   // Handler drzime v ref, at prekresleni mapy nezavisi na identite funkce
   useEffect(() => { zmenaRef.current = onZmena; }, [onZmena]);
@@ -68,8 +73,16 @@ export function Mapa({ latitude, longitude, onZmena, vyska = 260, zoom = 17 }: {
         iconAnchor: [17, 43],
       });
 
-      const m = L.map(uzel.current, { attributionControl: true })
-        .setView(start, latitude != null ? zoom : 7);
+      const naDotyk = L.Browser.mobile;
+      setDotykove(naDotyk);
+
+      const m = L.map(uzel.current, {
+        attributionControl: true,
+        // Kolecko mysi by na dlouhe strance misto scrollovani priblizovalo mapu
+        scrollWheelZoom: false,
+        // Na telefonu se posouvani zapne az klepnutim do mapy
+        dragging: !naDotyk,
+      }).setView(start, latitude != null ? zoom : 7);
 
       L.tileLayer("/api/mapa/dlazdice/{z}/{x}/{y}", {
         minZoom: 0,
@@ -129,12 +142,40 @@ export function Mapa({ latitude, longitude, onZmena, vyska = 260, zoom = 17 }: {
     }
   }, [latitude, longitude, zoom]);
 
+  function aktivuj() {
+    setAktivni(true);
+    mapa.current?.dragging.enable();
+    mapa.current?.scrollWheelZoom.enable();
+  }
+
   return (
     <div className="no-print">
-      <div ref={uzel} style={{ height: vyska }} className="w-full overflow-hidden rounded-card border border-line" />
+      <div className="relative">
+        <div ref={uzel} className={`w-full overflow-hidden rounded-card border border-line ${vyskaTrida}`} />
+
+        {/* Dokud uzivatel mapu nezapne, prst nad ni scrolluje stranku */}
+        {dotykove && !aktivni && (
+          <button
+            type="button"
+            onClick={aktivuj}
+            className="absolute inset-0 z-[500] flex items-end justify-center rounded-card bg-transparent pb-4"
+            aria-label="Aktivovat mapu"
+          >
+            <span className="rounded-full bg-surface-card/95 px-3 py-1.5 text-xs font-medium shadow">
+              Klepnutím aktivuješ mapu
+            </span>
+          </button>
+        )}
+      </div>
       {chyba
         ? <p className="mt-1 text-xs text-warn">{chyba}</p>
-        : onZmena && <p className="mt-1 text-xs text-ink-muted">Klepnutím do mapy upřesníš polohu — našeptávač zná dům, ne který vchod.</p>}
+        : onZmena && (
+          <p className="mt-1 text-xs text-ink-muted">
+            {dotykove && !aktivni
+              ? "Nejdřív mapu aktivuj, pak klepnutím určíš polohu."
+              : "Klepnutím do mapy upřesníš polohu — našeptávač zná dům, ne který vchod."}
+          </p>
+        )}
     </div>
   );
 }
