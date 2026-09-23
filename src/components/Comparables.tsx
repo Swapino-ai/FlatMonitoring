@@ -137,8 +137,8 @@ export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznam
       {serazene.some((n) => n.vzdalenostKm != null) && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted">
           <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2.5 w-2.5 rounded-sm border border-line bg-surface-card" />
-            z lokality
+            <span className="inline-block h-2.5 w-2.5 rounded-sm border border-good/40 bg-good/25" />
+            přímo z lokality
           </span>
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-2.5 w-2.5 rounded-sm border border-warn/40 bg-warn/20" />
@@ -166,9 +166,12 @@ export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznam
             <div key={i} className={`rounded-card border p-3 transition-all duration-300 ${
               vyrazeno
                 ? "border-line/60 bg-surface-sunken/40 opacity-50 saturate-0"
-                : zdaleka ? "border-warn/40 bg-warn/5"
-                  : nejblizsi ? "border-accent/50 bg-accent/5"
-                    : "border-line"
+                // Primo z lokality = zelena. Tyhle nabidky o cene v miste
+                // opravdu neco rikaji, na rozdil od tech z rozsireneho okruhu.
+                : n.zLokality ? "border-good/40 bg-good/10"
+                  : zdaleka ? "border-warn/40 bg-warn/5"
+                    : nejblizsi ? "border-accent/50 bg-accent/5"
+                      : "border-line"
             }`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">

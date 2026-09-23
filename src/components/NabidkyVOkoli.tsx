@@ -57,7 +57,9 @@ export function NabidkyVOkoli({ nabidky, kroky }: {
                   </thead>
                   <tbody>
                     {nabidky.map((n, i) => (
-                      <tr key={n.klic ?? i}>
+                      // Nabidky primo z lokality podbarvujeme — jsou to ty,
+                      // ktere o cene v miste opravdu neco rikaji
+                      <tr key={n.klic ?? i} className={n.zLokality ? "bg-good/10" : ""}>
                         <td>{n.disposition ?? "—"}</td>
                         <td className="num tabular-nums">{n.areaM2 ?? "—"} m²</td>
                         <td className="num tabular-nums">{czk(n.price)}</td>
@@ -77,6 +79,11 @@ export function NabidkyVOkoli({ nabidky, kroky }: {
                   </tbody>
                 </table>
               </div>
+              <p className="flex items-center gap-1.5 text-xs text-ink-muted">
+                <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-sm bg-good/25" />
+                zeleně nabídky přímo z lokality, ostatní z většího okolí
+              </p>
+
               <p className="text-xs text-ink-muted">
                 Tyhle nabídky se do odhadu nepočítají — mají jinou dispozici nebo plochu mimo
                 srovnatelné rozpětí. Sken proběhl, data jsou; jen z nich nejde udělat medián,
