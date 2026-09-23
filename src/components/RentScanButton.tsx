@@ -34,7 +34,7 @@ export function RentScanButton({ propertyId }: { propertyId: string }) {
       if (selhalo.length && pocet === 0) {
         setChyba(selhalo[0].message ?? "portál neodpověděl");
       } else if (!d.rent) {
-        setZprava(`${pocet} nabídek — na odhad je jich málo, hodnota beze změny.`);
+        setZprava(`${pocet} nabídek — nic srovnatelného se nenašlo, záznam nevznikl.`);
       } else {
         const castka = `${Math.round(d.rent.monthlyRent).toLocaleString("cs-CZ")} Kč/měs`;
         setZprava(d.rent.zapsano

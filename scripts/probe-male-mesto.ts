@@ -23,9 +23,10 @@ async function main() {
       const n = await srealitySource.fetchListings({ ...p });
       // Nula nabidek je legitimni vysledek — v Litomericich se garaze
       // pronajimaji zridka. Nelegitimni je vyjimka.
-      console.log(`    OK  ${popis}: ${n.length} nabídek`);
+      console.log(`    OK  ${popis}: ${n.length} nabídek${n.length > 0 && n.length < 3 ? " (malý vzorek — záznam má vzniknout i tak)" : ""}`);
       for (const x of n.slice(0, 3)) {
-        console.log(`          ${x.areaM2 ?? "?"} m² | ${x.price} Kč | ${x.district ?? "—"}`);
+        // Odkaz je to hlavni, proc ma zaznam vzniknout i pri par nabidkach
+        console.log(`          ${x.areaM2 ?? "?"} m² | ${x.price} Kč | ${x.district ?? "—"} | ${x.url ?? "BEZ ODKAZU"}`);
       }
     } catch (e) {
       chyb++;

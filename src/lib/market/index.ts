@@ -94,6 +94,12 @@ export async function comparableStats(opts: {
   areaM2: number;
   disposition?: string | null;
   sinceDays?: number;
+  /**
+   * Kolik nabidek staci. Tri jsou minimum, aby median neco znamenal — u najmu
+   * v malem meste ale i jedina nabidka nese informaci, kterou si chce clovek
+   * prokliknout. Kdo snizi prah, musi vysledek podle toho i oznacit.
+   */
+  minVzorek?: number;
 }): Promise<ComparableStats | null> {
   const since = new Date();
   since.setDate(since.getDate() - (opts.sinceDays ?? 60));
@@ -132,7 +138,7 @@ export async function comparableStats(opts: {
     return true;
   });
 
-  if (unikatni.length < 3) return null;
+  if (unikatni.length < (opts.minVzorek ?? 3)) return null;
 
   const perM2 = unikatni.map((r) => r.pricePerM2!).sort((a, b) => a - b);
   const prices = unikatni.map((r) => r.price).sort((a, b) => a - b);
@@ -210,6 +216,14 @@ export type { ScanQuery, ScrapedListing } from "./types";
  * Zapisuje se jen pri zmene — jinak by denni sken za rok vyrobil 365 shodnych
  * radku a historie by se v nich ztratila.
  */
+/** Pod tri nabidky uz to neni odhad, jen ukazka — at to karta rekne nahlas. */
+function spolehlivost(pocet: number): string {
+  if (pocet >= 15) return "HIGH";
+  if (pocet >= 7) return "MEDIUM";
+  if (pocet >= 3) return "LOW";
+  return "ORIENTACNI";
+}
+
 export async function odhadniNajemPriZmene(
   propertyId: string,
   tolerancePct = 1,
@@ -225,6 +239,9 @@ export async function odhadniNajemPriZmene(
     areaM2: p.areaM2,
     disposition: p.disposition ?? undefined,
     sinceDays: 30, // najem se meni rychleji nez prodejni cena
+    // I jedina nabidka je zaznam, ktery si chce clovek prokliknout. Ze z toho
+    // median nevznikne, rekne spolehlivost nize.
+    minVzorek: 1,
   });
   if (!stats) return null;
 
@@ -259,9 +276,11 @@ export async function odhadniNajemPriZmene(
       p75: stats.p75,
       source: "MARKET_SCAN",
       sampleSize: stats.count,
-      confidence: stats.count >= 15 ? "HIGH" : stats.count >= 7 ? "MEDIUM" : "LOW",
+      confidence: spolehlivost(stats.count),
       comparables: stats.listings as unknown as Prisma.InputJsonValue,
-      notes: `Medián ${Math.round(stats.medianPricePerM2).toLocaleString("cs-CZ")} Kč/m² měsíčně z ${stats.count} nabídek.`,
+      notes: stats.count < 3
+        ? `Jen ${stats.count === 1 ? "jediná nabídka" : `${stats.count} nabídky`} — na odhad je to málo, ber to jako ukázku trhu, ne jako cenu.`
+        : `Medián ${Math.round(stats.medianPricePerM2).toLocaleString("cs-CZ")} Kč/m² měsíčně z ${stats.count} nabídek.`,
     },
   });
 

@@ -32,7 +32,10 @@ export function RentHistory({ odhady, smluvniNajem, areaM2 }: {
   }
 
   const aktualni = odhady[0];
-  const rozdil = smluvniNajem > 0
+  // Pod tri nabidky to neni cena trhu, jen ukazka. Radit podle toho, jestli
+  // jsi pod trhem, by bylo horsi nez mlcet.
+  const orientacni = (aktualni.sampleSize ?? 0) < 3;
+  const rozdil = smluvniNajem > 0 && !orientacni
     ? ((smluvniNajem - aktualni.monthlyRent) / aktualni.monthlyRent) * 100
     : null;
 
@@ -58,12 +61,24 @@ export function RentHistory({ odhady, smluvniNajem, areaM2 }: {
             )}
           </div>
 
-          {trend !== null && Math.abs(trend) >= 0.5 && (
+          {orientacni && (
+            <Badge tone="warn">jen {aktualni.sampleSize} {aktualni.sampleSize === 1 ? "nabídka" : "nabídky"}</Badge>
+          )}
+
+          {!orientacni && trend !== null && Math.abs(trend) >= 0.5 && (
             <Badge tone={trend > 0 ? "good" : "warn"}>
               trh {trend > 0 ? "+" : ""}{trend.toFixed(1)} % od {dateCz(nejstarsi.date)}
             </Badge>
           )}
         </div>
+
+        {orientacni && (
+          <p className="mt-3 rounded-lg bg-warn/10 px-3 py-2 text-sm text-warn">
+            Na trhu je teď {aktualni.sampleSize === 1 ? "jediná srovnatelná nabídka" : `${aktualni.sampleSize} srovnatelné nabídky`}.
+            Na odhad ceny je to málo — ber to jako ukázku, co se nabízí, ne jako tržní nájem.
+            {smluvniNajem > 0 && <> Se svým nájmem {czk(smluvniNajem)} to radši neporovnávej.</>}
+          </p>
+        )}
 
         {rozdil !== null && (
           <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${
