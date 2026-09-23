@@ -11,6 +11,10 @@ const PRIPADY: { city: string; category: string; dealType: "SALE" | "RENT"; area
   { city: "Litoměřice", category: "GARAZ", dealType: "SALE", areaM2: 18 },
   { city: "Litoměřice", category: "GARAZ", dealType: "RENT", areaM2: 18 },
   { city: "Litoměřice", category: "BYT", dealType: "SALE", areaM2: 60 },
+  { city: "Litoměřice", category: "BYT", dealType: "RENT", areaM2: 60 },
+  // Okolni vetsi mesta — kdyby mela byt zdrojem, az v obci nic neni
+  { city: "Ústí nad Labem", category: "GARAZ", dealType: "SALE", areaM2: 18 },
+  { city: "Bohušovice nad Ohří", category: "BYT", dealType: "SALE", areaM2: 60 },
 ];
 
 async function main() {
