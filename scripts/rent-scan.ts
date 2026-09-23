@@ -13,6 +13,7 @@ import { PrismaClient } from "@prisma/client";
 import { runScan, odhadniNajemPriZmene } from "../src/lib/market";
 import { NEMOVITOST_MAP, nazevNemovitosti } from "../src/lib/catalogs";
 import { doplnPolohu } from "../src/lib/geokodovani";
+import { uklidDenik, ukonciBeh, zacniBeh } from "../src/lib/scanLog";
 
 const prisma = new PrismaClient();
 
@@ -69,16 +70,36 @@ async function main() {
 
   console.log("\nOdhady nájmu:");
   for (const p of skenovatelne) {
-    const v = await odhadniNajemPriZmene(p.id);
-    if (!v) {
-      console.log(`  ${p.name}: málo srovnatelných nabídek, odhad nevznikl`);
-      continue;
+    const beh = await zacniBeh({
+      trigger: "CRON_NAJEM", dealType: "RENT", propertyId: p.id,
+      propertyName: p.name, city: p.city, category: p.type,
+    });
+    try {
+      const v = await odhadniNajemPriZmene(p.id);
+      if (!v) {
+        console.log(`  ${p.name}: málo srovnatelných nabídek, odhad nevznikl`);
+        await ukonciBeh(beh, { status: "PRAZDNY", result: "málo srovnatelných nabídek, odhad nevznikl" });
+        continue;
+      }
+      const castka = v.monthlyRent.toLocaleString("cs-CZ");
+      const text = v.zapsano
+        ? `${castka} Kč/měs zapsáno (${v.duvod})`
+        : `${castka} Kč/měs — nezapsáno (${v.duvod})`;
+      console.log(`  ${p.name}: ${text}, ${v.stats.count} nabídek`);
+      await ukonciBeh(beh, {
+        status: "OK", listingsFound: v.stats.count,
+        okruhKm: v.stats.okruhKm, result: text,
+      });
+    } catch (e) {
+      const zprava = e instanceof Error ? e.message : String(e);
+      console.log(`  ${p.name}: selhalo — ${zprava}`);
+      await ukonciBeh(beh, { status: "SELHALO", message: zprava });
+      failed++;
     }
-    const castka = v.monthlyRent.toLocaleString("cs-CZ");
-    console.log(v.zapsano
-      ? `  ${p.name}: ${castka} Kč/měs zapsáno do historie (${v.duvod}, ${v.stats.count} nabídek)`
-      : `  ${p.name}: ${castka} Kč/měs — nezapsáno (${v.duvod})`);
   }
+
+  const smazano = await uklidDenik();
+  if (smazano > 0) console.log(`\nZ deníku odklizeno ${smazano} záznamů starších 90 dnů.`);
 
   const seconds = ((Date.now() - started.getTime()) / 1000).toFixed(0);
   console.log(`\nHotovo za ${seconds} s — ${ok} úspěšných dotazů, ${failed} selhalo.`);

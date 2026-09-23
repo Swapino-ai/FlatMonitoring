@@ -8,6 +8,7 @@ import { PrismaClient } from "@prisma/client";
 import { runScan, valuateFromMarket } from "../src/lib/market";
 import { NEMOVITOST_MAP, nazevNemovitosti } from "../src/lib/catalogs";
 import { doplnPolohu } from "../src/lib/geokodovani";
+import { uklidDenik, ukonciBeh, zacniBeh } from "../src/lib/scanLog";
 
 const prisma = new PrismaClient();
 
@@ -63,11 +64,33 @@ async function main() {
 
   console.log(`\nPřeceňuji nemovitosti:`);
   for (const p of properties) {
-    const v = await valuateFromMarket(p.id);
-    console.log(v
-      ? `  ${p.name}: ${v.value.toLocaleString("cs-CZ")} Kč (z ${v.stats.count} nabídek)`
-      : `  ${p.name}: málo srovnatelných nabídek, hodnota beze změny`);
+    const beh = await zacniBeh({
+      trigger: "CRON_TRH", dealType: "SALE", propertyId: p.id,
+      propertyName: p.name, city: p.city, category: p.type,
+    });
+    try {
+      const v = await valuateFromMarket(p.id);
+      if (!v) {
+        console.log(`  ${p.name}: málo srovnatelných nabídek, hodnota beze změny`);
+        await ukonciBeh(beh, { status: "PRAZDNY", result: "málo srovnatelných nabídek, hodnota beze změny" });
+        continue;
+      }
+      const text = `${v.value.toLocaleString("cs-CZ")} Kč`;
+      console.log(`  ${p.name}: ${text} (z ${v.stats.count} nabídek)`);
+      await ukonciBeh(beh, {
+        status: "OK", listingsFound: v.stats.count,
+        okruhKm: v.stats.okruhKm, result: `nová hodnota ${text}`,
+      });
+    } catch (e) {
+      const zprava = e instanceof Error ? e.message : String(e);
+      console.log(`  ${p.name}: selhalo — ${zprava}`);
+      await ukonciBeh(beh, { status: "SELHALO", message: zprava });
+      failed++;
+    }
   }
+
+  const smazano = await uklidDenik();
+  if (smazano > 0) console.log(`\nZ deníku odklizeno ${smazano} záznamů starších 90 dnů.`);
 
   const seconds = ((Date.now() - started.getTime()) / 1000).toFixed(0);
   console.log(`\nHotovo za ${seconds} s — ${ok} úspěšných dotazů, ${failed} selhalo.`);

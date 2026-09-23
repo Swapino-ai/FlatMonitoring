@@ -314,3 +314,37 @@ model MarketIndex {
 
   @@unique([code, period])
 }
+
+/// Jeden provedeny sken — kdy bezel, nad cim a jak dopadl.
+///
+/// Bez tohohle zaznamu nejde poznat, jestli nocni sken vubec probehl: prazdna
+/// historie odhadu muze znamenat "trh se nehnul" i "uz tyden to pada".
+model ScanRun {
+  id String @id @default(cuid())
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  /// CRON_NAJEM | CRON_TRH | RUCNI
+  trigger String
+  /// SALE | RENT
+  dealType String
+
+  /// Nemovitost muze byt smazana, proto si nazev drzime i zvlast
+  propertyId   String?
+  propertyName String
+  city         String
+  category     String
+
+  /// OK | PRAZDNY | SELHALO
+  status        String
+  listingsFound Int     @default(0)
+  okruhKm       Float?
+  /// Lidsky vysledek, napr. "odhad 15 200 Kč/měs zapsán"
+  result        String?
+  /// Text chyby, kdyz sken selhal
+  message       String?
+
+  @@index([startedAt])
+  @@index([trigger, startedAt])
+}

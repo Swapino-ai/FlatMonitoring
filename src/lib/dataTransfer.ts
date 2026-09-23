@@ -26,6 +26,7 @@ export async function exportujVse(): Promise<Zaloha> {
       marketScan: await prisma.marketScan.findMany(),
       marketListing: await prisma.marketListing.findMany(),
       marketIndex: await prisma.marketIndex.findMany(),
+      scanRun: await prisma.scanRun.findMany(),
     },
   };
 }
@@ -56,6 +57,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.marketListing.deleteMany();
     await tx.marketScan.deleteMany();
     await tx.marketIndex.deleteMany();
+    await tx.scanRun.deleteMany();
     await tx.rentEstimate.deleteMany();
     await tx.valuation.deleteMany();
     await tx.propertyOwner.deleteMany();
@@ -164,6 +166,18 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       comparables: x.comparables ?? undefined, notes: s(x.notes),
     }));
     if (rentEstimates.length) obnoveno.rentEstimate = (await tx.rentEstimate.createMany({ data: rentEstimates })).count;
+
+    // Denik nema cizi klice, muze se obnovit az nakonec
+    const behy = (t.scanRun as any[] ?? []).map((x) => ({
+      id: String(x.id), startedAt: dPovinne(x.startedAt),
+      finishedAt: d(x.finishedAt), trigger: String(x.trigger), dealType: String(x.dealType),
+      propertyId: s(x.propertyId), propertyName: String(x.propertyName),
+      city: String(x.city), category: String(x.category), status: String(x.status),
+      listingsFound: Math.round(c(x.listingsFound)),
+      okruhKm: x.okruhKm == null ? null : c(x.okruhKm),
+      result: s(x.result), message: s(x.message),
+    }));
+    if (behy.length) obnoveno.scanRun = (await tx.scanRun.createMany({ data: behy })).count;
 
     return { obnoveno, smazano: true };
   }, { timeout: 120_000 });

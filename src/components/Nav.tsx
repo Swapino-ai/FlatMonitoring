@@ -14,7 +14,10 @@ const LINKS = [
   { href: "/reports", label: "Reporty" },
 ];
 
-const OWNER_LINKS = [{ href: "/users", label: "Uživatelé" }];
+const OWNER_LINKS = [
+  { href: "/provoz", label: "Provoz" },
+  { href: "/users", label: "Uživatelé" },
+];
 
 export function Nav({ user, verze }: { user: { name: string; role: string }; verze?: ReactNode }) {
   const pathname = usePathname();
