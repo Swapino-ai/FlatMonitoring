@@ -30,6 +30,12 @@ jobs:
 
       - run: npm ci
 
+      - name: Kontrola připojovacích řetězců
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx tsx scripts/kontrola-pripojeni.ts
+
       - name: Sken trhu a přecenění
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
