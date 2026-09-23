@@ -12,6 +12,10 @@ export interface Nabidka {
   url: string | null;
   source: string;
   scrapedAt: string;
+  /** Vzdušná vzdálenost od nemovitosti; null u starších snímků. */
+  vzdalenostKm?: number | null;
+  /** Je nabídka přímo z lokality, nebo až z rozšířeného okruhu? */
+  zLokality?: boolean;
 }
 
 /**
@@ -72,7 +76,8 @@ export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznam
           <div className="absolute inset-x-0 top-4 h-1.5 rounded-full bg-gradient-to-r from-[rgb(var(--series-3))] via-[rgb(var(--series-4))] to-[rgb(var(--series-2))] opacity-40" />
           {/* Každá nabídka jako značka — je vidět, kde se ceny shlukují */}
           {serazene.map((n, i) => (
-            <div key={i} className="absolute top-3.5 h-2.5 w-px bg-ink-muted/50"
+            <div key={i}
+              className={`absolute top-3.5 h-2.5 w-px ${n.zLokality === false ? "bg-warn/70" : "bg-ink-muted/50"}`}
               style={{ left: `${((n.pricePerM2 - min) / rozsah) * 100}%` }} />
           ))}
           {/* Odhad z mediánu */}
@@ -95,20 +100,49 @@ export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznam
         </p>
       </div>
 
+      {serazene.some((n) => n.vzdalenostKm != null) && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm border border-line bg-surface-card" />
+            z lokality
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm border border-warn/40 bg-warn/20" />
+            z rozšířeného okruhu — jiný trh, ber s rezervou
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-2.5 rounded-sm border border-accent/50 bg-accent/20" />
+            na úrovni odhadu
+          </span>
+        </div>
+      )}
+
       {/* Karty jednotlivých nabídek */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {zobrazene.map((n, i) => {
           const rozdil = ((n.pricePerM2 - tvojeKcM2) / tvojeKcM2) * 100;
           // Nabidka temer na urovni odhadu — nejblizsi srovnani
           const nejblizsi = Math.abs(rozdil) < 2;
+          // Starsi snimky vzdalenost nemaji; ty neobarvujeme, abychom netvrdili
+          // neco, co v datech neni
+          const zdaleka = n.zLokality === false;
           return (
-            <div key={i} className={`rounded-card border p-3 ${nejblizsi ? "border-accent/50 bg-accent/5" : "border-line"}`}>
+            <div key={i} className={`rounded-card border p-3 ${
+              zdaleka ? "border-warn/40 bg-warn/5"
+                : nejblizsi ? "border-accent/50 bg-accent/5"
+                : "border-line"
+            }`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="whitespace-nowrap font-medium">
                     {n.disposition ?? "?"} · {n.areaM2 ?? "?"} m²
                   </div>
-                  <div className="truncate text-xs text-ink-muted">{n.district ?? "—"}</div>
+                  <div className="truncate text-xs text-ink-muted">
+                    {n.district ?? "—"}
+                    {n.vzdalenostKm != null && (
+                      <span className={zdaleka ? "text-warn" : "text-good"}> · {n.vzdalenostKm} km</span>
+                    )}
+                  </div>
                 </div>
                 {nejblizsi && (
                   <span title="Tahle nabídka je na úrovni odhadu"
@@ -154,9 +188,16 @@ export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznam
         </p>
       )}
 
+      {poznamka?.includes("jen podle plochy") && (
+        <p className="rounded-lg bg-warn/10 px-3 py-2 text-xs text-warn">
+          Se stejnou dispozicí se nic nenašlo, porovnává se jen podle plochy. Čísla ber
+          jako hrubé vodítko — 3+kk a 2+1 o stejné výměře mívají jinou cenu za metr.
+        </p>
+      )}
+
       <p className="text-xs text-ink-muted">
         Jde o nabídkové ceny ze Sreality, ne realizované — ty bývají o 5–10 % nižší.
-        Porovnává se stejná dispozice a plocha ±25 % v okruhu od tvé nemovitosti.
+        Porovnává se plocha ±25 % v okruhu od tvé nemovitosti.
       </p>
     </div>
   );

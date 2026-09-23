@@ -76,6 +76,11 @@ export interface ComparableStats {
   listings: SrovnatelnaNabidka[];
   /** V jakem okruhu se nakonec hledalo. Null = hledalo se podle mesta. */
   okruhKm: number | null;
+  /**
+   * Neslo najit dost nabidek se stejnou dispozici, takze se porovnavalo jen
+   * podle plochy. Odhad tim ztraci presnost a musi to byt videt.
+   */
+  dispoziceUvolnena: boolean;
   /** Nejblizsi vychozi okruh pro dany druh — proti nemu se pozna rozsireni. */
   vychoziOkruhKm: number | null;
 }
@@ -90,6 +95,13 @@ export interface SrovnatelnaNabidka {
   url: string | null;
   source: string;
   scrapedAt: string;
+  /** Vzdusna vzdalenost od nemovitosti. Null = nabidka nema souradnice. */
+  vzdalenostKm: number | null;
+  /**
+   * Je nabidka primo z lokality, nebo az z rozsireneho okruhu? Pocita se pri
+   * skenu a uklada do snimku — pozdeji uz vychozi okruh znat nemusime.
+   */
+  zLokality: boolean;
 }
 
 /** Statistika srovnatelnych nabidek z poslednich skenu. */
@@ -162,7 +174,6 @@ export async function comparableStats(opts: {
               city: opts.city,
               ...(opts.district ? { district: { contains: opts.district } } : {}),
             }),
-      ...(opts.disposition ? { disposition: opts.disposition } : {}),
       areaM2: { gte: opts.areaM2 - tol, lte: opts.areaM2 + tol },
       pricePerM2: { not: null },
     },
@@ -194,22 +205,46 @@ export async function comparableStats(opts: {
   const minimum = opts.minVzorek ?? 3;
   const cil = Math.max(minimum, opts.cilovyVzorek ?? 8);
 
-  let unikatni = vsechny;
-  let pouzityOkruh: number | null = null;
+  /** Projde okruhy od nejuzsiho a vrati ten, ve kterem uz je dost nabidek. */
+  function vyberOkruh(kandidati: typeof vsechny) {
+    if (!stred) return { vybrane: kandidati, okruh: null as number | null };
 
-  if (stred) {
-    const sVzdalenosti = vsechny
+    const sVzdalenosti = kandidati
       .filter((r) => r.latitude != null && r.longitude != null)
-      .map((r) => ({
-        r,
-        km: vzdalenostKm(stred, { latitude: r.latitude!, longitude: r.longitude! }),
-      }));
+      .map((r) => ({ r, km: vzdalenostKm(stred, { latitude: r.latitude!, longitude: r.longitude! }) }));
 
-    for (const okruh of kroky) {
-      const vybrane = sVzdalenosti.filter((x) => x.km <= okruh);
-      pouzityOkruh = okruh;
-      unikatni = vybrane.map((x) => x.r);
-      if (vybrane.length >= cil) break;
+    let vybrane = sVzdalenosti;
+    for (const k of kroky) {
+      const v = sVzdalenosti.filter((x) => x.km <= k);
+      vybrane = v;
+      if (v.length >= cil) break;
+    }
+
+    // Hlasime nejuzsi okruh, ktery vybrane nabidky opravdu obsahuje. Kdyz se
+    // cile nedosahne ani v nejsirsim, dobehl by cyklus do 50 km a tvrdil bychom
+    // "rozsireno na 50 km", i kdyz vsechny nabidky lezi do tri.
+    const nejdal = vybrane.reduce((m, x) => Math.max(m, x.km), 0);
+    const okruh = kroky.find((k) => k >= nejdal) ?? kroky[kroky.length - 1];
+
+    return { vybrane: vybrane.map((x) => x.r), okruh };
+  }
+
+  // Nejdriv zkusime shodnou dispozici. Kdyz se nic nenajde — treba 3+kk
+  // v obci, kde zadne jine 3+kk na prodej neni — je lepsi porovnat podle
+  // metru nez nemit odhad vubec. Uvolneni se ale musi ukazat.
+  const shodnaDispozice = opts.disposition
+    ? vsechny.filter((r) => r.disposition === opts.disposition)
+    : vsechny;
+
+  let { vybrane: unikatni, okruh: pouzityOkruh } = vyberOkruh(shodnaDispozice);
+  let dispoziceUvolnena = false;
+
+  if (unikatni.length < minimum && opts.disposition) {
+    const sirsi = vyberOkruh(vsechny);
+    if (sirsi.vybrane.length >= minimum) {
+      unikatni = sirsi.vybrane;
+      pouzityOkruh = sirsi.okruh;
+      dispoziceUvolnena = true;
     }
   }
 
@@ -222,11 +257,16 @@ export async function comparableStats(opts: {
     count: unikatni.length,
     okruhKm: pouzityOkruh,
     vychoziOkruhKm: stred ? kroky[0] : null,
+    dispoziceUvolnena,
     medianPricePerM2: quantile(perM2, 0.5),
     p25: quantile(perM2, 0.25),
     p75: quantile(perM2, 0.75),
     medianPrice: quantile(prices, 0.5),
-    listings: [...unikatni].sort((a, b) => a.pricePerM2! - b.pricePerM2!).map((r) => ({
+    listings: [...unikatni].sort((a, b) => a.pricePerM2! - b.pricePerM2!).map((r) => {
+      const km = stred && r.latitude != null && r.longitude != null
+        ? vzdalenostKm(stred, { latitude: r.latitude, longitude: r.longitude })
+        : null;
+      return {
       disposition: r.disposition,
       areaM2: r.areaM2,
       price: r.price,
@@ -235,7 +275,12 @@ export async function comparableStats(opts: {
       url: r.url,
       source: r.source,
       scrapedAt: r.scrapedAt.toISOString(),
-    })),
+      vzdalenostKm: km == null ? null : Math.round(km * 10) / 10,
+      // Bez souradnic nevime, kde nabidka je — radsi ji za "z lokality"
+      // nevydavame, nez bychom tvrdili neco, co nemuzeme doložit
+      zLokality: km != null && kroky[0] != null && km <= kroky[0],
+      };
+    }),
   };
 }
 
@@ -297,7 +342,7 @@ export async function valuateFromMarket(
       value,
       pricePerM2: stats.medianPricePerM2,
       source: "MARKET_SCAN",
-      confidence: spolehlivost(stats.count, stats.okruhKm, stats.vychoziOkruhKm),
+      confidence: spolehlivost(stats.count, stats.okruhKm, stats.vychoziOkruhKm, stats.dispoziceUvolnena),
       sampleSize: stats.count,
       // Snimek necháváme u oceneni — inzeraty z trhu casem zmizi, doklad musi zustat
       comparables: stats.listings as unknown as Prisma.InputJsonValue,
@@ -325,8 +370,9 @@ export type { ScanQuery, ScrapedListing } from "./types";
  * Siroky okruh spolehlivost snizuje: nabidky dvacet kilometru daleko uz
  * nevypovidaji o teto ctvrti, i kdyz jich je hodne.
  */
-function spolehlivost(pocet: number, okruhKm?: number | null, vychozi?: number | null): string {
+function spolehlivost(pocet: number, okruhKm?: number | null, vychozi?: number | null, dispoziceUvolnena = false): string {
   let stupen = pocet >= 15 ? 3 : pocet >= 7 ? 2 : pocet >= 3 ? 1 : 0;
+  if (dispoziceUvolnena) stupen -= 1;
   if (okruhKm != null && vychozi != null && okruhKm >= vychozi * 4) stupen -= 1;
   else if (okruhKm != null && vychozi != null && okruhKm >= vychozi * 2) stupen = Math.min(stupen, 2);
   return ["ORIENTACNI", "LOW", "MEDIUM", "HIGH"][Math.max(0, stupen)];
@@ -334,11 +380,14 @@ function spolehlivost(pocet: number, okruhKm?: number | null, vychozi?: number |
 
 /** Doveta o okruhu do poznamky — at je z historie poznat, odkud se bralo. */
 function okruhPopis(stats: ComparableStats): string {
-  if (stats.okruhKm == null) return "";
+  const dispozice = stats.dispoziceUvolnena
+    ? " Se stejnou dispozicí se nic nenašlo, porovnává se jen podle plochy."
+    : "";
+  if (stats.okruhKm == null) return dispozice;
   const siroky = stats.vychoziOkruhKm != null && stats.okruhKm > stats.vychoziOkruhKm;
-  return siroky
+  return (siroky
     ? ` Okruh rozšířen na ${stats.okruhKm} km, protože blíž nebylo dost nabídek.`
-    : ` Okruh ${stats.okruhKm} km.`;
+    : ` Okruh ${stats.okruhKm} km.`) + dispozice;
 }
 
 export async function odhadniNajemPriZmene(
@@ -396,7 +445,7 @@ export async function odhadniNajemPriZmene(
       p75: stats.p75,
       source: "MARKET_SCAN",
       sampleSize: stats.count,
-      confidence: spolehlivost(stats.count, stats.okruhKm, stats.vychoziOkruhKm),
+      confidence: spolehlivost(stats.count, stats.okruhKm, stats.vychoziOkruhKm, stats.dispoziceUvolnena),
       comparables: stats.listings as unknown as Prisma.InputJsonValue,
       notes: (stats.count < 3
         ? `Jen ${stats.count === 1 ? "jediná nabídka" : `${stats.count} nabídky`} — na odhad je to málo, ber to jako ukázku trhu, ne jako cenu.`

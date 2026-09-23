@@ -9,15 +9,18 @@
 import { okruhyProTyp } from "../src/lib/geo";
 
 function vyber(vzdalenosti: number[], typ: string, cil: number) {
-  let pouzity: number | null = null;
-  let pocet = 0;
-  for (const okruh of okruhyProTyp(typ)) {
+  const kroky = okruhyProTyp(typ);
+  let vybrane: number[] = vzdalenosti;
+  for (const okruh of kroky) {
     const v = vzdalenosti.filter((d) => d <= okruh);
-    pouzity = okruh;
-    pocet = v.length;
+    vybrane = v;
     if (v.length >= cil) break;
   }
-  return { pouzity, pocet };
+  // Hlasi se nejuzsi okruh, ktery vybrane nabidky opravdu obsahuje — jinak
+  // by se u rídkého trhu tvrdilo "rozšířeno na 50 km", i kdyz vsechny lezi bliz
+  const nejdal = vybrane.reduce((m, d) => Math.max(m, d), 0);
+  const pouzity = kroky.find((k) => k >= nejdal) ?? kroky[kroky.length - 1];
+  return { pouzity, pocet: vybrane.length };
 }
 
 const PRIPADY: { popis: string; typ: string; vzdalenosti: number[]; cil: number; okruh: number; pocet: number }[] = [
@@ -27,9 +30,11 @@ const PRIPADY: { popis: string; typ: string; vzdalenosti: number[]; cil: number;
     vzdalenosti: [1, 2, 7, 8, 9, 10, 11, 20, 21], okruh: 24, pocet: 9 },
   { popis: "blízko osm — zůstane u dvanácti", typ: "BYT", cil: 8,
     vzdalenosti: [1, 2, 7, 8, 9, 10, 11, 11.5, 20], okruh: 12, pocet: 8 },
-  { popis: "skoro nic — dojde na strop", typ: "GARAZ", cil: 8,
+  { popis: "skoro nic — okruh podle nejvzdálenější nabídky", typ: "GARAZ", cil: 8,
     vzdalenosti: [3, 45], okruh: 50, pocet: 2 },
-  { popis: "nic v dosahu", typ: "BYT", cil: 8, vzdalenosti: [], okruh: 50, pocet: 0 },
+  { popis: "dvě blízké nabídky — nehlásit strop", typ: "BYT", cil: 8,
+    vzdalenosti: [1, 2.5], okruh: 3, pocet: 2 },
+  { popis: "nic v dosahu", typ: "BYT", cil: 8, vzdalenosti: [], okruh: 3, pocet: 0 },
 ];
 
 let chyb = 0;
