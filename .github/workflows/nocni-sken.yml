@@ -1,11 +1,12 @@
-# Noční sken nájemního trhu.
+# Noční sken trhu — jediný plánovaný běh aplikace.
 #
-# Nájemné reaguje na sezonu i na nabídku ve čtvrti rychleji než prodejní cena,
-# proto se sleduje denně. Do historie se zapíše jen změna — shodné odhady se
-# nezapisují, aby se v nich historie neztratila.
+# Projde všechny nemovitosti, stáhne prodejní i nájemní nabídky, přecení
+# a odhadne nájem. Do historie se zapisuje jen změna, takže denní běh
+# nevyrobí 365 skoro shodných řádků za rok.
 #
-# Neběží na Vercelu: Sreality odmítá dotazy z datových center a sken mezi
-# dotazy záměrně čeká, takže by se do limitu serverless funkce nevešel.
+# Neběží na Vercelu záměrně: Sreality odmítají dotazy z datových center
+# a sken mezi dotazy čeká, aby portál nezatěžoval — do limitu serverless
+# funkce by se nevešel.
 #
 # Nastavení: Settings → Secrets and variables → Actions → New repository secret
 #   DATABASE_URL  — pooled řetězec z Neonu
@@ -13,7 +14,7 @@
 #   MAPY_API_KEY  — klíč z developer.mapy.cz; bez něj se u obcí bez vlastního
 #                   výpisu na Sreality nedohledá kraj a sken pro ně skončí bez dat
 
-name: Noční sken nájmů
+name: Noční sken trhu
 
 on:
   schedule:
@@ -21,9 +22,9 @@ on:
   workflow_dispatch: # ruční spuštění tlačítkem v záložce Actions
 
 jobs:
-  scan:
+  sken:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -41,9 +42,24 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npx tsx scripts/kontrola-pripojeni.ts
 
-      - name: Sken nájmů a zápis odhadů
+      - name: Sken trhu, přecenění a odhad nájmů
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           MAPY_API_KEY: ${{ secrets.MAPY_API_KEY }}
-        run: npm run rent:scan
+        run: npm run sken
+
+      - name: Záloha dat
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npm run backup
+
+      - name: Ulož zálohu jako artefakt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zaloha-${{ github.run_number }}
+          path: zalohy/*.json
+          retention-days: 90

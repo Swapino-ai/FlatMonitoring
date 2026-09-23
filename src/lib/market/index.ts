@@ -247,8 +247,16 @@ function quantile(sorted: number[], q: number): number {
   return sorted[base + 1] !== undefined ? sorted[base] + rest * (sorted[base + 1] - sorted[base]) : sorted[base];
 }
 
-/** Z mediánu ceny za m² udela odhad hodnoty a ulozi jako Valuation. */
-export async function valuateFromMarket(propertyId: string): Promise<{ value: number; stats: ComparableStats } | null> {
+/**
+ * Z medianu ceny za m² udela odhad hodnoty a ulozi jako Valuation.
+ *
+ * Zapisuje se jen pri zmene — sken bezi kazdou noc a shodne odhady by za rok
+ * vyrobily 365 skoro stejnych radku, ve kterych by se skutecny vyvoj ztratil.
+ */
+export async function valuateFromMarket(
+  propertyId: string,
+  tolerancePct = 0.5,
+): Promise<{ value: number; stats: ComparableStats; zapsano: boolean; duvod: string } | null> {
   const p = await prisma.property.findUnique({ where: { id: propertyId } });
   if (!p) return null;
 
@@ -267,6 +275,22 @@ export async function valuateFromMarket(propertyId: string): Promise<{ value: nu
 
   const value = Math.round(stats.medianPricePerM2 * p.areaM2);
 
+  const posledni = await prisma.valuation.findFirst({
+    where: { propertyId, source: "MARKET_SCAN" },
+    orderBy: { date: "desc" },
+  });
+
+  if (posledni) {
+    const zmena = Math.abs((value - posledni.value) / posledni.value) * 100;
+    const stejnyDen = posledni.date.toDateString() === new Date().toDateString();
+    if (stejnyDen || zmena < tolerancePct) {
+      return {
+        value, stats, zapsano: false,
+        duvod: stejnyDen ? "dnes už oceněno" : `změna jen ${zmena.toFixed(2)} %`,
+      };
+    }
+  }
+
   await prisma.valuation.create({
     data: {
       propertyId: p.id,
@@ -281,7 +305,7 @@ export async function valuateFromMarket(propertyId: string): Promise<{ value: nu
     },
   });
 
-  return { value, stats };
+  return { value, stats, zapsano: true, duvod: posledni ? "změna nad tolerancí" : "první ocenění" };
 }
 
 export type { ScanQuery, ScrapedListing } from "./types";

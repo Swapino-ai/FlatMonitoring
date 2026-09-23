@@ -92,7 +92,7 @@ export async function GET() {
     diagnoza.push(`Pro jednu stránku se načítá ${velikostKB} kB dat. To už je hodně — vyplatí se omezit rozsah načítaných transakcí.`);
   }
   if (portal.stav === 404 || portal.stav === 403) {
-    diagnoza.push(`Sreality odsud vracejí HTTP ${portal.stav} na adresu, která z jiných sítí funguje. Odmítají požadavky z datového centra. Sken spouštěj přes GitHub Actions (Actions → Měsíční sken trhu → Run workflow); hodnotu lze také zadat ručně v detailu bytu.`);
+    diagnoza.push(`Sreality odsud vracejí HTTP ${portal.stav} na adresu, která z jiných sítí funguje. Odmítají požadavky z datového centra. Sken spouštěj přes GitHub Actions (Actions → Noční sken trhu → Run workflow); hodnotu lze také zadat ručně v detailu bytu.`);
   } else if (portal.stav === 200 && !portal.maData) {
     diagnoza.push("Sreality odpovídají, ale stránka neobsahuje očekávaná data — patrně se změnila struktura webu. Spusť v Actions workflow Sonda portálů.");
   } else if (portal.stav === 200) {

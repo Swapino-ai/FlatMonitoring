@@ -10,6 +10,8 @@ import { nazevNemovitosti } from "@/lib/catalogs";
 export const dynamic = "force-dynamic";
 
 const SPOUSTE: Record<string, string> = {
+  CRON_NOCNI: "Noční sken",
+  // Zaznamy z doby, kdy skeny bezely dva — v deniku porad jsou
   CRON_NAJEM: "Noční sken nájmů",
   CRON_TRH: "Měsíční sken trhu",
   RUCNI: "Ruční spuštění",
@@ -17,8 +19,7 @@ const SPOUSTE: Record<string, string> = {
 
 /** Kdy má co běžet — proti tomu se pozná výpadek. */
 const PLAN = [
-  { trigger: "CRON_NAJEM", popis: "každý den ve 3:40", tolerance: 36 },
-  { trigger: "CRON_TRH", popis: "1. dne v měsíci v 6:00", tolerance: 24 * 35 },
+  { trigger: "CRON_NOCNI", popis: "každý den ve 3:40", tolerance: 36 },
 ];
 
 function hodinOd(d: Date) {

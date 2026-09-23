@@ -53,7 +53,7 @@ export async function nactiStranku(url: string): Promise<{ data: unknown; html: 
     // okrajova kategorie), nebo portal odmita pozadavky z datoveho centra.
     // Nerozlisime je, takze zminime obe — driv hlaska svadela jen na druhou.
     const napoveda = res.status === 404 || res.status === 403
-      ? " — buď v této obci žádná taková nabídka není, nebo portál odmítl požadavek z datového centra. Zkus sken spustit přes GitHub Actions (Actions → Měsíční sken trhu)."
+      ? " — buď v této obci žádná taková nabídka není, nebo portál odmítl požadavek z datového centra. Zkus sken spustit přes GitHub Actions (Actions → Noční sken trhu)."
       : "";
     throw new Error(`HTTP ${res.status} na ${url}${napoveda}`);
   }

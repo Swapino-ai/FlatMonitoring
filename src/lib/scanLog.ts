@@ -8,7 +8,12 @@
  */
 import { prisma } from "./db";
 
-export type Spoust = "CRON_NAJEM" | "CRON_TRH" | "RUCNI";
+/**
+ * CRON_NOCNI je jediny planovany sken. Starsi hodnoty CRON_NAJEM a CRON_TRH
+ * zustavaji kvuli zaznamum z doby, kdy skeny bezely dva — v deniku se porad
+ * zobrazuji.
+ */
+export type Spoust = "CRON_NOCNI" | "CRON_NAJEM" | "CRON_TRH" | "RUCNI";
 
 export interface ZacatekBehu {
   trigger: Spoust;

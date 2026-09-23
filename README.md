@@ -89,18 +89,24 @@ Partner uvidí čísla i reporty, ale nic nezmění a sken trhu nespustí.
 Pak mu pošleš adresu aplikace a přihlašovací údaje — heslo ideálně jinou cestou
 než ten odkaz. Žádné tunely, žádná nastavení routeru, funguje to odkudkoli.
 
-### 7. Měsíční sken trhu
+### 7. Noční sken trhu
 
-Sken běží přes GitHub Actions, ne na Vercelu — mezi dotazy záměrně čeká, aby
-portály nezatěžoval, a do časového limitu serverless funkce by se nevešel.
+Aplikace má **jediný plánovaný běh**: každou noc ve 3:40 projde všechny
+nemovitosti, stáhne prodejní i nájemní nabídky, přecení a odhadne nájem.
+Do historie se zapisuje jen změna, takže denní běh nevyrobí 365 skoro shodných
+řádků za rok.
+
+Běží přes GitHub Actions, ne na Vercelu — Sreality odmítají dotazy z datových
+center a sken mezi dotazy čeká, aby portál nezatěžoval; do časového limitu
+serverless funkce by se nevešel.
 
 V repozitáři na GitHubu: **Settings → Secrets and variables → Actions →
-New repository secret** a přidej `DATABASE_URL` a `DIRECT_URL` (stejné hodnoty
-jako na Vercelu).
+New repository secret** a přidej `DATABASE_URL`, `DIRECT_URL` (stejné hodnoty
+jako na Vercelu) a `MAPY_API_KEY`.
 
-Pak se sken spustí 1. den v měsíci sám. Ručně ho pustíš v záložce **Actions →
-Měsíční sken trhu → Run workflow**. Ten samý běh po sobě uloží i zálohu dat
-jako artefakt ke stažení.
+Ručně ho pustíš v záložce **Actions → Noční sken trhu → Run workflow**. Ten samý
+běh po sobě uloží i zálohu dat jako artefakt ke stažení. Co proběhlo a jak to
+dopadlo, uvidíš v aplikaci na stránce **Provoz**.
 
 ---
 
@@ -348,8 +354,8 @@ a byt 22 m² ve stejném městě by si jinak navzájem zamořily medián.
 ### Noční sken nájmů
 
 Nájemné reaguje na sezonu i na změnu nabídky ve čtvrti mnohem rychleji než
-prodejní cena, proto se skenuje **každou noc** (workflow *Noční sken nájmů*,
-1:40 UTC), zatímco prodejní ceny jednou měsíčně. Odhad vzniká stejně jako
+prodejní cena. Skenuje se ale společně s prodejními cenami v jediném nočním
+běhu — dva plány zvlášť jen znamenaly dvě místa, kde něco může selhat. Odhad vzniká stejně jako
 u prodejní ceny — medián Kč/m² ze srovnatelných nabídek krát tvoje plocha —
 a ukládá se do vlastní historie se snímkem nabídek, ze kterých vznikl.
 
