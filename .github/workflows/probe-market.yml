@@ -21,8 +21,8 @@ jobs:
       - name: Ověření odkazů na detail inzerátu
         run: npx tsx scripts/probe-odkazy.ts
 
-      - name: Sken v malé obci
-        run: npx tsx scripts/probe-male-mesto.ts
+      - name: Sonda okresu a kraje
+        run: npx tsx scripts/probe-okres.ts
 
       - name: Test scraperů proti živým portálům
         id: test
