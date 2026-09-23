@@ -49,9 +49,11 @@ export async function nactiStranku(url: string): Promise<{ data: unknown; html: 
   const res = await fetch(url, { headers: HLAVICKY_PROHLIZECE, redirect: "follow" });
 
   if (!res.ok) {
-    // 404 na adrese, ktera jinde funguje, znaci odmitnuti pozadavku z datoveho centra
+    // 404 ma dve pricinny: bud takova nabidka v obci proste neni (male mesto,
+    // okrajova kategorie), nebo portal odmita pozadavky z datoveho centra.
+    // Nerozlisime je, takze zminime obe — driv hlaska svadela jen na druhou.
     const napoveda = res.status === 404 || res.status === 403
-      ? " — portál patrně odmítl požadavek z datového centra. Zkus sken spustit přes GitHub Actions (Actions → Měsíční sken trhu)."
+      ? " — buď v této obci žádná taková nabídka není, nebo portál odmítl požadavek z datového centra. Zkus sken spustit přes GitHub Actions (Actions → Měsíční sken trhu)."
       : "";
     throw new Error(`HTTP ${res.status} na ${url}${napoveda}`);
   }

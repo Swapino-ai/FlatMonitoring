@@ -25,7 +25,7 @@ export async function runScan(query: ScanQuery): Promise<ScanResult[]> {
     try {
       const listings = await source.fetchListings(query);
       const status = listings.length === 0 ? "PARTIAL" : "OK";
-      await persist(source.name, status, listings, listings.length === 0 ? "Zdroj nevrátil žádné nabídky — možná se změnila struktura webu." : undefined);
+      await persist(source.name, status, listings, listings.length === 0 ? "Zdroj nevrátil žádné nabídky — v této obci a kategorii buď nic není, nebo se změnila struktura webu." : undefined);
       results.push({ source: source.name, status, count: listings.length });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

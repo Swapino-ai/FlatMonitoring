@@ -42,7 +42,18 @@ export const srealitySource: MarketSource = {
       // takze si ji odfiltrujeme az z vysledku.
       const url = `https://www.sreality.cz/hledani/${typ}/${cesta}/${mesto}${strana > 1 ? `?strana=${strana}` : ""}`;
 
-      const { data, html } = await nactiStranku(url);
+      // V malem meste je garazi par a druha stranka vubec neexistuje — portal
+      // na ni vraci 404. To neni porucha: jen uz nic dalsiho neni. Chybu proto
+      // propoustime jen z prvni stranky, jinak by se zahodily i nabidky, ktere
+      // uz mame nactene.
+      let stranka: { data: unknown; html: string };
+      try {
+        stranka = await nactiStranku(url);
+      } catch (e) {
+        if (strana === 1) throw e;
+        break;
+      }
+      const { data, html } = stranka;
       // Odkaz na detail se z dat stranky poskladat neda — v ceste je slug ulice,
       // ktery v nich neni. Bereme ho tedy primo z odkazu ve vypisu.
       const odkazy = odkazyZVypisu(html);
