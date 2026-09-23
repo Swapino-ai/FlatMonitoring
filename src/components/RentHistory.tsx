@@ -16,10 +16,14 @@ interface Odhad {
  * Vyvoj trzniho najemneho. Proti smluvnimu najmu je videt, jestli
  * nepodnajimas — nebo naopak jestli neni najem nad trhem a hrozi odchod.
  */
-export function RentHistory({ odhady, smluvniNajem, areaM2 }: {
+export function RentHistory({ odhady, smluvniNajem, areaM2, propertyId, vyrazene = [], canEdit = false }: {
   odhady: Odhad[];
   smluvniNajem: number;
   areaM2: number;
+  propertyId?: string;
+  /** Klíče nabídek, které uživatel z odhadu vyřadil. */
+  vyrazene?: string[];
+  canEdit?: boolean;
 }) {
   const [otevrene, setOtevrene] = useState<string | null>(null);
 
@@ -155,7 +159,8 @@ export function RentHistory({ odhady, smluvniNajem, areaM2 }: {
         return (
           <div className="rounded-card border border-line p-4">
             <Comparables nabidky={nabidky} tvojeKcM2={o.rentPerM2 ?? 0}
-              plochaM2={areaM2} datumOceneni={o.date} poznamka={o.notes} />
+              plochaM2={areaM2} datumOceneni={o.date} poznamka={o.notes}
+              propertyId={propertyId} vyrazene={vyrazene} canEdit={canEdit} />
           </div>
         );
       })()}

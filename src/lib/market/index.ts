@@ -74,6 +74,8 @@ export interface ComparableStats {
   medianPrice: number;
   /** Konkretni nabidky, ze kterych medián vznikl — kvuli dolozitelnosti. */
   listings: SrovnatelnaNabidka[];
+  /** Kolik nabidek uzivatel z odhadu vyradil. */
+  vyloucenoUzivatelem: number;
   /** V jakem okruhu se nakonec hledalo. Null = hledalo se podle mesta. */
   okruhKm: number | null;
   /**
@@ -83,6 +85,15 @@ export interface ComparableStats {
   dispoziceUvolnena: boolean;
   /** Nejblizsi vychozi okruh pro dany druh — proti nemu se pozna rozsireni. */
   vychoziOkruhKm: number | null;
+}
+
+/** Nabidky, ktere uzivatel u teto nemovitosti z odhadu vyradil. */
+export async function nactiVyloucene(propertyId: string): Promise<Set<string>> {
+  const r = await prisma.excludedListing.findMany({
+    where: { propertyId },
+    select: { source: true, externalId: true },
+  });
+  return new Set(r.map((x) => `${x.source}|${x.externalId}`));
 }
 
 /** Snimek jedne nabidky ukladany k oceneni. */
@@ -95,6 +106,8 @@ export interface SrovnatelnaNabidka {
   url: string | null;
   source: string;
   scrapedAt: string;
+  /** Klic pro vyrazeni z odhadu, "ZDROJ|externiId". Null u starsich snimku. */
+  klic: string | null;
   /** Vzdusna vzdalenost od nemovitosti. Null = nabidka nema souradnice. */
   vzdalenostKm: number | null;
   /**
@@ -129,6 +142,12 @@ export async function comparableStats(opts: {
   longitude?: number | null;
   /** Kraj — záchrana pro nemovitost bez souřadnic, když se skenoval kraj. */
   region?: string | null;
+  /**
+   * Nabídky, které uživatel z odhadu vyřadil, ve tvaru "ZDROJ|externiId".
+   * Nejbližší nabídka nemusí být srovnatelná a rozhodnout to umí jen člověk,
+   * který to místo zná.
+   */
+  vyloucene?: Set<string>;
   okruhKm?: number;
   /**
    * Kolik nabidek staci, aby se okruh dal prestat rozsirovat. Sken zacne
@@ -155,6 +174,8 @@ export async function comparableStats(opts: {
   // Stahneme jednou v nejsirsi obalce a zuzujeme az v pameti — opakovane
   // dotazy do databaze by delaly totez, jen pomaleji.
   const obalka = stred ? obalkaOkruhu(stred, nejsirsi) : null;
+
+  const pocetPredVyrazenim = { hodnota: 0 };
 
   const rows = await prisma.marketListing.findMany({
     where: {
@@ -190,6 +211,11 @@ export async function comparableStats(opts: {
   // z kazde nabidky jen nejnovejsi zaznam (dotaz je razeny od nejnovejsiho).
   const videne = new Set<string>();
   const vsechny = rows.filter((r) => {
+    // Vyrazene nabidky do odhadu nevstupuji vubec
+    if (r.externalId && opts.vyloucene?.has(`${r.source}|${r.externalId}`)) {
+      pocetPredVyrazenim.hodnota++;
+      return false;
+    }
     // Bez externalId nezbyva nez identita podle ceny, plochy a ctvrti
     const klic = r.externalId
       ? `${r.source}|${r.externalId}`
@@ -255,6 +281,7 @@ export async function comparableStats(opts: {
 
   return {
     count: unikatni.length,
+    vyloucenoUzivatelem: pocetPredVyrazenim.hodnota,
     okruhKm: pouzityOkruh,
     vychoziOkruhKm: stred ? kroky[0] : null,
     dispoziceUvolnena,
@@ -275,6 +302,7 @@ export async function comparableStats(opts: {
       url: r.url,
       source: r.source,
       scrapedAt: r.scrapedAt.toISOString(),
+      klic: r.externalId ? `${r.source}|${r.externalId}` : null,
       vzdalenostKm: km == null ? null : Math.round(km * 10) / 10,
       // Bez souradnic nevime, kde nabidka je — radsi ji za "z lokality"
       // nevydavame, nez bychom tvrdili neco, co nemuzeme doložit
@@ -305,10 +333,13 @@ export async function valuateFromMarket(
   const p = await prisma.property.findUnique({ where: { id: propertyId } });
   if (!p) return null;
 
+  const vyloucene = await nactiVyloucene(p.id);
+
   const stats = await comparableStats({
     city: p.city,
     district: p.district,
     dealType: "SALE",
+    vyloucene,
     category: p.type,
     latitude: p.latitude,
     longitude: p.longitude,
@@ -397,10 +428,13 @@ export async function odhadniNajemPriZmene(
   const p = await prisma.property.findUnique({ where: { id: propertyId } });
   if (!p) return null;
 
+  const vyloucene = await nactiVyloucene(p.id);
+
   const stats = await comparableStats({
     city: p.city,
     district: p.district,
     dealType: "RENT",
+    vyloucene,
     category: p.type,
     latitude: p.latitude,
     longitude: p.longitude,

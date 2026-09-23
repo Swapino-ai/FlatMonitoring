@@ -23,6 +23,7 @@ export async function exportujVse(): Promise<Zaloha> {
       service: await prisma.service.findMany(),
       valuation: await prisma.valuation.findMany(),
       rentEstimate: await prisma.rentEstimate.findMany(),
+      excludedListing: await prisma.excludedListing.findMany(),
       marketScan: await prisma.marketScan.findMany(),
       marketListing: await prisma.marketListing.findMany(),
       marketIndex: await prisma.marketIndex.findMany(),
@@ -59,6 +60,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.marketIndex.deleteMany();
     await tx.scanRun.deleteMany();
     await tx.rentEstimate.deleteMany();
+    await tx.excludedListing.deleteMany();
     await tx.valuation.deleteMany();
     await tx.propertyOwner.deleteMany();
     await tx.service.deleteMany();
@@ -166,6 +168,14 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       comparables: x.comparables ?? undefined, notes: s(x.notes),
     }));
     if (rentEstimates.length) obnoveno.rentEstimate = (await tx.rentEstimate.createMany({ data: rentEstimates })).count;
+
+    const vyrazene = (t.excludedListing as any[] ?? []).map((x) => ({
+      id: String(x.id), propertyId: String(x.propertyId),
+      source: String(x.source), externalId: String(x.externalId),
+      popis: String(x.popis ?? ""), reason: s(x.reason),
+      createdAt: dPovinne(x.createdAt ?? new Date()),
+    }));
+    if (vyrazene.length) obnoveno.excludedListing = (await tx.excludedListing.createMany({ data: vyrazene })).count;
 
     // Denik nema cizi klice, muze se obnovit az nakonec
     const behy = (t.scanRun as any[] ?? []).map((x) => ({

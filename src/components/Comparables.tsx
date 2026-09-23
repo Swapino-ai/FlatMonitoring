@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { czk, dateCz } from "@/lib/format";
+import { prepniVyrazeni } from "@/lib/actions";
 
 export interface Nabidka {
   disposition: string | null;
@@ -12,6 +13,8 @@ export interface Nabidka {
   url: string | null;
   source: string;
   scrapedAt: string;
+  /** Klíč pro vyřazení z odhadu; null u starších snímků. */
+  klic?: string | null;
   /** Vzdušná vzdálenost od nemovitosti; null u starších snímků. */
   vzdalenostKm?: number | null;
   /** Je nabídka přímo z lokality, nebo až z rozšířeného okruhu? */
@@ -30,15 +33,21 @@ function pouzitelnyOdkaz(url: string | null | undefined): boolean {
  * Nabidky, ze kterych medián vznikl. Bez nich je ocenění černá skříňka —
  * tohle ukáže, s čím přesně se byt porovnával.
  */
-export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznamka }: {
+export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznamka, propertyId, vyrazene = [], canEdit = false }: {
   nabidky: Nabidka[];
   tvojeKcM2: number;
   plochaM2: number;
   datumOceneni: Date | string;
   /** Poznámka od ocenění — nese i to, v jakém okruhu se hledalo. */
   poznamka?: string | null;
+  /** Bez něj nejde nabídku vyřadit — historické snímky ho nemají. */
+  propertyId?: string;
+  /** Klíče nabídek, které už uživatel vyřadil. */
+  vyrazene?: string[];
+  canEdit?: boolean;
 }) {
   const [vse, setVse] = useState(false);
+  const [ceka, startTransition] = useTransition();
 
   if (nabidky.length === 0) {
     return (
@@ -170,6 +179,19 @@ export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznam
                   </span>
                 )}
               </div>
+
+              {canEdit && propertyId && n.klic && (
+                <button
+                  type="button"
+                  disabled={ceka}
+                  onClick={() => startTransition(() =>
+                    prepniVyrazeni(propertyId, n.klic!, `${n.disposition ?? "?"} · ${n.areaM2 ?? "?"} m² · ${n.district ?? "—"} · ${czk(n.price)}`),
+                  )}
+                  className="mt-2 w-full rounded-lg border border-dashed border-line py-1 text-xs text-ink-muted hover:border-warn hover:text-warn disabled:opacity-50"
+                >
+                  {vyrazene.includes(n.klic) ? "vrátit do odhadu" : "nezapočítávat do odhadu"}
+                </button>
+              )}
             </div>
           );
         })}
@@ -185,6 +207,13 @@ export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznam
         <p className="rounded-lg bg-warn/10 px-3 py-2 text-xs text-warn">
           {poznamka.slice(poznamka.indexOf("Okruh"))} Nabídky z většího okolí jsou jiný trh —
           ber odhad jako hrubý.
+        </p>
+      )}
+
+      {vyrazene.length > 0 && (
+        <p className="text-xs text-ink-muted">
+          {vyrazene.length === 1 ? "Jedna nabídka je" : `${vyrazene.length} nabídek je`} z odhadu
+          vyřazená. Vrátit je jde v seznamu pod kartou ocenění.
         </p>
       )}
 

@@ -105,6 +105,7 @@ model Property {
   transactions  Transaction[]
   services      Service[]
   valuations    Valuation[]
+  excluded      ExcludedListing[]
   owners        PropertyOwner[]
   rentEstimates RentEstimate[]
 
@@ -351,4 +352,26 @@ model ScanRun {
 
   @@index([startedAt])
   @@index([trigger, startedAt])
+}
+
+/// Nabidka, kterou uzivatel z odhadu vyradil.
+///
+/// Sken bere, co je nejblizsi, ale nejblizsi nemusi byt srovnatelne: byt
+/// v Bohusovicich se poměřuje s Roudnici, ktera je drazsi, a odhad to zvedne.
+/// Rozhodnout, co do porovnani nepatri, umi jen clovek, ktery to misto zna.
+model ExcludedListing {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  source     String
+  externalId String
+  /// Popis nabidky v dobe vyrazeni — inzerat casem zmizi, ale uzivatel musi
+  /// poznat, co vlastne vyradil
+  popis      String
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@unique([propertyId, source, externalId])
+  @@index([propertyId])
 }

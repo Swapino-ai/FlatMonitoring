@@ -130,3 +130,38 @@ export async function deleteProperty(id: string): Promise<void> {
   revalidatePath("/properties");
   redirect("/properties");
 }
+
+/**
+ * Vyradi nabidku z odhadu, nebo ji zase vrati.
+ *
+ * Nejblizsi nabidka nemusi byt srovnatelna — byt v Bohusovicich se poměřuje
+ * s Roudnici, ktera je drazsi, a odhad to zvedne. Rozhodnout, co do porovnani
+ * nepatri, umi jen clovek, ktery to misto zna.
+ */
+export async function prepniVyrazeni(
+  propertyId: string,
+  klic: string,
+  popis: string,
+): Promise<void> {
+  const user = await getSession();
+  if (!user || user.role !== "OWNER") throw new Error("Nedostatečné oprávnění");
+
+  const [source, externalId] = klic.split("|");
+  if (!source || !externalId) throw new Error("Neplatná nabídka");
+
+  const existujici = await prisma.excludedListing.findUnique({
+    where: { propertyId_source_externalId: { propertyId, source, externalId } },
+  });
+
+  if (existujici) {
+    await prisma.excludedListing.delete({ where: { id: existujici.id } });
+  } else {
+    await prisma.excludedListing.create({
+      // Popis si drzime, protoze inzerat casem z trhu zmizi a uzivatel by
+      // pak nepoznal, co vlastne vyradil
+      data: { propertyId, source, externalId, popis: popis.slice(0, 200) },
+    });
+  }
+
+  revalidatePath(`/properties/${propertyId}`);
+}

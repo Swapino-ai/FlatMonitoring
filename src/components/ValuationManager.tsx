@@ -18,11 +18,13 @@ const SOURCE_LABELS: Record<string, string> = {
   INDEX: "index",
 };
 
-export function ValuationManager({ propertyId, valuations, areaM2, canEdit }: {
+export function ValuationManager({ propertyId, valuations, areaM2, canEdit, vyrazene = [] }: {
   propertyId: string;
   valuations: Row[];
   areaM2: number;
   canEdit: boolean;
+  /** Klíče nabídek, které uživatel z odhadu vyřadil. */
+  vyrazene?: string[];
 }) {
   // Ktere oceneni si uzivatel rozkliknul pro zobrazeni srovnatelnych nabidek
   const [otevrene, setOtevrene] = useState<string | null>(null);
@@ -91,6 +93,9 @@ export function ValuationManager({ propertyId, valuations, areaM2, canEdit }: {
                           plochaM2={areaM2}
                           datumOceneni={v.date}
                           poznamka={v.notes}
+                          propertyId={propertyId}
+                          vyrazene={vyrazene}
+                          canEdit={canEdit}
                         />
                       </td>
                     </tr>

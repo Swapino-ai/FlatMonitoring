@@ -12,6 +12,7 @@ import { LeaseManager } from "@/components/LeaseManager";
 import { RentHistory } from "@/components/RentHistory";
 import { RentScanButton } from "@/components/RentScanButton";
 import { Mapa } from "@/components/Mapa";
+import { VyrazeneNabidky } from "@/components/VyrazeneNabidky";
 import { ServiceManager } from "@/components/ServiceManager";
 import { TransactionManager } from "@/components/TransactionManager";
 import { analyzeProperty, loadProperty } from "@/lib/portfolio";
@@ -90,6 +91,12 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     return `V okolí je ${vObci + vKraji} nabídek, ale po zúžení na srovnatelnou plochu a dispozici jich zbylo míň než tři. `
       + "Odhad z toho nedělám — radši žádný než klamavý.";
   })();
+
+  const vyrazene = await prisma.excludedListing.findMany({
+    where: { propertyId: property.id },
+    orderBy: { createdAt: "desc" },
+  });
+  const vyrazeneKlice = vyrazene.map((v) => `${v.source}|${v.externalId}`);
 
   // Odhady najmu z nocniho skenu — vlastni dotaz, at je loadProperty lehky
   const odhadyNajmu = await prisma.rentEstimate.findMany({
@@ -245,7 +252,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
 
         <Card title="Tržní nájem — noční sken trhu"
           action={<Link href="/market" className="text-xs text-accent">Sken trhu →</Link>}>
-          <RentHistory odhady={odhadyNajmu} smluvniNajem={smluvniNajem} areaM2={property.areaM2} />
+          <RentHistory odhady={odhadyNajmu} smluvniNajem={smluvniNajem} areaM2={property.areaM2}
+            propertyId={property.id} vyrazene={vyrazeneKlice} canEdit={user.role === "OWNER"} />
           {user.role === "OWNER" && <RentScanButton propertyId={property.id} />}
         </Card>
 
@@ -294,7 +302,9 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
               valuations={property.valuations}
               areaM2={property.areaM2}
               canEdit={user.role === "OWNER"}
+              vyrazene={vyrazeneKlice}
             />
+            <VyrazeneNabidky propertyId={property.id} polozky={vyrazene} canEdit={user.role === "OWNER"} />
             {duvodBezOceneni && (
               <p className="mt-3 rounded-lg bg-warn/10 px-3 py-2.5 text-sm text-warn">{duvodBezOceneni}</p>
             )}
