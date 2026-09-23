@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db";
-import { obalkaOkruhu, okruhProTyp, vzdalenostKm } from "../geo";
+import { MAX_OKRUH_KM, obalkaOkruhu, okruhyProTyp, vzdalenostKm } from "../geo";
 import { srealitySource } from "./sreality";
 import type { MarketSource, ScanQuery, ScrapedListing } from "./types";
 
@@ -73,6 +73,10 @@ export interface ComparableStats {
   medianPrice: number;
   /** Konkretni nabidky, ze kterych medián vznikl — kvuli dolozitelnosti. */
   listings: SrovnatelnaNabidka[];
+  /** V jakem okruhu se nakonec hledalo. Null = hledalo se podle mesta. */
+  okruhKm: number | null;
+  /** Nejblizsi vychozi okruh pro dany druh — proti nemu se pozna rozsireni. */
+  vychoziOkruhKm: number | null;
 }
 
 /** Snimek jedne nabidky ukladany k oceneni. */
@@ -111,6 +115,11 @@ export async function comparableStats(opts: {
   latitude?: number | null;
   longitude?: number | null;
   okruhKm?: number;
+  /**
+   * Kolik nabidek staci, aby se okruh dal prestat rozsirovat. Sken zacne
+   * u nejuzsiho okruhu pro dany druh a rozsiruje, dokud jich tolik nema.
+   */
+  cilovyVzorek?: number;
 }): Promise<ComparableStats | null> {
   const since = new Date();
   since.setDate(since.getDate() - (opts.sinceDays ?? 60));
@@ -124,8 +133,13 @@ export async function comparableStats(opts: {
   const stred = opts.latitude != null && opts.longitude != null
     ? { latitude: opts.latitude, longitude: opts.longitude }
     : null;
-  const okruhKm = opts.okruhKm ?? okruhProTyp(opts.category ?? "BYT");
-  const obalka = stred ? obalkaOkruhu(stred, okruhKm) : null;
+  // Pevny okruh jen kdyz si ho nekdo vyslovne vyzada; jinak zacneme u toho
+  // nejuzsiho a rozsirujeme, dokud neni z ceho pocitat.
+  const kroky = opts.okruhKm ? [opts.okruhKm] : okruhyProTyp(opts.category ?? "BYT");
+  const nejsirsi = kroky[kroky.length - 1];
+  // Stahneme jednou v nejsirsi obalce a zuzujeme az v pameti — opakovane
+  // dotazy do databaze by delaly totez, jen pomaleji.
+  const obalka = stred ? obalkaOkruhu(stred, nejsirsi) : null;
 
   const rows = await prisma.marketListing.findMany({
     where: {
@@ -153,17 +167,11 @@ export async function comparableStats(opts: {
     orderBy: { scrapedAt: "desc" },
   });
 
-  // Obdelnik je o neco vetsi nez kruh — rohy odrizneme az tady
-  const vOkruhu = stred
-    ? rows.filter((r) => r.latitude != null && r.longitude != null
-        && vzdalenostKm(stred, { latitude: r.latitude, longitude: r.longitude }) <= okruhKm)
-    : rows;
-
   // Kazdy sken uklada nove radky, takze tataz nabidka lezi v tabulce tolikrat,
   // kolikrat sken bezel — a do medianu by vstupovala tolikrat taky. Bereme
   // z kazde nabidky jen nejnovejsi zaznam (dotaz je razeny od nejnovejsiho).
   const videne = new Set<string>();
-  const unikatni = vOkruhu.filter((r) => {
+  const vsechny = rows.filter((r) => {
     // Bez externalId nezbyva nez identita podle ceny, plochy a ctvrti
     const klic = r.externalId
       ? `${r.source}|${r.externalId}`
@@ -173,13 +181,40 @@ export async function comparableStats(opts: {
     return true;
   });
 
-  if (unikatni.length < (opts.minVzorek ?? 3)) return null;
+  // Rozsirovani okruhu: bereme nejuzsi, ve kterem uz je dost nabidek. Kdyz se
+  // nedosahne cile ani v nejsirsim, zustane nejsirsi — lepsi hruby odhad
+  // z okoli nez zadny, jen to musi byt videt.
+  const minimum = opts.minVzorek ?? 3;
+  const cil = Math.max(minimum, opts.cilovyVzorek ?? 8);
+
+  let unikatni = vsechny;
+  let pouzityOkruh: number | null = null;
+
+  if (stred) {
+    const sVzdalenosti = vsechny
+      .filter((r) => r.latitude != null && r.longitude != null)
+      .map((r) => ({
+        r,
+        km: vzdalenostKm(stred, { latitude: r.latitude!, longitude: r.longitude! }),
+      }));
+
+    for (const okruh of kroky) {
+      const vybrane = sVzdalenosti.filter((x) => x.km <= okruh);
+      pouzityOkruh = okruh;
+      unikatni = vybrane.map((x) => x.r);
+      if (vybrane.length >= cil) break;
+    }
+  }
+
+  if (unikatni.length < minimum) return null;
 
   const perM2 = unikatni.map((r) => r.pricePerM2!).sort((a, b) => a - b);
   const prices = unikatni.map((r) => r.price).sort((a, b) => a - b);
 
   return {
     count: unikatni.length,
+    okruhKm: pouzityOkruh,
+    vychoziOkruhKm: stred ? kroky[0] : null,
     medianPricePerM2: quantile(perM2, 0.5),
     p25: quantile(perM2, 0.25),
     p75: quantile(perM2, 0.75),
@@ -230,11 +265,11 @@ export async function valuateFromMarket(propertyId: string): Promise<{ value: nu
       value,
       pricePerM2: stats.medianPricePerM2,
       source: "MARKET_SCAN",
-      confidence: stats.count >= 15 ? "HIGH" : stats.count >= 7 ? "MEDIUM" : "LOW",
+      confidence: spolehlivost(stats.count, stats.okruhKm, stats.vychoziOkruhKm),
       sampleSize: stats.count,
       // Snimek necháváme u oceneni — inzeraty z trhu casem zmizi, doklad musi zustat
       comparables: stats.listings as unknown as Prisma.InputJsonValue,
-      notes: `Medián ${Math.round(stats.medianPricePerM2).toLocaleString("cs-CZ")} Kč/m² z ${stats.count} nabídek (mezikvartilové rozpětí ${Math.round(stats.p25).toLocaleString("cs-CZ")}–${Math.round(stats.p75).toLocaleString("cs-CZ")} Kč/m²). Nabídkové ceny, realizované bývají nižší.`,
+      notes: `Medián ${Math.round(stats.medianPricePerM2).toLocaleString("cs-CZ")} Kč/m² z ${stats.count} nabídek (mezikvartilové rozpětí ${Math.round(stats.p25).toLocaleString("cs-CZ")}–${Math.round(stats.p75).toLocaleString("cs-CZ")} Kč/m²). Nabídkové ceny, realizované bývají nižší.` + okruhPopis(stats),
     },
   });
 
@@ -253,12 +288,25 @@ export type { ScanQuery, ScrapedListing } from "./types";
  * Zapisuje se jen pri zmene — jinak by denni sken za rok vyrobil 365 shodnych
  * radku a historie by se v nich ztratila.
  */
-/** Pod tri nabidky uz to neni odhad, jen ukazka — at to karta rekne nahlas. */
-function spolehlivost(pocet: number): string {
-  if (pocet >= 15) return "HIGH";
-  if (pocet >= 7) return "MEDIUM";
-  if (pocet >= 3) return "LOW";
-  return "ORIENTACNI";
+/**
+ * Pod tri nabidky uz to neni odhad, jen ukazka — at to karta rekne nahlas.
+ * Siroky okruh spolehlivost snizuje: nabidky dvacet kilometru daleko uz
+ * nevypovidaji o teto ctvrti, i kdyz jich je hodne.
+ */
+function spolehlivost(pocet: number, okruhKm?: number | null, vychozi?: number | null): string {
+  let stupen = pocet >= 15 ? 3 : pocet >= 7 ? 2 : pocet >= 3 ? 1 : 0;
+  if (okruhKm != null && vychozi != null && okruhKm >= vychozi * 4) stupen -= 1;
+  else if (okruhKm != null && vychozi != null && okruhKm >= vychozi * 2) stupen = Math.min(stupen, 2);
+  return ["ORIENTACNI", "LOW", "MEDIUM", "HIGH"][Math.max(0, stupen)];
+}
+
+/** Doveta o okruhu do poznamky — at je z historie poznat, odkud se bralo. */
+function okruhPopis(stats: ComparableStats): string {
+  if (stats.okruhKm == null) return "";
+  const siroky = stats.vychoziOkruhKm != null && stats.okruhKm > stats.vychoziOkruhKm;
+  return siroky
+    ? ` Okruh rozšířen na ${stats.okruhKm} km, protože blíž nebylo dost nabídek.`
+    : ` Okruh ${stats.okruhKm} km.`;
 }
 
 export async function odhadniNajemPriZmene(
@@ -315,11 +363,12 @@ export async function odhadniNajemPriZmene(
       p75: stats.p75,
       source: "MARKET_SCAN",
       sampleSize: stats.count,
-      confidence: spolehlivost(stats.count),
+      confidence: spolehlivost(stats.count, stats.okruhKm, stats.vychoziOkruhKm),
       comparables: stats.listings as unknown as Prisma.InputJsonValue,
-      notes: stats.count < 3
+      notes: (stats.count < 3
         ? `Jen ${stats.count === 1 ? "jediná nabídka" : `${stats.count} nabídky`} — na odhad je to málo, ber to jako ukázku trhu, ne jako cenu.`
-        : `Medián ${Math.round(stats.medianPricePerM2).toLocaleString("cs-CZ")} Kč/m² měsíčně z ${stats.count} nabídek.`,
+        : `Medián ${Math.round(stats.medianPricePerM2).toLocaleString("cs-CZ")} Kč/m² měsíčně z ${stats.count} nabídek.`)
+        + okruhPopis(stats),
     },
   });
 

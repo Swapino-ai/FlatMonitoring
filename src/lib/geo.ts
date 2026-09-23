@@ -56,3 +56,21 @@ export const VYCHOZI_OKRUH_KM: Record<string, number> = {
 };
 
 export const okruhProTyp = (typ: string) => VYCHOZI_OKRUH_KM[typ] ?? 5;
+
+/**
+ * Nejvetsi okruh, na ktery jsme ochotni jit. Dal uz to neni "okoli" — nabidky
+ * padesat kilometru daleko jsou jiny trh a medián z nich by klamal.
+ */
+export const MAX_OKRUH_KM = 50;
+
+/**
+ * Posloupnost okruhu od vychoziho po maximalni. Sken zacne u nejuzsiho
+ * a rozsiruje, dokud nema z ceho pocitat.
+ */
+export function okruhyProTyp(typ: string): number[] {
+  const zaklad = okruhProTyp(typ);
+  const kroky: number[] = [];
+  for (let r = zaklad; r < MAX_OKRUH_KM; r *= 2) kroky.push(r);
+  kroky.push(MAX_OKRUH_KM);
+  return kroky;
+}

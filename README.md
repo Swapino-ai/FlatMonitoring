@@ -296,10 +296,25 @@ Je to jeden skok navíc, což u aplikace pro dva lidi nevadí.
 **Srovnatelné nabídky se pak hledají podle vzdušné vzdálenosti**, ne podle
 shody názvu čtvrti. Byt na hranici Vinohrad a Žižkova má blíž k nabídkám za
 rohem než k druhému konci „své“ čtvrti, a sousední obec za hranicí města je
-srovnatelnější než druhý konec toho samého města. Okruh se řídí druhem
-nemovitosti: byt 3 km, garáž nebo parkovací stání 5 km, rodinný dům 8 km,
-pozemek 10 km, bytový dům a sklad 15 km — u řidšího trhu je potřeba širší
-záběr, aby se vůbec našel vzorek.
+srovnatelnější než druhý konec toho samého města. Okruh **se rozšiřuje, dokud není z čeho počítat**: začne na výchozím podle
+druhu nemovitosti a zdvojnásobuje se, dokud nemá osm srovnatelných nabídek,
+nejvýš však na 50 km. Dál už to není okolí — nabídky padesát kilometrů daleko
+jsou jiný trh a medián z nich by klamal.
+
+| Druh | Výchozí okruh | Posloupnost |
+| --- | --- | --- |
+| Byt, družstevní byt | 3 km | 3 → 6 → 12 → 24 → 48 → 50 |
+| Garáž, parkovací stání | 5 km | 5 → 10 → 20 → 40 → 50 |
+| Rodinný dům | 8 km | 8 → 16 → 32 → 50 |
+| Pozemek | 10 km | 10 → 20 → 40 → 50 |
+| Bytový dům, sklad | 15 km | 15 → 30 → 50 |
+
+Pravidlo je záměrně jednoduché — ber nejužší okruh, ve kterém už je osm
+nabídek. Důsledek je, že kvůli jedné chybějící nabídce může skočit o stupeň
+výš; to je přijatelnější než chytré výjimky, kterým pak nikdo nerozumí.
+
+Rozšíření se nezamlčuje: sníží uvedenou spolehlivost a karta konkurenčních
+nabídek napíše, na kolik kilometrů se muselo jít.
 
 U nemovitosti bez souřadnic (založené dřív, nebo s ručně psanou adresou) se
 srovnává postaru podle města a čtvrti. Stačí ji otevřít v úpravách a adresu

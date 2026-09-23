@@ -155,7 +155,7 @@ export function RentHistory({ odhady, smluvniNajem, areaM2 }: {
         return (
           <div className="rounded-card border border-line p-4">
             <Comparables nabidky={nabidky} tvojeKcM2={o.rentPerM2 ?? 0}
-              plochaM2={areaM2} datumOceneni={o.date} />
+              plochaM2={areaM2} datumOceneni={o.date} poznamka={o.notes} />
           </div>
         );
       })()}

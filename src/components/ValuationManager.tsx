@@ -90,6 +90,7 @@ export function ValuationManager({ propertyId, valuations, areaM2, canEdit }: {
                           tvojeKcM2={v.pricePerM2 ?? (areaM2 ? v.value / areaM2 : 0)}
                           plochaM2={areaM2}
                           datumOceneni={v.date}
+                          poznamka={v.notes}
                         />
                       </td>
                     </tr>

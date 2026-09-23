@@ -26,11 +26,13 @@ function pouzitelnyOdkaz(url: string | null | undefined): boolean {
  * Nabidky, ze kterych medián vznikl. Bez nich je ocenění černá skříňka —
  * tohle ukáže, s čím přesně se byt porovnával.
  */
-export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni }: {
+export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznamka }: {
   nabidky: Nabidka[];
   tvojeKcM2: number;
   plochaM2: number;
   datumOceneni: Date | string;
+  /** Poznámka od ocenění — nese i to, v jakém okruhu se hledalo. */
+  poznamka?: string | null;
 }) {
   const [vse, setVse] = useState(false);
 
@@ -145,9 +147,16 @@ export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni }: {
         </button>
       )}
 
+      {poznamka?.includes("rozšířen") && (
+        <p className="rounded-lg bg-warn/10 px-3 py-2 text-xs text-warn">
+          {poznamka.slice(poznamka.indexOf("Okruh"))} Nabídky z většího okolí jsou jiný trh —
+          ber odhad jako hrubý.
+        </p>
+      )}
+
       <p className="text-xs text-ink-muted">
         Jde o nabídkové ceny ze Sreality, ne realizované — ty bývají o 5–10 % nižší.
-        Porovnává se stejné město, dispozice a plocha ±25 %.
+        Porovnává se stejná dispozice a plocha ±25 % v okruhu od tvé nemovitosti.
       </p>
     </div>
   );
