@@ -136,10 +136,14 @@ export async function prepocitejPoVyrazeni(propertyId: string): Promise<{
     where: { propertyId, source: "MARKET_SCAN" },
     orderBy: { date: "desc" },
   });
+  // Rucni vyber je rozhodnuti uzivatele, ne statisticky vzorek. Kdyz nechal
+  // jedinou nabidku, protoze zna mistni trh, je to jeho odpovednost — nemame
+  // duvod mu do toho mluvit. Bez zasahu drzime minimum tri.
+  const minimum = vyloucene.size > 0 ? 1 : 3;
+
   if (oceneni) {
     const ceny = zbyleCeny(oceneni.comparables);
-    // Pod tri nabidky uz by odhad nic nevazil — radsi nechame puvodni
-    if (ceny.length >= 3) {
+    if (ceny.length >= minimum) {
       const zaM2 = quantile(ceny, 0.5);
       const hodnota = Math.round(zaM2 * p.areaM2);
       await prisma.valuation.update({
@@ -148,9 +152,11 @@ export async function prepocitejPoVyrazeni(propertyId: string): Promise<{
           value: hodnota,
           pricePerM2: zaM2,
           sampleSize: ceny.length,
-          confidence: spolehlivost(ceny.length),
+          confidence: vyloucene.size > 0 ? "RUCNI" : spolehlivost(ceny.length),
           // Snimek zamerne nechavame, jak byl — je to doklad
-          notes: `${oceneni.notes?.split(" Přepočítáno")[0] ?? ""} Přepočítáno bez ${vyloucene.size} vyřazených nabídek.`.trim(),
+          notes: vyloucene.size > 0
+            ? `${oceneni.notes?.split(" Ručně upraveno")[0].split(" Přepočítáno")[0] ?? ""} Ručně upraveno — počítáno z ${ceny.length} ${ceny.length === 1 ? "vybrané nabídky" : "vybraných nabídek"}, ${vyloucene.size} vyřazeno.`.trim()
+            : `${oceneni.notes?.split(" Ručně upraveno")[0].split(" Přepočítáno")[0] ?? ""}`.trim(),
         },
       });
       vysledek.hodnota = hodnota;
@@ -172,8 +178,10 @@ export async function prepocitejPoVyrazeni(propertyId: string): Promise<{
           monthlyRent: mesicne,
           rentPerM2: zaM2,
           sampleSize: ceny.length,
-          confidence: spolehlivost(ceny.length),
-          notes: `${najem.notes?.split(" Přepočítáno")[0] ?? ""} Přepočítáno bez ${vyloucene.size} vyřazených nabídek.`.trim(),
+          confidence: vyloucene.size > 0 ? "RUCNI" : spolehlivost(ceny.length),
+          notes: vyloucene.size > 0
+            ? `${najem.notes?.split(" Ručně upraveno")[0].split(" Přepočítáno")[0] ?? ""} Ručně upraveno — počítáno z ${ceny.length} ${ceny.length === 1 ? "vybrané nabídky" : "vybraných nabídek"}, ${vyloucene.size} vyřazeno.`.trim()
+            : `${najem.notes?.split(" Ručně upraveno")[0].split(" Přepočítáno")[0] ?? ""}`.trim(),
         },
       });
       vysledek.najem = mesicne;
@@ -573,6 +581,9 @@ export async function valuateFromMarket(
     district: p.district,
     dealType: "SALE",
     vyloucene,
+    // Rucni vyber respektujeme i pri nocnim skenu — jinak by odhad znovu
+    // spadl na "malo nabidek" a uzivateluv zasah by prisel vnivec
+    minVzorek: vyloucene.size > 0 ? 1 : 3,
     category: p.type,
     latitude: p.latitude,
     longitude: p.longitude,

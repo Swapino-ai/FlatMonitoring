@@ -7,7 +7,7 @@ import { Comparables, type Nabidka } from "./Comparables";
 
 interface Row {
   id: string; date: Date; value: number; pricePerM2: number | null;
-  source: string; sampleSize: number | null; notes: string | null;
+  source: string; sampleSize: number | null; notes: string | null; confidence?: string | null;
   comparables?: unknown;
 }
 
@@ -67,6 +67,11 @@ export function ValuationManager({ propertyId, valuations, areaM2, canEdit, vyra
                     <td className="text-ink-secondary">
                       {SOURCE_LABELS[v.source] ?? v.source}
                       {v.sampleSize ? <span className="text-xs text-ink-muted"> ({v.sampleSize} nabídek)</span> : null}
+                      {v.confidence === "RUCNI" && (
+                        <span className="ml-1.5 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+                          ručně upraveno
+                        </span>
+                      )}
                       {v.notes && <div className="text-xs text-ink-muted">{v.notes}</div>}
                       {nabidky.length > 0 && (
                         <button onClick={() => setOtevrene(rozbaleno ? null : v.id)}

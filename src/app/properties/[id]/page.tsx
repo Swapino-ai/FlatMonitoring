@@ -192,12 +192,26 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             label="Odhadní tržní hodnota"
             hodnota={czkCompact(a.currentValue)}
             tone={a.valueGain >= 0 ? "good" : "bad"}
-            doplnek={<>
-              {czk(a.currentValue / property.areaM2)}/m² · zdroj {valuationSourceLabel(a.valuationSource)}
-              <span className="ml-2 font-medium text-ink-primary">
-                {a.valueGain >= 0 ? "+" : ""}{czkCompact(a.valueGain)} ({pct(a.valueGainPct)}) za {a.yearsHeld.toFixed(1)} roku
-              </span>
-            </>}
+            doplnek={(() => {
+              // Z kolika nabídek odhad vznikl — bez toho je číslo neprůhledné
+              const v = property.valuations[0];
+              const vzorek = v?.sampleSize ?? null;
+              return (<>
+                {czk(a.currentValue / property.areaM2)}/m² · zdroj {valuationSourceLabel(a.valuationSource)}
+                {vzorek != null && (
+                  <> · z {vzorek} {vzorek === 1 ? "nabídky" : vzorek < 5 ? "nabídek" : "nabídek"}
+                    {v?.confidence === "RUCNI" && (
+                      <span className="ml-1.5 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+                        ručně upraveno
+                      </span>
+                    )}
+                  </>
+                )}
+                <span className="ml-2 block font-medium text-ink-primary sm:ml-0 sm:mt-0.5">
+                  {a.valueGain >= 0 ? "+" : ""}{czkCompact(a.valueGain)} ({pct(a.valueGainPct)}) za {a.yearsHeld.toFixed(1)} roku
+                </span>
+              </>);
+            })()}
           />
 
           <div className="card">
