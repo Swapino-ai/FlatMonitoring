@@ -30,6 +30,17 @@ function pouzitelnyOdkaz(url: string | null | undefined): boolean {
 }
 
 /**
+ * Klic pro vyrazeni nabidky z odhadu. Snimky porizene driv ho v sobe nemaji,
+ * ale id inzeratu je na konci adresy — bez toho by u starsich oceneni neslo
+ * vyradit nic.
+ */
+function klicNabidky(n: Nabidka): string | null {
+  if (n.klic) return n.klic;
+  const id = typeof n.url === "string" ? n.url.match(/\/(\d+)\/?$/)?.[1] : null;
+  return id ? `${n.source || "SREALITY"}|${id}` : null;
+}
+
+/**
  * Nabidky, ze kterych medián vznikl. Bez nich je ocenění černá skříňka —
  * tohle ukáže, s čím přesně se byt porovnával.
  */
@@ -97,7 +108,7 @@ export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznam
           {serazene.map((n, i) => (
             <div key={i}
               className={`absolute top-3.5 h-2.5 w-px transition-opacity duration-300 ${
-                n.klic != null && vyrazenoLokalne.includes(n.klic)
+                (() => { const k = klicNabidky(n); return k != null && vyrazenoLokalne.includes(k); })()
                   ? "bg-ink-muted/20"
                   : n.zLokality === false ? "bg-warn/70" : "bg-ink-muted/50"
               }`}
@@ -149,7 +160,8 @@ export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznam
           // Starsi snimky vzdalenost nemaji; ty neobarvujeme, abychom netvrdili
           // neco, co v datech neni
           const zdaleka = n.zLokality === false;
-          const vyrazeno = n.klic != null && vyrazenoLokalne.includes(n.klic);
+          const klic = klicNabidky(n);
+          const vyrazeno = klic != null && vyrazenoLokalne.includes(klic);
           return (
             <div key={i} className={`rounded-card border p-3 transition-all duration-300 ${
               vyrazeno
@@ -197,11 +209,11 @@ export function Comparables({ nabidky, tvojeKcM2, plochaM2, datumOceneni, poznam
                 )}
               </div>
 
-              {canEdit && propertyId && n.klic && (
+              {canEdit && propertyId && klic && (
                 <button
                   type="button"
                   disabled={ceka}
-                  onClick={() => prepni(n.klic!, `${n.disposition ?? "?"} · ${n.areaM2 ?? "?"} m² · ${n.district ?? "—"} · ${czk(n.price)}`)}
+                  onClick={() => prepni(klic, `${n.disposition ?? "?"} · ${n.areaM2 ?? "?"} m² · ${n.district ?? "—"} · ${czk(n.price)}`)}
                   className={`mt-2 w-full rounded-lg border border-dashed py-1 text-xs transition-colors ${
                     vyrazeno
                       ? "border-accent/50 text-accent hover:bg-accent/5"

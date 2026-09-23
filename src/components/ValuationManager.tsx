@@ -71,7 +71,9 @@ export function ValuationManager({ propertyId, valuations, areaM2, canEdit, vyra
                       {nabidky.length > 0 && (
                         <button onClick={() => setOtevrene(rozbaleno ? null : v.id)}
                           className="mt-1 block text-xs text-accent hover:underline">
-                          {rozbaleno ? "Skrýt srovnatelné nabídky" : `Podle čeho se počítalo (${nabidky.length}) →`}
+                          {rozbaleno
+                            ? "Skrýt srovnatelné nabídky"
+                            : `Podle čeho se počítalo (${nabidky.length})${canEdit ? " — tady jde nabídku vyřadit" : ""} →`}
                         </button>
                       )}
                     </td>
