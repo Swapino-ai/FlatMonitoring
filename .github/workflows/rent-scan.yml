@@ -10,6 +10,8 @@
 # Nastavení: Settings → Secrets and variables → Actions → New repository secret
 #   DATABASE_URL  — pooled řetězec z Neonu
 #   DIRECT_URL    — direct řetězec z Neonu
+#   MAPY_API_KEY  — klíč z developer.mapy.cz; bez něj se u obcí bez vlastního
+#                   výpisu na Sreality nedohledá kraj a sken pro ně skončí bez dat
 
 name: Noční sken nájmů
 
@@ -43,4 +45,5 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          MAPY_API_KEY: ${{ secrets.MAPY_API_KEY }}
         run: npm run rent:scan

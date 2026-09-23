@@ -66,6 +66,14 @@ export const srealitySource: MarketSource = {
           strana = 0; // po inkrementu cyklu zacneme znovu od prvni stranky
           continue;
         }
+        // Obec vypis nema a kraj neni znamy — rekneme rovnou, co s tim
+        if (!query.region) {
+          throw new Error(
+            `Obec ${query.city} nemá na Sreality vlastní výpis a u nemovitosti není uložený kraj, `
+            + "který by ho nahradil. Otevři ji v úpravách a vyber adresu z našeptávače — "
+            + "doplní se kraj i poloha. (Bez klíče MAPY_API_KEY se kraj nedohledá sám.)",
+          );
+        }
         throw e;
       }
       const { data, html } = stranka;

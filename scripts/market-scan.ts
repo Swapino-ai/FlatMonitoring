@@ -7,6 +7,7 @@
 import { PrismaClient } from "@prisma/client";
 import { runScan, valuateFromMarket } from "../src/lib/market";
 import { NEMOVITOST_MAP, nazevNemovitosti } from "../src/lib/catalogs";
+import { doplnPolohu } from "../src/lib/geokodovani";
 
 const prisma = new PrismaClient();
 
@@ -21,6 +22,19 @@ async function main() {
   }
 
   // Jeden dotaz na kombinaci mesto+dispozice — nechceme portaly zbytecne zatezovat
+  // Kraj a souradnice u nemovitosti, kterym chybi — bez kraje neni zaloha
+  // pro obce bez vlastniho vypisu z ceho vyjit
+  for (const p of properties) {
+    if (p.region && p.latitude != null) continue;
+    const n = await doplnPolohu(p.id);
+    if (n?.region) {
+      p.region = n.region;
+      p.latitude = n.latitude;
+      p.longitude = n.longitude;
+      console.log(`  ${p.name}: doplněn kraj ${n.region}`);
+    }
+  }
+
   const queries = new Map<string, { city: string; district: string | null; disposition: string | null; areaM2: number; type: string; region: string | null }>();
   for (const p of properties) {
     if (!NEMOVITOST_MAP.get(p.type)?.srealityCesta) continue;

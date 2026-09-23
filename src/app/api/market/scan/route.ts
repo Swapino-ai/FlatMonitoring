@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { runScan, valuateFromMarket, odhadniNajemPriZmene } from "@/lib/market";
 import { NEMOVITOST_MAP } from "@/lib/catalogs";
+import { doplnPolohu } from "@/lib/geokodovani";
 
 // Jeden dotaz na portal trva 15-20 s, protoze se strankuje do hloubky,
 // nez se nasbira dost srovnatelnych nabidek. Proto kazdy pozadavek resi
@@ -46,13 +47,18 @@ export async function POST(request: Request) {
 
   const dealType = telo.dealType ?? "SALE";
 
+  // Nemovitosti zalozene pred naseptavacem nemaji kraj, a bez nej nefunguje
+  // zaloha pro obce, ktere na Sreality vlastni vypis nemaji. Dohledame ho
+  // z adresy a ulozime — priste uz to neni potreba.
+  const poloha = await doplnPolohu(property.id);
+
   const results = await runScan({
     city: property.city,
     district: property.district ?? undefined,
     disposition: property.disposition ?? undefined,
     areaM2: property.areaM2,
     category: property.type,
-    region: property.region ?? undefined,
+    region: poloha?.region ?? property.region ?? undefined,
     dealType,
   });
 
