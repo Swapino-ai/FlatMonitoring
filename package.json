@@ -18,8 +18,7 @@
     "vercel-build": "prisma generate && prisma db push --skip-generate && next build",
     "probe": "tsx scripts/probe-market.ts",
     "test:scrapers": "tsx scripts/test-scrapers.ts",
-    "rent:scan": "tsx scripts/rent-scan.ts",
-    "odkazy:doplnit": "tsx scripts/doplnit-odkazy.ts"
+    "rent:scan": "tsx scripts/rent-scan.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.1.0",
