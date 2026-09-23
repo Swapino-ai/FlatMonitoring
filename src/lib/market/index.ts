@@ -112,24 +112,38 @@ export async function comparableStats(opts: {
       pricePerM2: { not: null },
     },
     select: {
-      pricePerM2: true, price: true, areaM2: true, disposition: true,
+      externalId: true, pricePerM2: true, price: true, areaM2: true, disposition: true,
       district: true, url: true, source: true, scrapedAt: true,
     },
-    orderBy: { pricePerM2: "asc" },
+    orderBy: { scrapedAt: "desc" },
   });
 
-  if (rows.length < 3) return null;
+  // Kazdy sken uklada nove radky, takze tataz nabidka lezi v tabulce tolikrat,
+  // kolikrat sken bezel — a do medianu by vstupovala tolikrat taky. Bereme
+  // z kazde nabidky jen nejnovejsi zaznam (dotaz je razeny od nejnovejsiho).
+  const videne = new Set<string>();
+  const unikatni = rows.filter((r) => {
+    // Bez externalId nezbyva nez identita podle ceny, plochy a ctvrti
+    const klic = r.externalId
+      ? `${r.source}|${r.externalId}`
+      : `${r.source}|${r.price}|${r.areaM2}|${r.district}`;
+    if (videne.has(klic)) return false;
+    videne.add(klic);
+    return true;
+  });
 
-  const perM2 = rows.map((r) => r.pricePerM2!).sort((a, b) => a - b);
-  const prices = rows.map((r) => r.price).sort((a, b) => a - b);
+  if (unikatni.length < 3) return null;
+
+  const perM2 = unikatni.map((r) => r.pricePerM2!).sort((a, b) => a - b);
+  const prices = unikatni.map((r) => r.price).sort((a, b) => a - b);
 
   return {
-    count: rows.length,
+    count: unikatni.length,
     medianPricePerM2: quantile(perM2, 0.5),
     p25: quantile(perM2, 0.25),
     p75: quantile(perM2, 0.75),
     medianPrice: quantile(prices, 0.5),
-    listings: rows.map((r) => ({
+    listings: [...unikatni].sort((a, b) => a.pricePerM2! - b.pricePerM2!).map((r) => ({
       disposition: r.disposition,
       areaM2: r.areaM2,
       price: r.price,
