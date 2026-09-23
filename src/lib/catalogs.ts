@@ -132,3 +132,30 @@ export const TYPY_NEMOVITOSTI: TypNemovitosti[] = [
 
 export const NEMOVITOST_MAP = new Map(TYPY_NEMOVITOSTI.map((t) => [t.klic, t]));
 export const nazevNemovitosti = (k: string) => NEMOVITOST_MAP.get(k)?.nazev ?? k;
+
+/**
+ * Kraje ve tvaru, ktery prijima adresa Sreality. Slouzi jako zaloha pro obce
+ * bez vlastniho vypisu (Bohusovice nad Ohri vraci 404) — okres neexistuje
+ * v zadnem tvaru, overeno sondou.
+ *
+ * Slugy overuje scripts/probe-kraje.ts proti zivemu webu.
+ */
+export const KRAJE: { slug: string; nazev: string }[] = [
+  { slug: "hlavni-mesto-praha", nazev: "Hlavní město Praha" },
+  { slug: "stredocesky-kraj", nazev: "Středočeský kraj" },
+  { slug: "jihocesky-kraj", nazev: "Jihočeský kraj" },
+  { slug: "plzensky-kraj", nazev: "Plzeňský kraj" },
+  { slug: "karlovarsky-kraj", nazev: "Karlovarský kraj" },
+  { slug: "ustecky-kraj", nazev: "Ústecký kraj" },
+  { slug: "liberecky-kraj", nazev: "Liberecký kraj" },
+  { slug: "kralovehradecky-kraj", nazev: "Královéhradecký kraj" },
+  { slug: "pardubicky-kraj", nazev: "Pardubický kraj" },
+  { slug: "kraj-vysocina", nazev: "Kraj Vysočina" },
+  { slug: "jihomoravsky-kraj", nazev: "Jihomoravský kraj" },
+  { slug: "olomoucky-kraj", nazev: "Olomoucký kraj" },
+  { slug: "zlinsky-kraj", nazev: "Zlínský kraj" },
+  { slug: "moravskoslezsky-kraj", nazev: "Moravskoslezský kraj" },
+];
+
+export const nazevKraje = (slug: string) =>
+  KRAJE.find((k) => k.slug === slug)?.nazev ?? slug;

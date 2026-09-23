@@ -6,7 +6,7 @@ import { useState } from "react";
 import { saveProperty, type FormState } from "@/lib/actions";
 import { Card } from "./Stat";
 import { Pole } from "./form";
-import { NEMOVITOST_MAP, TYPY_NEMOVITOSTI } from "@/lib/catalogs";
+import { KRAJE, NEMOVITOST_MAP, TYPY_NEMOVITOSTI } from "@/lib/catalogs";
 import { AdresaNaseptavac, type Navrh } from "./AdresaNaseptavac";
 import { Mapa } from "./Mapa";
 
@@ -113,9 +113,25 @@ export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik 
           <Field label="Městská část / katastr" name="district" value={adresa.district} onChange={zmen("district")}
             hint="Používá se pro srovnání s trhem" errors={state.fieldErrors} />
 
+          <div>
+            <label className="label mb-1.5 block" htmlFor="region">Kraj</label>
+            <select
+              id="region"
+              name="region"
+              value={adresa.region}
+              onChange={(e) => setAdresa((a) => ({ ...a, region: e.target.value }))}
+              className="input"
+            >
+              <option value="">— nevyplněno —</option>
+              {KRAJE.map((k) => <option key={k.slug} value={k.slug}>{k.nazev}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-ink-muted">
+              Záloha pro malé obce, které na Sreality vlastní výpis nemají. Našeptávač ho vyplní sám.
+            </p>
+          </div>
+
           <input type="hidden" name="latitude" value={adresa.latitude ?? ""} />
           <input type="hidden" name="longitude" value={adresa.longitude ?? ""} />
-          <input type="hidden" name="region" value={adresa.region} />
 
           <div className="sm:col-span-2">
             <Mapa latitude={adresa.latitude} longitude={adresa.longitude} onZmena={zMapy} />
