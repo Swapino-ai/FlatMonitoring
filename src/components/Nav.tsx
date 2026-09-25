@@ -14,10 +14,9 @@ const LINKS = [
   { href: "/reports", label: "Reporty" },
 ];
 
-const OWNER_LINKS = [
-  { href: "/provoz", label: "Provoz" },
-  { href: "/users", label: "Uživatelé" },
-];
+// Uzivatele i provoz jsou schovane pod Spravou — v hlavnim menu by stinily
+// tomu, kvuli cemu se do aplikace chodi
+const OWNER_LINKS = [{ href: "/sprava", label: "Správa" }];
 
 export function Nav({ user, verze }: { user: { name: string; role: string }; verze?: ReactNode }) {
   const pathname = usePathname();

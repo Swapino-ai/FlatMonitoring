@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "./db";
 import { getSession } from "./auth";
-import { prepocitejPoVyrazeni } from "./market";
+import { prepocitejPoVyrazeni, rozdelMesta } from "./market";
 
 const numberish = (fallback = 0) =>
   z.preprocess((v) => {
@@ -175,4 +175,87 @@ export async function prepniVyrazeni(
   revalidatePath(`/properties/${propertyId}`);
   revalidatePath("/");
   revalidatePath("/properties");
+}
+
+/** Co se ma pri uklidu smazat. */
+export type RozsahUklidu = "vse" | "nesouvisejici";
+
+export interface VysledekUklidu {
+  oceneni: number;
+  najmy: number;
+  nabidky: number;
+  skeny: number;
+  denik: number;
+}
+
+/**
+ * Uklid dat z trhu.
+ *
+ * "vse" smaze vsechny odhady i stazene nabidky — hodi se, kdyz se zmenila
+ * pravidla srovnavani a stara data uz jen matou. Rucne zadana oceneni
+ * zustavaji vzdy: ta aplikace nevyrobila a nema pravo je zahodit.
+ *
+ * "nesouvisejici" nechá data, ktera k necemu patri, a smaze zbytek: nabidky
+ * z obci, ktere si uzivatel u sve nemovitosti zakazal, nabidky z kategorii
+ * a mest, ktera uz zadna nemovitost nema, a odhady po smazanych jednotkach.
+ */
+export async function uklidTrznichDat(rozsah: RozsahUklidu): Promise<VysledekUklidu> {
+  const user = await getSession();
+  if (!user || user.role !== "OWNER") throw new Error("Nedostatečné oprávnění");
+
+  const vysledek: VysledekUklidu = { oceneni: 0, najmy: 0, nabidky: 0, skeny: 0, denik: 0 };
+
+  if (rozsah === "vse") {
+    // Rucni a znalecka oceneni nechavame — aplikace je nevyrobila
+    vysledek.oceneni = (await prisma.valuation.deleteMany({ where: { source: "MARKET_SCAN" } })).count;
+    vysledek.najmy = (await prisma.rentEstimate.deleteMany({ where: { source: "MARKET_SCAN" } })).count;
+    vysledek.nabidky = (await prisma.marketListing.deleteMany({})).count;
+    vysledek.skeny = (await prisma.marketScan.deleteMany({})).count;
+    revalidatePath("/");
+    revalidatePath("/properties");
+    revalidatePath("/market");
+    return vysledek;
+  }
+
+  const nemovitosti = await prisma.property.findMany({
+    select: { id: true, city: true, type: true, excludedCities: true },
+  });
+
+  // Nabidky z obci, ktere si uzivatel zakazal, uz do zadneho odhadu nevstoupi
+  const zakazane = new Set<string>();
+  for (const p of nemovitosti) {
+    for (const m of rozdelMesta(p.excludedCities)) zakazane.add(m.toLowerCase());
+  }
+  if (zakazane.size > 0) {
+    const kandidati = await prisma.marketListing.findMany({ select: { id: true, city: true, district: true } });
+    const kSmazani = kandidati
+      .filter((n) => {
+        const kde = `${n.city} ${n.district ?? ""}`.toLowerCase();
+        return [...zakazane].some((z) => kde.includes(z));
+      })
+      .map((n) => n.id);
+    if (kSmazani.length > 0) {
+      vysledek.nabidky += (await prisma.marketListing.deleteMany({ where: { id: { in: kSmazani } } })).count;
+    }
+  }
+
+  // Nabidky v kategoriich, ktere uz zadna nemovitost nema
+  const kategorie = [...new Set(nemovitosti.map((p) => p.type))];
+  vysledek.nabidky += (await prisma.marketListing.deleteMany({
+    where: { category: { notIn: kategorie.length ? kategorie : ["—"] } },
+  })).count;
+
+  // Skeny, po kterych uz nezbyla zadna nabidka
+  vysledek.skeny = (await prisma.marketScan.deleteMany({ where: { listings: { none: {} } } })).count;
+
+  // Denik starsi 30 dnu — provozni zaznam, ne data
+  const hranice = new Date();
+  hranice.setDate(hranice.getDate() - 30);
+  vysledek.denik = (await prisma.scanRun.deleteMany({ where: { startedAt: { lt: hranice } } })).count;
+
+  revalidatePath("/");
+  revalidatePath("/properties");
+  revalidatePath("/market");
+  revalidatePath("/sprava");
+  return vysledek;
 }
