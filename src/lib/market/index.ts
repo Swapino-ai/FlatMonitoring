@@ -132,58 +132,78 @@ export async function prepocitejPoVyrazeni(propertyId: string): Promise<{
     hodnota: null, najem: null, vyrazeno: vyloucene.size,
   };
 
-  const oceneni = await prisma.valuation.findFirst({
-    where: { propertyId, source: "MARKET_SCAN" },
-    orderBy: { date: "desc" },
-  });
   // Rucni vyber je rozhodnuti uzivatele, ne statisticky vzorek. Kdyz nechal
   // jedinou nabidku, protoze zna mistni trh, je to jeho odpovednost — nemame
   // duvod mu do toho mluvit. Bez zasahu drzime minimum tri.
   const minimum = vyloucene.size > 0 ? 1 : 3;
 
-  if (oceneni) {
-    const ceny = zbyleCeny(oceneni.comparables);
+  // --- Odhad hodnoty ---
+  // Puvodni zaver skenu nikdy neprepisujeme: korekce je samostatny zaznam,
+  // aby v historii zustalo videt "sken rekl X, po me korekci Y". Opakovane
+  // klikani ale historii nezaplavi — uprava se drzi v jedinem zaznamu.
+  const rucniOceneni = await prisma.valuation.findFirst({
+    where: { propertyId, confidence: "RUCNI" },
+    orderBy: { date: "desc" },
+  });
+  const skenOceneni = await prisma.valuation.findFirst({
+    where: { propertyId, source: "MARKET_SCAN", confidence: { not: "RUCNI" } },
+    orderBy: { date: "desc" },
+  });
+
+  if (vyloucene.size === 0) {
+    // Vsechny nabidky vraceny — korekce uz nema smysl a plati zase sken
+    if (rucniOceneni) await prisma.valuation.delete({ where: { id: rucniOceneni.id } });
+  } else if (skenOceneni) {
+    const ceny = zbyleCeny(skenOceneni.comparables);
     if (ceny.length >= minimum) {
       const zaM2 = quantile(ceny, 0.5);
       const hodnota = Math.round(zaM2 * p.areaM2);
-      await prisma.valuation.update({
-        where: { id: oceneni.id },
-        data: {
-          value: hodnota,
-          pricePerM2: zaM2,
-          sampleSize: ceny.length,
-          confidence: vyloucene.size > 0 ? "RUCNI" : spolehlivost(ceny.length),
-          // Snimek zamerne nechavame, jak byl — je to doklad
-          notes: vyloucene.size > 0
-            ? `${oceneni.notes?.split(" Ručně upraveno")[0].split(" Přepočítáno")[0] ?? ""} Ručně upraveno — počítáno z ${ceny.length} ${ceny.length === 1 ? "vybrané nabídky" : "vybraných nabídek"}, ${vyloucene.size} vyřazeno.`.trim()
-            : `${oceneni.notes?.split(" Ručně upraveno")[0].split(" Přepočítáno")[0] ?? ""}`.trim(),
-        },
-      });
+      const data = {
+        propertyId,
+        value: hodnota,
+        pricePerM2: zaM2,
+        source: "MARKET_SCAN",
+        confidence: "RUCNI",
+        sampleSize: ceny.length,
+        // Snimek prebirame ze skenu — doklad musi zustat i u korekce
+        comparables: skenOceneni.comparables as Prisma.InputJsonValue,
+        notes: `Ručně upraveno — počítáno z ${ceny.length} ${ceny.length === 1 ? "vybrané nabídky" : "vybraných nabídek"}, ${vyloucene.size} vyřazeno. Sken bez korekce: ${skenOceneni.value.toLocaleString("cs-CZ")} Kč.`,
+      };
+      if (rucniOceneni) await prisma.valuation.update({ where: { id: rucniOceneni.id }, data });
+      else await prisma.valuation.create({ data });
       vysledek.hodnota = hodnota;
     }
   }
 
-  const najem = await prisma.rentEstimate.findFirst({
-    where: { propertyId, source: "MARKET_SCAN" },
+  // --- Odhad najmu, stejnym pravidlem ---
+  const rucniNajem = await prisma.rentEstimate.findFirst({
+    where: { propertyId, confidence: "RUCNI" },
     orderBy: { date: "desc" },
   });
-  if (najem) {
-    const ceny = zbyleCeny(najem.comparables);
+  const skenNajem = await prisma.rentEstimate.findFirst({
+    where: { propertyId, source: "MARKET_SCAN", confidence: { not: "RUCNI" } },
+    orderBy: { date: "desc" },
+  });
+
+  if (vyloucene.size === 0) {
+    if (rucniNajem) await prisma.rentEstimate.delete({ where: { id: rucniNajem.id } });
+  } else if (skenNajem) {
+    const ceny = zbyleCeny(skenNajem.comparables);
     if (ceny.length >= 1) {
       const zaM2 = quantile(ceny, 0.5);
       const mesicne = Math.round(zaM2 * p.areaM2);
-      await prisma.rentEstimate.update({
-        where: { id: najem.id },
-        data: {
-          monthlyRent: mesicne,
-          rentPerM2: zaM2,
-          sampleSize: ceny.length,
-          confidence: vyloucene.size > 0 ? "RUCNI" : spolehlivost(ceny.length),
-          notes: vyloucene.size > 0
-            ? `${najem.notes?.split(" Ručně upraveno")[0].split(" Přepočítáno")[0] ?? ""} Ručně upraveno — počítáno z ${ceny.length} ${ceny.length === 1 ? "vybrané nabídky" : "vybraných nabídek"}, ${vyloucene.size} vyřazeno.`.trim()
-            : `${najem.notes?.split(" Ručně upraveno")[0].split(" Přepočítáno")[0] ?? ""}`.trim(),
-        },
-      });
+      const data = {
+        propertyId,
+        monthlyRent: mesicne,
+        rentPerM2: zaM2,
+        source: "MARKET_SCAN",
+        confidence: "RUCNI",
+        sampleSize: ceny.length,
+        comparables: skenNajem.comparables as Prisma.InputJsonValue,
+        notes: `Ručně upraveno — počítáno z ${ceny.length} ${ceny.length === 1 ? "vybrané nabídky" : "vybraných nabídek"}, ${vyloucene.size} vyřazeno. Sken bez korekce: ${skenNajem.monthlyRent.toLocaleString("cs-CZ")} Kč/měs.`,
+      };
+      if (rucniNajem) await prisma.rentEstimate.update({ where: { id: rucniNajem.id }, data });
+      else await prisma.rentEstimate.create({ data });
       vysledek.najem = mesicne;
     }
   }
