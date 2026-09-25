@@ -19,6 +19,7 @@ type Values = Partial<{
   renovationCosts: number; landShareValue: number; depreciationGroup: number;
   depreciationMethod: string; status: string; notes: string | null;
   latitude: number | null; longitude: number | null; region: string | null;
+  scanRadiusKm: number | null; excludedCities: string | null;
 }>;
 
 export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik }: {
@@ -143,6 +144,21 @@ export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik 
           </div>
           <Field label="Číslo jednotky v KN" name="cadastralNo" defaultValue={v.cadastralNo ?? ""} errors={state.fieldErrors} />
         </div>
+      </Card>
+
+      <Card title="Srovnávání s trhem">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Okruh hledání (km)" name="scanRadiusKm" type="number" step="0.5" min="0.5"
+            defaultValue={v.scanRadiusKm ?? ""} errors={state.fieldErrors}
+            hint="Prázdné = automaticky podle druhu, s rozšiřováním až do dostatku nabídek. Zadané číslo se nerozšiřuje." />
+          <Field label="Nezapočítávat obce" name="excludedCities" defaultValue={v.excludedCities ?? ""}
+            errors={state.fieldErrors}
+            hint="Oddělené čárkou, např. „Roudnice nad Labem, Lovosice“. Nabídky odtud se k této jednotce nepřičtou." />
+        </div>
+        <p className="mt-3 rounded-lg bg-surface-sunken px-3 py-2.5 text-xs text-ink-secondary">
+          Odhad postavený výhradně na nabídkách z téže obce se označí jako <strong>kvalifikovaný</strong>.
+          Je to nejsilnější doklad, jaký z nabídkových cen jde postavit.
+        </p>
       </Card>
 
       {katalog?.upozorneni && (

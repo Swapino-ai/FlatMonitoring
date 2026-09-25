@@ -72,6 +72,12 @@ export function ValuationManager({ propertyId, valuations, areaM2, canEdit, vyra
                           ručně upraveno
                         </span>
                       )}
+                      {v.confidence === "KVALIFIKOVANY" && (
+                        <span className="ml-1.5 rounded bg-good/15 px-1.5 py-0.5 text-[10px] font-medium text-good"
+                          title="Všechny srovnatelné nabídky jsou přímo z této obce">
+                          kvalifikovaný
+                        </span>
+                      )}
                       {v.notes && <div className="text-xs text-ink-muted">{v.notes}</div>}
                       {nabidky.length > 0 && (
                         <button onClick={() => setOtevrene(rozbaleno ? null : v.id)}

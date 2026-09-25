@@ -205,6 +205,12 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                         ručně upraveno
                       </span>
                     )}
+                    {v?.confidence === "KVALIFIKOVANY" && (
+                      <span className="ml-1.5 rounded bg-good/15 px-1.5 py-0.5 text-[10px] font-medium text-good"
+                        title="Všechny srovnatelné nabídky jsou přímo z této obce">
+                        kvalifikovaný odhad
+                      </span>
+                    )}
                   </>
                 )}
                 <span className="ml-2 block font-medium text-ink-primary sm:ml-0 sm:mt-0.5">
@@ -285,8 +291,10 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
               <>
                 <Mapa latitude={property.latitude} longitude={property.longitude} vyskaTrida="h-48 lg:h-56" />
                 <p className="mt-2 text-xs text-ink-muted">
-                  Podle téhle polohy se hledá srovnání — od {okruhProTyp(property.type)} km dál,
-                  dokud není dost nabídek.
+                  {property.scanRadiusKm
+                    ? `Srovnání se hledá v pevném okruhu ${property.scanRadiusKm} km.`
+                    : `Podle téhle polohy se hledá srovnání — od ${okruhProTyp(property.type)} km dál, dokud není dost nabídek.`}
+                  {property.excludedCities && ` Nezapočítává se: ${property.excludedCities}.`}
                 </p>
               </>
             ) : (

@@ -76,6 +76,13 @@ export interface ComparableStats {
   listings: SrovnatelnaNabidka[];
   /** Kolik nabidek uzivatel z odhadu vyradil. */
   vyloucenoUzivatelem: number;
+  /**
+   * Odhad stoji jen na nabidkach ze stejne obce. To je nejsilnejsi doklad,
+   * jaky z nabidkovych cen jde postavit — proto "kvalifikovany".
+   */
+  kvalifikovany: boolean;
+  /** Kolik z pouzitych nabidek je primo z obce nemovitosti. */
+  zObce: number;
   /** V jakem okruhu se nakonec hledalo. Null = hledalo se podle mesta. */
   okruhKm: number | null;
   /**
@@ -348,6 +355,11 @@ export async function diagnostikaOceneni(propertyId: string, dealType: "SALE" | 
   return kroky;
 }
 
+/** "Roudnice, Lovosice" → ["Roudnice", "Lovosice"] */
+export function rozdelMesta(seznam: string | null | undefined): string[] {
+  return (seznam ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+}
+
 /** Nabidky, ktere uzivatel u teto nemovitosti z odhadu vyradil. */
 export async function nactiVyloucene(propertyId: string): Promise<Set<string>> {
   const r = await prisma.excludedListing.findMany({
@@ -404,6 +416,11 @@ export async function comparableStats(opts: {
   /** Kraj — záchrana pro nemovitost bez souřadnic, když se skenoval kraj. */
   region?: string | null;
   /**
+   * Obce, ze kterých se nabídky nepřičítají. Byt v Bohušovicích se nemá
+   * poměřovat s Roudnicí, i když je blízko.
+   */
+  vyloucenaMesta?: string[];
+  /**
    * Nabídky, které uživatel z odhadu vyřadil, ve tvaru "ZDROJ|externiId".
    * Nejbližší nabídka nemusí být srovnatelná a rozhodnout to umí jen člověk,
    * který to místo zná.
@@ -430,6 +447,8 @@ export async function comparableStats(opts: {
     : null;
   // Pevny okruh jen kdyz si ho nekdo vyslovne vyzada; jinak zacneme u toho
   // nejuzsiho a rozsirujeme, dokud neni z ceho pocitat.
+  // Rucne zadany okruh se nerozsiruje — kdo ho nastavi, vi proc. Bez nej
+  // zacneme u nejuzsiho pro dany druh a rozsirujeme, dokud neni dost vzorku.
   const kroky = opts.okruhKm ? [opts.okruhKm] : okruhyProTyp(opts.category ?? "BYT");
   const nejsirsi = kroky[kroky.length - 1];
   // Stahneme jednou v nejsirsi obalce a zuzujeme az v pameti — opakovane
@@ -461,7 +480,7 @@ export async function comparableStats(opts: {
     },
     select: {
       externalId: true, pricePerM2: true, price: true, areaM2: true, disposition: true,
-      district: true, url: true, source: true, scrapedAt: true,
+      city: true, district: true, url: true, source: true, scrapedAt: true,
       latitude: true, longitude: true,
     },
     orderBy: { scrapedAt: "desc" },
@@ -470,8 +489,20 @@ export async function comparableStats(opts: {
   // Kazdy sken uklada nove radky, takze tataz nabidka lezi v tabulce tolikrat,
   // kolikrat sken bezel — a do medianu by vstupovala tolikrat taky. Bereme
   // z kazde nabidky jen nejnovejsi zaznam (dotaz je razeny od nejnovejsiho).
+  // Porovnavame bez diakritiky a velikosti pismen — uzivatel napise "roudnice"
+  // i "Roudnice nad Labem" a obojí má zabrat
+  const zakazane = (opts.vyloucenaMesta ?? [])
+    .map((m) => m.trim().toLowerCase())
+    .filter(Boolean);
+  const jeZakazane = (mesto: string | null, ctvrt: string | null) => {
+    if (zakazane.length === 0) return false;
+    const kde = `${mesto ?? ""} ${ctvrt ?? ""}`.toLowerCase();
+    return zakazane.some((z) => kde.includes(z));
+  };
+
   const videne = new Set<string>();
   const vsechny = rows.filter((r) => {
+    if (jeZakazane(r.city, r.district)) return false;
     // Vyrazene nabidky do odhadu nevstupuji vubec
     if (r.externalId && opts.vyloucene?.has(`${r.source}|${r.externalId}`)) {
       pocetPredVyrazenim.hodnota++;
@@ -537,11 +568,16 @@ export async function comparableStats(opts: {
 
   if (unikatni.length < minimum) return null;
 
+  // Shoda nazvu obce, ne vzdalenost: uzivatel mysli "v mem meste", ne "do 3 km"
+  const zObce = unikatni.filter((r) => r.city?.toLowerCase() === opts.city.toLowerCase()).length;
+
   const perM2 = unikatni.map((r) => r.pricePerM2!).sort((a, b) => a - b);
   const prices = unikatni.map((r) => r.price).sort((a, b) => a - b);
 
   return {
     count: unikatni.length,
+    kvalifikovany: zObce === unikatni.length && unikatni.length >= 3,
+    zObce,
     vyloucenoUzivatelem: pocetPredVyrazenim.hodnota,
     okruhKm: pouzityOkruh,
     vychoziOkruhKm: stred ? kroky[0] : null,
@@ -601,6 +637,8 @@ export async function valuateFromMarket(
     district: p.district,
     dealType: "SALE",
     vyloucene,
+    okruhKm: p.scanRadiusKm ?? undefined,
+    vyloucenaMesta: rozdelMesta(p.excludedCities),
     // Rucni vyber respektujeme i pri nocnim skenu — jinak by odhad znovu
     // spadl na "malo nabidek" a uzivateluv zasah by prisel vnivec
     minVzorek: vyloucene.size > 0 ? 1 : 3,
@@ -637,7 +675,11 @@ export async function valuateFromMarket(
       value,
       pricePerM2: stats.medianPricePerM2,
       source: "MARKET_SCAN",
-      confidence: spolehlivost(stats.count, stats.okruhKm, stats.vychoziOkruhKm, stats.dispoziceUvolnena),
+      // Nabidky vyhradne z teto obce jsou nejsilnejsi doklad, jaky z nabidkovych
+      // cen jde postavit — at je to na oceneni videt
+      confidence: stats.kvalifikovany
+        ? "KVALIFIKOVANY"
+        : spolehlivost(stats.count, stats.okruhKm, stats.vychoziOkruhKm, stats.dispoziceUvolnena),
       sampleSize: stats.count,
       // Snimek necháváme u oceneni — inzeraty z trhu casem zmizi, doklad musi zustat
       comparables: stats.listings as unknown as Prisma.InputJsonValue,
@@ -675,14 +717,19 @@ function spolehlivost(pocet: number, okruhKm?: number | null, vychozi?: number |
 
 /** Doveta o okruhu do poznamky — at je z historie poznat, odkud se bralo. */
 function okruhPopis(stats: ComparableStats): string {
+  const obec = stats.kvalifikovany
+    ? " Všechny nabídky jsou přímo z této obce — kvalifikovaný odhad."
+    : stats.zObce > 0
+      ? ` Z toho ${stats.zObce} přímo z obce.`
+      : "";
   const dispozice = stats.dispoziceUvolnena
     ? " Se stejnou dispozicí se nic nenašlo, porovnává se jen podle plochy."
     : "";
-  if (stats.okruhKm == null) return dispozice;
+  if (stats.okruhKm == null) return dispozice + obec;
   const siroky = stats.vychoziOkruhKm != null && stats.okruhKm > stats.vychoziOkruhKm;
   return (siroky
     ? ` Okruh rozšířen na ${stats.okruhKm} km, protože blíž nebylo dost nabídek.`
-    : ` Okruh ${stats.okruhKm} km.`) + dispozice;
+    : ` Okruh ${stats.okruhKm} km.`) + dispozice + obec;
 }
 
 export async function odhadniNajemPriZmene(
@@ -699,6 +746,8 @@ export async function odhadniNajemPriZmene(
     district: p.district,
     dealType: "RENT",
     vyloucene,
+    okruhKm: p.scanRadiusKm ?? undefined,
+    vyloucenaMesta: rozdelMesta(p.excludedCities),
     category: p.type,
     latitude: p.latitude,
     longitude: p.longitude,
@@ -743,7 +792,9 @@ export async function odhadniNajemPriZmene(
       p75: stats.p75,
       source: "MARKET_SCAN",
       sampleSize: stats.count,
-      confidence: spolehlivost(stats.count, stats.okruhKm, stats.vychoziOkruhKm, stats.dispoziceUvolnena),
+      confidence: stats.kvalifikovany
+        ? "KVALIFIKOVANY"
+        : spolehlivost(stats.count, stats.okruhKm, stats.vychoziOkruhKm, stats.dispoziceUvolnena),
       comparables: stats.listings as unknown as Prisma.InputJsonValue,
       notes: (stats.count < 3
         ? `Jen ${stats.count === 1 ? "jediná nabídka" : `${stats.count} nabídky`} — na odhad je to málo, ber to jako ukázku trhu, ne jako cenu.`

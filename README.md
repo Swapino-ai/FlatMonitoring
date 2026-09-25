@@ -322,6 +322,21 @@ výš; to je přijatelnější než chytré výjimky, kterým pak nikdo nerozum�
 Rozšíření se nezamlčuje: sníží uvedenou spolehlivost a karta konkurenčních
 nabídek napíše, na kolik kilometrů se muselo jít.
 
+### Nastavení srovnávání u jednotky
+
+Automatika nemusí sedět všude, proto jde u každé nemovitosti nastavit:
+
+- **Okruh hledání v km.** Prázdné = automaticky podle druhu s rozšiřováním.
+  Zadané číslo se **nerozšiřuje** — kdo ho nastaví, ví proč.
+- **Nezapočítávat obce.** Seznam oddělený čárkou, např. „Roudnice nad Labem,
+  Lovosice“. Byt v Bohušovicích se nemá poměřovat s Roudnicí, i když je blízko.
+  Porovnává se bez ohledu na velikost písmen a stačí část názvu.
+
+Odhad postavený **výhradně na nabídkách z téže obce** se označí jako
+**kvalifikovaný** — zeleným odznakem u hodnoty i v historii ocenění. Je to
+nejsilnější doklad, jaký z nabídkových cen jde postavit; všechno ostatní je
+odhad slepený z okolí a je rozdíl to vědět.
+
 U nemovitosti bez souřadnic (založené dřív, nebo s ručně psanou adresou) se
 srovnává postaru podle města a čtvrti. Stačí ji otevřít v úpravách a adresu
 vybrat z našeptávače.

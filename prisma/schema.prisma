@@ -81,6 +81,15 @@ model Property {
   /// 404). Okres neexistuje v zadnem tvaru — overeno sondou.
   region      String?
 
+  /// Okruh pro hledani srovnatelnych nabidek v km. Null = automaticky podle
+  /// druhu nemovitosti s rozsirovanim, dokud neni dost vzorku. Rucne zadany
+  /// okruh se nerozsiruje — kdo ho nastavi, vi proc.
+  scanRadiusKm Float?
+
+  /// Obce, ze kterych se nabidky k teto jednotce nepricitaji, oddelene carkou.
+  /// Byt v Bohusovicich se nema poměřovat s Roudnici, i kdyz je blizko.
+  excludedCities String?
+
   // --- Porizeni ---
   purchaseDate     DateTime
   purchasePrice    Float // kupni cena jednotky
