@@ -27,6 +27,34 @@ async function zkus(cesta: string, hlavicky: Record<string, string> = {}) {
   }
 }
 
+/** Ze stranky udela cisty text, at je v logu videt, co je na ni napsano. */
+function text(html: string) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Vypise endpointy z OpenAPI specifikace. */
+function vypisSpecifikaci(telo: string): boolean {
+  try {
+    const j = JSON.parse(telo) as { paths?: Record<string, Record<string, unknown>> };
+    if (!j.paths) return false;
+    console.log("  SPECIFIKACE, endpointy:");
+    for (const [cesta, metody] of Object.entries(j.paths)) {
+      console.log(`    ${Object.keys(metody).join(",").toUpperCase()} ${cesta}`);
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Popis sluzby a hledani strojove citelne specifikace. */
 async function krok1() {
   console.log("\n=== 1. Popis služby a specifikace ===");
@@ -40,19 +68,22 @@ async function krok1() {
     const v = await zkus(c);
     console.log(`\n[${v.status}] ${v.url}  (${v.typ})`);
 
-    if (v.typ.includes("json") && v.telo.startsWith("{")) {
-      try {
-        const j = JSON.parse(v.telo) as { paths?: Record<string, Record<string, unknown>> };
-        if (j.paths) {
-          console.log("  NALEZENA SPECIFIKACE, endpointy:");
-          for (const [cesta, metody] of Object.entries(j.paths)) {
-            console.log(`    ${Object.keys(metody).join(",").toUpperCase()} ${cesta}`);
-          }
-          continue;
-        }
-      } catch { /* neni JSON, vypise se jako text */ }
-    }
-    console.log(`  ${zkratka(v.telo, 400)}`);
+    if (v.telo.startsWith("{") && vypisSpecifikaci(v.telo)) continue;
+    console.log(`  ${zkratka(text(v.telo), c === "/Popis" ? 4000 : 500)}`);
+  }
+
+  // Swagger UI si adresu specifikace bere z initializeru — odtud se dozvime,
+  // kde specifikace opravdu lezi
+  console.log("\n--- adresa specifikace ze Swagger UI ---");
+  const init = await zkus("/swagger/swagger-initializer.js");
+  console.log(`[${init.status}] ${init.url}`);
+  console.log(`  ${zkratka(init.telo, 800)}`);
+
+  for (const m of init.telo.matchAll(/["']([^"']*\.(?:json|yaml|yml))["']/g)) {
+    const adresa = m[1].startsWith("http") ? m[1] : new URL(m[1], `${ZAKLAD}/swagger/`).toString();
+    const spec = await zkus(adresa);
+    console.log(`\n[${spec.status}] ${spec.url}`);
+    if (!vypisSpecifikaci(spec.telo)) console.log(`  ${zkratka(spec.telo, 600)}`);
   }
 }
 
