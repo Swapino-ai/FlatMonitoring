@@ -56,31 +56,36 @@ export function UklidDat({ pocty }: {
       <div className="grid gap-3 sm:grid-cols-2">
         <button type="button" onClick={() => { setRezim("nesouvisejici"); setVysledek(null); }}
           className={`btn ${rezim === "nesouvisejici" ? "border-accent text-accent" : ""}`}>
-          Smazat nesouvisející
+          Uklidit balast
         </button>
         <button type="button" onClick={() => { setRezim("vse"); setVysledek(null); }}
           className={`btn ${rezim === "vse" ? "border-bad text-bad" : ""}`}>
-          Smazat všechna data z trhu
+          Smazat historii odhadů
         </button>
       </div>
 
-      <p className="text-xs text-ink-muted">
-        <strong>Nesouvisející</strong> nechá, co k něčemu patří: smaže nabídky z obcí, které sis
-        u nemovitostí zakázal, nabídky v kategoriích, které už žádná nemovitost nemá, skeny
-        bez nabídek a provozní deník starší 30 dnů.
-        <br />
-        <strong>Všechna data z trhu</strong> smažou i ocenění, odhady nájmu ze skenu a seznam
-        ručně vyřazených nabídek — ten by jinak odkazoval na inzeráty, které už v databázi
-        nejsou. Hodí se, když se změnila pravidla srovnávání a stará čísla už jen matou;
-        nová vzniknou při nejbližším skenu.
-      </p>
+      <div className="space-y-2 text-xs text-ink-muted">
+        <p>
+          <strong className="text-ink-primary">Uklidit balast</strong> — smaže jen to, co už
+          k ničemu není: nabídky z obcí, které sis u nemovitostí zakázal, nabídky v kategoriích,
+          které nemáš (domy, když vlastníš byty a garáže), skeny bez jediné nabídky a provozní
+          deník starší 30 dnů. <strong className="text-ink-primary">Odhady a ocenění zůstávají
+          celé</strong>, stejně jako nabídky, ze kterých vznikly, i tvoje ruční vyřazení.
+        </p>
+        <p>
+          <strong className="text-ink-primary">Smazat historii odhadů</strong> — vrátí trh na
+          nulu: všechna ocenění a odhady nájmu ze skenu, všechny stažené nabídky a seznam ručně
+          vyřazených. Hodí se, když se změnila pravidla srovnávání a stará čísla už jen matou.
+          Nová vzniknou při nejbližším skenu. Ruční a znalecká ocenění zůstávají.
+        </p>
+      </div>
 
       {rezim && (
         <div className={`rounded-card border p-4 ${rezim === "vse" ? "border-bad/40 bg-bad/5" : "border-accent/40 bg-accent/5"}`}>
           <p className="text-sm">
             {rezim === "vse"
               ? `Smaže se ${pocty.oceneni} ocenění, ${pocty.najmy} odhadů nájmu, ${pocty.nabidky} nabídek, ${pocty.skeny} skenů a ${pocty.vyrazene} ručně vyřazených nabídek.`
-              : "Smažou se jen nabídky a záznamy, které už do žádného odhadu nevstupují."}
+              : `Smažou se jen nabídky a záznamy, které už do žádného odhadu nevstupují. Historie odhadů (${pocty.oceneni} ocenění, ${pocty.najmy} nájmů) zůstává.`}
             {" "}Vrátit to nejde — zálohu si stáhneš v Reportech.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
