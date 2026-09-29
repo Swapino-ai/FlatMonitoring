@@ -322,6 +322,22 @@ výš; to je přijatelnější než chytré výjimky, kterým pak nikdo nerozum�
 Rozšíření se nezamlčuje: sníží uvedenou spolehlivost a karta konkurenčních
 nabídek napíše, na kolik kilometrů se muselo jít.
 
+### Jak vzniká odhad
+
+Postup je popsaný v aplikaci na stránce **Ocenění a trh** u každé nemovitosti,
+v kartě *Jak odhad vzniká*. Text se čte z `src/lib/market/pravidla.ts`, tedy
+ze stejného místa, odkud si čísla bere kód — popis tak nemůže zestárnout proti
+skutečnosti.
+
+Ve zkratce: stáhnou se nabídky podle obce a druhu (u malých obcí celý kraj),
+vyřadí se nesrovnatelné podle plochy a dispozice, určí se nejužší okruh s
+dostatkem vzorku, spočítá se medián ceny za m² a vynásobí tvojí plochou.
+Označí se spolehlivost a do historie se zapíše jen změna.
+
+Detail nemovitosti tuhle mašinerii neukazuje — jsou tam jen výsledná čísla
+a odkaz. Kdo řeší, proč odhad vyšel takhle, jde na stránku trhu; kdo chce
+vidět výkonnost, zůstane v detailu.
+
 ### Nastavení srovnávání u jednotky
 
 Automatika nemusí sedět všude, proto jde u každé nemovitosti nastavit:

@@ -5,16 +5,11 @@ import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { AmortizationChart } from "@/components/charts";
-import { ValuationManager } from "@/components/ValuationManager";
 import { Napoveda } from "@/components/Napoveda";
 import { LoanManager } from "@/components/LoanManager";
 import { LeaseManager } from "@/components/LeaseManager";
-import { RentHistory } from "@/components/RentHistory";
-import { RentScanButton } from "@/components/RentScanButton";
 import { Mapa } from "@/components/Mapa";
 import { Hero, Kondice, type Kontrola } from "@/components/Kondice";
-import { VyrazeneNabidky } from "@/components/VyrazeneNabidky";
-import { NabidkyVOkoli } from "@/components/NabidkyVOkoli";
 import { ServiceManager } from "@/components/ServiceManager";
 import { TransactionManager } from "@/components/TransactionManager";
 import { analyzeProperty, loadProperty } from "@/lib/portfolio";
@@ -29,7 +24,6 @@ import { categoryLabel, SERVICE_TYPES } from "@/lib/categories";
 import { czk, czkCompact, dateCz, num, pct, STATUS_LABELS } from "@/lib/format";
 import { NEMOVITOST_MAP, nazevNemovitosti } from "@/lib/catalogs";
 import { okruhProTyp } from "@/lib/geo";
-import { diagnostikaOceneni, nabidkyVOkoli } from "@/lib/market";
 
 export const dynamic = "force-dynamic";
 
@@ -61,40 +55,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     method: property.depreciationMethod as "STRAIGHT" | "ACCELERATED",
     startYear: property.depreciationStart ?? new Date(property.purchaseDate).getFullYear(),
   });
-
-  // Když ocenění chybí, chceme umět říct proč — hádat "asi málo nabídek" je
-  // k ničemu, když skutečná příčina je chybějící poloha nebo kraj.
-  const duvodBezOceneni = property.valuations.length > 0 ? null : await (async () => {
-    const maPolohu = property.latitude != null && property.longitude != null;
-    if (!NEMOVITOST_MAP.get(property.type)?.srealityCesta) {
-      return `Tenhle druh nemovitosti se na Sreality neskenuje — hodnotu zadej ručně.`;
-    }
-    const od = new Date();
-    od.setDate(od.getDate() - 60);
-    const vObci = await prisma.marketListing.count({
-      where: { dealType: "SALE", category: property.type, scrapedAt: { gte: od }, city: property.city },
-    });
-    const vKraji = property.region
-      ? await prisma.marketListing.count({
-          where: { dealType: "SALE", category: property.type, scrapedAt: { gte: od }, region: property.region },
-        })
-      : 0;
-
-    if (vObci + vKraji === 0) {
-      return "Sken zatím pro tenhle druh nemovitosti nic nenašel. Spusť sken trhu, nebo zadej hodnotu ručně.";
-    }
-    if (!maPolohu && !property.region) {
-      return `Nabídky v databázi jsou (${vObci + vKraji}), ale nejde je spárovat: nemovitost nemá uloženou polohu ani kraj. `
-        + "Otevři úpravy, vyber adresu z našeptávače — doplní se obojí.";
-    }
-    if (!maPolohu && vKraji > 0 && vObci === 0) {
-      return `Nabídky jsou jen z okolí kraje (${vKraji}), ne přímo z obce. Bez souřadnic je k nemovitosti nepřiřadíme — `
-        + "vyber adresu z našeptávače a spusť sken znovu.";
-    }
-    return `Sken proběhl a v okolí je ${vObci + vKraji} nabídek, ale po zúžení na srovnatelnou plochu `
-      + "a dispozici jich zbyly míň než tři. Medián z toho nedělám — radši žádný odhad než klamavý. "
-      + "Co se našlo, si můžeš prohlédnout níž.";
-  })();
 
   // Nejnovejsi odhad najmu — patri nahoru vedle hodnoty, ne az pod finance
   const nejnovejsiNajem = await prisma.rentEstimate.findFirst({
@@ -131,24 +91,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     });
   }
 
-  // Když odhad nevznikl, ať je aspoň vidět, co sken našel — "málo srovnatelných
-  // nabídek" bez seznamu je tvrzení, které si nejde ověřit
-  const okoli = property.valuations.length > 0
-    ? { nabidky: [], kroky: [] }
-    : { nabidky: await nabidkyVOkoli(property.id), kroky: await diagnostikaOceneni(property.id) };
-
-  const vyrazene = await prisma.excludedListing.findMany({
-    where: { propertyId: property.id },
-    orderBy: { createdAt: "desc" },
-  });
-  const vyrazeneKlice = vyrazene.map((v) => `${v.source}|${v.externalId}`);
-
-  // Odhady najmu z nocniho skenu — vlastni dotaz, at je loadProperty lehky
-  const odhadyNajmu = await prisma.rentEstimate.findMany({
-    where: { propertyId: property.id },
-    orderBy: { date: "desc" },
-    take: 60,
-  });
   // Proti trhu porovnavame cely najem, ne jen podil prihlaseneho vlastnika
   const smluvniNajem = property.leases.find((l) => l.isActive)?.rentMonthly ?? 0;
 
@@ -218,6 +160,10 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                 </span>
               </>);
             })()}
+            vedle={
+              <Link href={`/properties/${property.id}/trh`}
+                className="btn no-print whitespace-nowrap">Ocenění a trh →</Link>
+            }
           />
 
           <div className="card">
@@ -272,13 +218,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <Card title="Vývoj tržního nájmu"
-            action={<Link href="/market" className="text-xs text-accent">Sken trhu →</Link>}>
-            <RentHistory odhady={odhadyNajmu} smluvniNajem={smluvniNajem} areaM2={property.areaM2}
-              propertyId={property.id} vyrazene={vyrazeneKlice} canEdit={user.role === "OWNER"} />
-            {user.role === "OWNER" && <RentScanButton propertyId={property.id} />}
-          </Card>
-
           <Card title="Poloha" action={
             property.latitude != null && property.longitude != null ? (
               <a href={`https://mapy.cz/zakladni?x=${property.longitude}&y=${property.latitude}&z=17`}
@@ -381,21 +320,23 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
         )}
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card title="Ocenění" action={<Link href="/market" className="text-xs text-accent">Sken trhu →</Link>}>
-            <ValuationManager
-              propertyId={property.id}
-              valuations={property.valuations}
-              areaM2={property.areaM2}
-              canEdit={user.role === "OWNER"}
-              vyrazene={vyrazeneKlice}
-            />
-            <VyrazeneNabidky propertyId={property.id} polozky={vyrazene} canEdit={user.role === "OWNER"} />
-            {duvodBezOceneni && (
-              <>
-                <p className="mt-3 rounded-lg bg-warn/10 px-3 py-2.5 text-sm text-warn">{duvodBezOceneni}</p>
-                <NabidkyVOkoli nabidky={okoli.nabidky} kroky={okoli.kroky} />
-              </>
-            )}
+          <Card title="Ocenění a trh" action={
+            <Link href={`/properties/${property.id}/trh`} className="text-xs text-accent">Otevřít →</Link>
+          }>
+            <table className="table-base">
+              <tbody>
+                <Row label="Odhad hodnoty" value={property.valuations[0] ? czk(property.valuations[0].value) : "—"}
+                  note={property.valuations[0]
+                    ? `z ${property.valuations[0].sampleSize ?? "?"} nabídek · ${dateCz(property.valuations[0].date)}`
+                    : "zatím nevznikl"} />
+                <Row label="Odhad nájmu" value={nejnovejsiNajem ? `${czk(nejnovejsiNajem.monthlyRent)}/měs.` : "—"}
+                  note={nejnovejsiNajem ? `z ${nejnovejsiNajem.sampleSize ?? "?"} nabídek` : "zatím nevznikl"} />
+              </tbody>
+            </table>
+            <p className="mt-3 text-xs text-ink-muted">
+              Historie ocenění, srovnatelné nabídky, ruční korekce a postup, jak odhad vzniká —
+              všechno na vlastní stránce, ať tady nestíní výkonnosti.
+            </p>
           </Card>
 
           <Card title="Služby a dodavatelé" action={<Link href="/savings" className="text-xs text-accent">Kde ušetřit →</Link>}>
