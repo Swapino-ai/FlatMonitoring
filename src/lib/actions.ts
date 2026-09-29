@@ -186,6 +186,7 @@ export interface VysledekUklidu {
   nabidky: number;
   skeny: number;
   denik: number;
+  vyrazene: number;
 }
 
 /**
@@ -203,7 +204,7 @@ export async function uklidTrznichDat(rozsah: RozsahUklidu): Promise<VysledekUkl
   const user = await getSession();
   if (!user || user.role !== "OWNER") throw new Error("Nedostatečné oprávnění");
 
-  const vysledek: VysledekUklidu = { oceneni: 0, najmy: 0, nabidky: 0, skeny: 0, denik: 0 };
+  const vysledek: VysledekUklidu = { oceneni: 0, najmy: 0, nabidky: 0, skeny: 0, denik: 0, vyrazene: 0 };
 
   if (rozsah === "vse") {
     // Rucni a znalecka oceneni nechavame — aplikace je nevyrobila
@@ -211,6 +212,9 @@ export async function uklidTrznichDat(rozsah: RozsahUklidu): Promise<VysledekUkl
     vysledek.najmy = (await prisma.rentEstimate.deleteMany({ where: { source: "MARKET_SCAN" } })).count;
     vysledek.nabidky = (await prisma.marketListing.deleteMany({})).count;
     vysledek.skeny = (await prisma.marketScan.deleteMany({})).count;
+    // Vyrazene nabidky odkazuji na inzeraty, ktere uz v databazi nejsou —
+    // po smazani vsech dat by zbyl seznam, ke kteremu se neda nic dohledat
+    vysledek.vyrazene = (await prisma.excludedListing.deleteMany({})).count;
     revalidatePath("/");
     revalidatePath("/properties");
     revalidatePath("/market");

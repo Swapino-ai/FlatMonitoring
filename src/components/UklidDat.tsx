@@ -11,7 +11,7 @@ import { uklidTrznichDat, type RozsahUklidu, type VysledekUklidu } from "@/lib/a
  * se nemazou nikdy; ta aplikace nevyrobila.
  */
 export function UklidDat({ pocty }: {
-  pocty: { oceneni: number; najmy: number; nabidky: number; skeny: number; rucni: number };
+  pocty: { oceneni: number; najmy: number; nabidky: number; skeny: number; rucni: number; vyrazene: number };
 }) {
   const [rezim, setRezim] = useState<RozsahUklidu | null>(null);
   const [potvrzeni, setPotvrzeni] = useState("");
@@ -44,6 +44,7 @@ export function UklidDat({ pocty }: {
             <tr><td>Odhady nájmu ze skenu</td><td className="num tabular-nums">{pocty.najmy}</td></tr>
             <tr><td>Stažené nabídky</td><td className="num tabular-nums">{pocty.nabidky}</td></tr>
             <tr><td>Záznamy o skenech</td><td className="num tabular-nums">{pocty.skeny}</td></tr>
+            <tr><td>Ručně vyřazené nabídky</td><td className="num tabular-nums">{pocty.vyrazene}</td></tr>
             <tr>
               <td className="text-ink-secondary">Ruční a znalecká ocenění</td>
               <td className="num tabular-nums text-ink-secondary">{pocty.rucni} — nemažou se</td>
@@ -68,16 +69,17 @@ export function UklidDat({ pocty }: {
         u nemovitostí zakázal, nabídky v kategoriích, které už žádná nemovitost nemá, skeny
         bez nabídek a provozní deník starší 30 dnů.
         <br />
-        <strong>Všechna data z trhu</strong> smažou i ocenění a odhady nájmu ze skenu. Hodí se,
-        když se změnila pravidla srovnávání a stará čísla už jen matou — nové vzniknou při
-        nejbližším skenu.
+        <strong>Všechna data z trhu</strong> smažou i ocenění, odhady nájmu ze skenu a seznam
+        ručně vyřazených nabídek — ten by jinak odkazoval na inzeráty, které už v databázi
+        nejsou. Hodí se, když se změnila pravidla srovnávání a stará čísla už jen matou;
+        nová vzniknou při nejbližším skenu.
       </p>
 
       {rezim && (
         <div className={`rounded-card border p-4 ${rezim === "vse" ? "border-bad/40 bg-bad/5" : "border-accent/40 bg-accent/5"}`}>
           <p className="text-sm">
             {rezim === "vse"
-              ? `Smaže se ${pocty.oceneni} ocenění, ${pocty.najmy} odhadů nájmu, ${pocty.nabidky} nabídek a ${pocty.skeny} skenů.`
+              ? `Smaže se ${pocty.oceneni} ocenění, ${pocty.najmy} odhadů nájmu, ${pocty.nabidky} nabídek, ${pocty.skeny} skenů a ${pocty.vyrazene} ručně vyřazených nabídek.`
               : "Smažou se jen nabídky a záznamy, které už do žádného odhadu nevstupují."}
             {" "}Vrátit to nejde — zálohu si stáhneš v Reportech.
           </p>
@@ -102,7 +104,8 @@ export function UklidDat({ pocty }: {
       {vysledek && (
         <p className="rounded-lg bg-good/10 px-3 py-2.5 text-sm text-good">
           Smazáno: {vysledek.oceneni} ocenění, {vysledek.najmy} odhadů nájmu, {vysledek.nabidky} nabídek,
-          {" "}{vysledek.skeny} skenů{vysledek.denik > 0 ? `, ${vysledek.denik} záznamů deníku` : ""}.
+          {" "}{vysledek.skeny} skenů{vysledek.vyrazene > 0 ? `, ${vysledek.vyrazene} vyřazených nabídek` : ""}
+          {vysledek.denik > 0 ? `, ${vysledek.denik} záznamů deníku` : ""}.
         </p>
       )}
     </div>

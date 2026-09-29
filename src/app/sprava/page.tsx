@@ -19,7 +19,7 @@ export default async function SpravaPage() {
   const user = await page();
   if (user.role !== "OWNER") redirect("/");
 
-  const [uzivatelu, nemovitosti, oceneni, najmy, nabidky, skeny, rucni, poslendiBeh] = await Promise.all([
+  const [uzivatelu, nemovitosti, oceneni, najmy, nabidky, skeny, rucni, vyrazenych, poslendiBeh] = await Promise.all([
     prisma.user.count(),
     prisma.property.count(),
     prisma.valuation.count({ where: { source: "MARKET_SCAN" } }),
@@ -27,6 +27,7 @@ export default async function SpravaPage() {
     prisma.marketListing.count(),
     prisma.marketScan.count(),
     prisma.valuation.count({ where: { source: { not: "MARKET_SCAN" } } }),
+    prisma.excludedListing.count(),
     prisma.scanRun.findFirst({ orderBy: { startedAt: "desc" }, select: { startedAt: true, status: true } }),
   ]);
 
@@ -67,7 +68,7 @@ export default async function SpravaPage() {
         </div>
 
         <Card title="Úklid dat z trhu">
-          <UklidDat pocty={{ oceneni, najmy, nabidky, skeny, rucni }} />
+          <UklidDat pocty={{ oceneni, najmy, nabidky, skeny, rucni, vyrazene: vyrazenych }} />
         </Card>
 
         <Card title="Záloha a obnova">
