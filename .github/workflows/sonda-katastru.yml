@@ -1,0 +1,25 @@
+# Diagnostika API katastru nemovitostí (api-kn.cuzk.gov.cz).
+# Spousti se jen rucne a nic nemeni — jen vypisuje, co API vraci.
+# Ze sandboxu Claude na cuzk.gov.cz nedosahne, proto se zkousi odsud.
+
+name: Sonda katastru
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sonda:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Co API katastru vrací
+        env:
+          KATASTR_API_KEY: ${{ secrets.KATASTR_API_KEY }}
+        run: npx tsx scripts/probe-katastr.ts
