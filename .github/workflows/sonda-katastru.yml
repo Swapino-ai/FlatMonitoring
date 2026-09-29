@@ -24,6 +24,9 @@ jobs:
           KATASTR_API_KEY: ${{ secrets.KATASTR_API_KEY }}
         run: npx tsx scripts/probe-katastr.ts
 
+      - name: Jaký odkaz otevře stavbu v Nahlížení
+        run: npx tsx scripts/probe-nahlizeni.ts
+
       # Tvar odpovedi pro skutecnou nemovitost — parser se pise podle nej
       - name: Odpověď pro vlastní nemovitost
         env:
