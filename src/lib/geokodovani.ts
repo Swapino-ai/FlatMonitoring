@@ -9,7 +9,7 @@
  * Bezi jen na serveru, protoze pouziva klic k Mapy.cz.
  */
 import { prisma } from "./db";
-import { slugMesta } from "./market/util";
+import { krajNaSlug } from "./catalogs";
 
 interface MapyPolozka {
   position?: { lat?: number; lon?: number };
@@ -48,7 +48,7 @@ export async function dohledejAdresu(adresa: {
     return {
       latitude: p.position?.lat ?? null,
       longitude: p.position?.lon ?? null,
-      region: kraj ? slugMesta(kraj) : null,
+      region: kraj ? krajNaSlug(kraj) || null : null,
     };
   } catch {
     return null;

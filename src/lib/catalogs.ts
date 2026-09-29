@@ -157,5 +157,30 @@ export const KRAJE: { slug: string; nazev: string }[] = [
   { slug: "moravskoslezsky-kraj", nazev: "Moravskoslezský kraj" },
 ];
 
+/**
+ * Nazev kraje z Mapy.cz na slug pro adresu Sreality.
+ *
+ * Mapy.cz vraci "Ustecky kraj", formular ale pracuje se slugem. Bez prevodu
+ * se hodnota do vyberu kraje nevesla a tise se zahodila.
+ */
+export function krajNaSlug(nazev: string): string {
+  const s = nazev
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  if (!s) return "";
+
+  const presne = KRAJE.find((k) => k.slug === s);
+  if (presne) return presne.slug;
+
+  // Mapy.cz nekdy vrati jen "Praha" nebo "Vysocina" bez slova kraj
+  const jadro = s.replace(/^kraj-|-kraj$/g, "");
+  const castecne = KRAJE.find((k) => k.slug.replace(/^kraj-|-kraj$/g, "").includes(jadro));
+  return castecne?.slug ?? "";
+}
+
 export const nazevKraje = (slug: string) =>
   KRAJE.find((k) => k.slug === slug)?.nazev ?? slug;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { krajNaSlug } from "@/lib/catalogs";
 
 /**
  * Naseptavac adres nad Mapy.cz.
@@ -27,8 +28,9 @@ function rozeber(p: MapyPolozka) {
   const mesto = najdi("regional.municipality") ?? najdi("regional.region") ?? "";
   const cast = najdi("regional.municipality_part") ?? "";
   const ulice = najdi("regional.street") ?? "";
-  // Kraj je zaloha pro male obce, ktere na Sreality vlastni vypis nemaji
-  const kraj = najdi("regional.region") ?? "";
+  // Kraj je zaloha pro male obce, ktere na Sreality vlastni vypis nemaji.
+  // Formular ho drzi jako slug, proto se nazev prevadi.
+  const kraj = krajNaSlug(najdi("regional.region") ?? "");
 
   return {
     // p.name u adresy nese "Korunní 734/15" i s cislem popisnym

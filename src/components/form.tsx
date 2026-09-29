@@ -134,3 +134,16 @@ export function isoDatum(d: Date | string | null | undefined): string | undefine
   const dd = typeof d === "string" ? new Date(d) : d;
   return Number.isNaN(dd.getTime()) ? undefined : dd.toISOString().slice(0, 10);
 }
+
+/** Viceradkove pole pro poznamky. */
+export function TextPole({ label, name, hint, sirka = "", ...rest }: {
+  label: string; name: string; hint?: string; sirka?: string;
+} & React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <div className={sirka}>
+      <label className="label mb-1.5 block" htmlFor={name}>{label}</label>
+      <textarea id={name} name={name} rows={2} className="input resize-y" {...rest} />
+      {hint && <p className="mt-1 text-xs text-ink-muted">{hint}</p>}
+    </div>
+  );
+}

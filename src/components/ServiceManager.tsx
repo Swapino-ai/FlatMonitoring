@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { deleteService, saveService, type EntityFormState } from "@/lib/entityActions";
 import {
-  Hlaska, Pole, Rozbalovaci, SmazatTlacitko, UpravaPanel, UpravitTlacitko, Vyber, Zaskrtavatko, isoDatum,
+  Hlaska, Pole, Rozbalovaci, SmazatTlacitko, TextPole, UpravaPanel, UpravitTlacitko, Vyber, Zaskrtavatko, isoDatum,
 } from "./form";
 import { SERVICE_TYPES } from "@/lib/categories";
 import { czk, dateCz } from "@/lib/format";
@@ -11,6 +11,7 @@ import { czk, dateCz } from "@/lib/format";
 interface Row {
   id: string; type: string; provider: string; contractNo: string | null; monthlyCost: number;
   annualCost: number | null; contractEnd: Date | null; noticePeriodMonths: number; isBundleable: boolean;
+  notes: string | null;
 }
 
 export function ServiceManager({ propertyId, services, canEdit }: {
@@ -51,7 +52,10 @@ export function ServiceManager({ propertyId, services, canEdit }: {
                   {SERVICE_TYPES[s.type] ?? s.type}
                   {!s.isBundleable && <span className="ml-1.5 text-xs text-ink-muted">(mimo balík)</span>}
                 </td>
-                <td className="text-ink-secondary">{s.provider}</td>
+                <td className="text-ink-secondary">
+                  {s.provider}
+                  {s.notes && <span className="block text-xs text-ink-muted">{s.notes}</span>}
+                </td>
                 <td className="num">{czk(s.monthlyCost + (s.annualCost ?? 0) / 12)}</td>
                 <td className="text-ink-secondary">{s.contractEnd ? dateCz(s.contractEnd) : "volné"}</td>
                 {canEdit && (
@@ -115,6 +119,8 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka }: {
         <Zaskrtavatko name="isBundleable" label="Zahrnout do hromadné poptávky"
           defaultChecked={r ? r.isBundleable : true} hint="Vypni u SVJ a regulovaných plateb" />
       </div>
+      <TextPole label="Poznámka" name="notes" sirka="sm:col-span-2" defaultValue={r?.notes ?? ""}
+        placeholder="nepovinné" hint="Číslo odběrného místa, kontakt na technika, co bylo dohodnuto po telefonu" />
       <div className="sm:col-span-2">
         <button type="submit" disabled={pending} className="btn btn-primary">
           {pending ? "Ukládám…" : popisekTlacitka}
