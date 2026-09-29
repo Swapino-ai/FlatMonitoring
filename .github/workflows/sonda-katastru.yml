@@ -23,3 +23,11 @@ jobs:
         env:
           KATASTR_API_KEY: ${{ secrets.KATASTR_API_KEY }}
         run: npx tsx scripts/probe-katastr.ts
+
+      # Tvar odpovedi pro skutecnou nemovitost — parser se pise podle nej
+      - name: Odpověď pro vlastní nemovitost
+        env:
+          KATASTR_API_KEY: ${{ secrets.KATASTR_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx tsx scripts/probe-katastr-jednotka.ts
