@@ -263,13 +263,13 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             id: "katastr",
             nazev: "Katastr",
             obsah: (<>
+            {/* Odkaz vede na úvodní stránku Nahlížení, ne hlouběji: adresy
+                uvnitř aplikace ČÚZK mění a ověřit je nejde, protože Nahlížení
+                je za ochranou proti robotům. Identifikátory k vyhledání jsou
+                na kartě ke zkopírování. */}
             <SbalitelnaKarta klic="katastr" title="Katastr nemovitostí" action={
-              katastr?.katastralniUzemiKod != null ? (
-                <a href={`https://nahlizenidokn.cuzk.gov.cz/VyberBudovu.aspx?typ=Stavba&ku=${katastr.katastralniUzemiKod}`}
-                  target="_blank" rel="noreferrer noopener" className="text-xs text-accent">
-                  Nahlížení do KN →
-                </a>
-              ) : null
+              <a href="https://nahlizenidokn.cuzk.gov.cz/" target="_blank" rel="noreferrer noopener"
+                className="text-xs text-accent">Nahlížení do KN →</a>
             }>
               <KatastrKarta
                 propertyId={property.id}

@@ -4,6 +4,29 @@ import { useState, useTransition } from "react";
 import { dohledejKatastr, vyberJednotku, zjistiKvotu, type KatastrStav } from "@/lib/katastrActions";
 import { Hlaska } from "./form";
 
+/** Zkopiruje hodnotu, at se do Nahlizeni neprepisuje rucne. */
+function Zkopirovat({ hodnota }: { hodnota: string }) {
+  const [hotovo, setHotovo] = useState(false);
+  return (
+    <button
+      type="button"
+      className="ml-2 text-xs text-accent hover:underline"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(hodnota);
+          setHotovo(true);
+          setTimeout(() => setHotovo(false), 1500);
+        } catch {
+          // Bez pristupu do schranky (starsi prohlizec, http) zbyva oznacit rucne
+          setHotovo(false);
+        }
+      }}
+    >
+      {hotovo ? "zkopírováno" : "kopírovat"}
+    </button>
+  );
+}
+
 export interface JednotkaVolba {
   id: number;
   cislo: number;
@@ -61,12 +84,14 @@ export function KatastrKarta({ propertyId, data, canEdit, adresa }: {
         <>
           <table className="table-base">
             <tbody>
-              <Radek label="List vlastnictví" value={data.lvCislo != null ? `LV ${data.lvCislo}` : "—"} zvyraznit />
+              <Radek label="List vlastnictví" value={data.lvCislo != null ? `LV ${data.lvCislo}` : "—"} zvyraznit
+                kopie={data.lvCislo != null ? String(data.lvCislo) : undefined} />
               <Radek label="Katastrální území"
                 value={data.katastralniUzemiNazev
                   ? `${data.katastralniUzemiNazev}${data.katastralniUzemiKod ? ` (${data.katastralniUzemiKod})` : ""}`
-                  : "—"} />
-              <Radek label="Parcela" value={data.parcely ?? "—"} />
+                  : "—"}
+                kopie={data.katastralniUzemiKod != null ? String(data.katastralniUzemiKod) : undefined} />
+              <Radek label="Parcela" value={data.parcely ?? "—"} kopie={data.parcely ?? undefined} />
               <Radek label="Stavba" value={[
                 data.typStavby,
                 data.cisloDomovni != null ? `č. p. ${data.cisloDomovni}` : null,
@@ -99,10 +124,22 @@ export function KatastrKarta({ propertyId, data, canEdit, adresa }: {
             </div>
           )}
 
-          <p className="mt-3 text-xs text-ink-muted">
-            Načteno {new Date(data.nactenoKdy).toLocaleString("cs-CZ")}.
-            {" "}Vlastníci a nabývací tituly v bezplatném API nejsou — ty jsou jen v placeném dálkovém přístupu.
-          </p>
+          <div className="mt-3 space-y-1.5 text-xs text-ink-muted">
+            <p>Načteno {new Date(data.nactenoKdy).toLocaleString("cs-CZ")}.</p>
+            <p>
+              Vlastníky ukáže{" "}
+              <a href="https://nahlizenidokn.cuzk.gov.cz/" target="_blank" rel="noreferrer noopener"
+                className="text-accent">Nahlížení do KN</a>{" "}
+              po přihlášení Identitou občana — zdarma. Vyhledej podle čísla LV a kódu
+              katastrálního území výše, tlačítkem si je zkopíruješ. V bezplatném API
+              katastru vlastníci nejsou, ti jsou jen v placeném dálkovém přístupu.
+            </p>
+            <p>
+              Změny u svých nemovitostí si můžeš nechat hlídat zdarma službou{" "}
+              <a href="https://portal.gov.cz/sluzby-vs/zrizeni-sluzby-sledovani-zmen-v-katastru-nemovitosti-S8171"
+                target="_blank" rel="noreferrer noopener" className="text-accent">Sledování změn</a>.
+            </p>
+          </div>
         </>
       ) : (
         <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
@@ -125,11 +162,16 @@ export function KatastrKarta({ propertyId, data, canEdit, adresa }: {
   );
 }
 
-function Radek({ label, value, zvyraznit }: { label: string; value: string; zvyraznit?: boolean }) {
+function Radek({ label, value, zvyraznit, kopie }: {
+  label: string; value: string; zvyraznit?: boolean; kopie?: string;
+}) {
   return (
     <tr>
       <td className="text-ink-secondary">{label}</td>
-      <td className={zvyraznit ? "font-medium" : ""}>{value}</td>
+      <td className={zvyraznit ? "font-medium" : ""}>
+        {value}
+        {kopie && value !== "—" && <Zkopirovat hodnota={kopie} />}
+      </td>
     </tr>
   );
 }
