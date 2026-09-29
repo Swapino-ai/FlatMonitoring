@@ -71,10 +71,58 @@ export default async function SpravaPage() {
           <UklidDat pocty={{ oceneni, najmy, nabidky, skeny, rucni, vyrazene: vyrazenych }} />
         </Card>
 
+        <Card title="Nastavení prostředí">
+          <Prostredi />
+        </Card>
+
         <Card title="Záloha a obnova">
           <DataTransfer />
         </Card>
       </main>
     </>
+  );
+}
+
+/**
+ * Prehled promennych prostredi. Vypisuje jen jestli hodnota existuje, nikdy
+ * samotnou hodnotu — jde o pripojovaci retezce a klice.
+ */
+function Prostredi() {
+  const promenne = [
+    {
+      nazev: "DATABASE_URL",
+      nastaveno: Boolean(process.env.DATABASE_URL),
+      k: "Připojení k databázi. Bez ní aplikace vůbec nenaběhne.",
+    },
+    {
+      nazev: "AUTH_SECRET",
+      nastaveno: Boolean(process.env.AUTH_SECRET),
+      k: "Podpis přihlašovací cookie. Bez něj se nelze přihlásit.",
+    },
+    {
+      nazev: "MAPY_API_KEY",
+      nastaveno: Boolean(process.env.MAPY_API_KEY),
+      k: "Našeptávač adres a mapové dlaždice. Bez klíče jde adresu vyplnit ručně, ale mapa zůstane prázdná.",
+    },
+  ];
+
+  return (
+    <div className="space-y-2">
+      {promenne.map((p) => (
+        <div key={p.nazev} className="flex flex-wrap items-start justify-between gap-2 border-b border-line pb-2 last:border-0 last:pb-0">
+          <div className="min-w-0">
+            <div className="font-mono text-sm">{p.nazev}</div>
+            <p className="text-xs text-ink-secondary">{p.k}</p>
+          </div>
+          <span className={`shrink-0 text-xs font-medium ${p.nastaveno ? "text-good" : "text-warn"}`}>
+            {p.nastaveno ? "✓ nastaveno" : "! chybí"}
+          </span>
+        </div>
+      ))}
+      <p className="text-xs text-ink-muted">
+        Hodnoty se tady nikdy nezobrazují — jen to, jestli existují. Mění se ve Vercelu
+        v Settings → Environment Variables a pro noční sken v GitHubu v Settings → Secrets.
+      </p>
+    </div>
   );
 }
