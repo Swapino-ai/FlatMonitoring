@@ -6,6 +6,7 @@ import { Verze } from "@/components/Verze";
 import { Card, Stat, StatGrid } from "@/components/Stat";
 import { DataTransfer } from "@/components/DataTransfer";
 import { UklidDat } from "@/components/UklidDat";
+import { TestMapy } from "@/components/TestMapy";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -119,6 +120,7 @@ function Prostredi() {
           </span>
         </div>
       ))}
+      <TestMapy />
       <p className="text-xs text-ink-muted">
         Hodnoty se tady nikdy nezobrazují — jen to, jestli existují. Mění se ve Vercelu
         v Settings → Environment Variables a pro noční sken v GitHubu v Settings → Secrets.
