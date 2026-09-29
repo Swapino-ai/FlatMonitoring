@@ -107,46 +107,49 @@ async function krok1() {
   }
 }
 
-/** Ktera hlavicka klic uzna. Bez toho je vse ostatni hadani. */
-async function krok2(): Promise<Record<string, string> | null> {
-  console.log("\n=== 2. Jméno hlavičky pro klíč ===");
+/**
+ * Ktera hlavicka a ktery zaklad cesty klic uzna.
+ *
+ * Endpointy ze stranky Popis (/AplikacniSluzby/StavUctu) vraci HTML stranku
+ * "Chyba 404" — tedy web aplikace, ne API. Cesty v dokumentaci jsou zrejme
+ * relativni k nejakemu zakladu, ktery v popisu uveden neni. Hleda se tedy
+ * kombinace zakladu a hlavicky; rozliseni je snadne, protoze web vraci HTML
+ * a API ma vracet JSON.
+ */
+async function krok2(): Promise<{ hlavicky: Record<string, string>; zaklad: string } | null> {
+  console.log("\n=== 2. Základ cesty a jméno hlavičky ===");
   if (!KLIC) {
     console.log("KATASTR_API_KEY není nastavený — krok 2 a 3 se přeskočí.");
     return null;
   }
   console.log(`Klíč je nastavený, délka ${KLIC.length} znaků (hodnota se nevypisuje).`);
 
+  const zaklady = ["", "/api", "/api/v1", "/api/v1.0", "/v1", "/rest", "/rest/v1", "/kn", "/api/kn", "/sluzby"];
   const varianty: Record<string, string>[] = [
-    { ApiKey: KLIC },
-    { "Api-Key": KLIC },
-    { "X-Api-Key": KLIC },
-    { apikey: KLIC },
-    { Authorization: `ApiKey ${KLIC}` },
-    { Authorization: `Bearer ${KLIC}` },
+    { ApiKey: KLIC }, { "X-Api-Key": KLIC }, { Authorization: `ApiKey ${KLIC}` },
   ];
 
-  // Ciselnik kraju je nejnevinnejsi dotaz, jaky takove API muze mit
-  // Tvary endpointu podle stranky Popis: /AplikacniSluzby/StavUctu,
-  // /CiselnikyUzemnichJednotek/Obce/588903, /Jednotka/Vyhledani
-  const testovaci = ["/AplikacniSluzby/StavUctu", "/CiselnikyUzemnichJednotek/Obce/588903"];
-
-  for (const h of varianty) {
-    for (const c of testovaci) {
-      const v = await zkus(c, h);
+  for (const zaklad of zaklady) {
+    for (const h of varianty) {
       const jmeno = Object.keys(h)[0];
-      console.log(`[${v.status}] ${jmeno} → ${c}  ${zkratka(v.telo, 200)}`);
-      if (v.status === 200) {
-        console.log(`  FUNGUJE: hlavička ${jmeno}, endpoint ${c}`);
-        return h;
+      const v = await zkus(`${zaklad}/AplikacniSluzby/StavUctu`, h);
+      const jsonovy = v.typ.includes("json");
+      // HTML znamena, ze odpovida web, ne API — takovy zaklad nema cenu
+      const znacka = jsonovy ? "JSON" : "html";
+      console.log(`[${v.status}] ${znacka} ${jmeno} → ${zaklad || "/"}  ${zkratka(jsonovy ? v.telo : text(v.telo), 200)}`);
+
+      if (jsonovy) {
+        console.log(`  ODPOVÍDÁ API: základ "${zaklad}", hlavička ${jmeno}, HTTP ${v.status}`);
+        if (v.status === 200) return { hlavicky: h, zaklad };
       }
     }
   }
-  console.log("Žádná kombinace hlavičky a adresy neprošla — viz kroky výše ve výpisu.");
+  console.log("Žádná kombinace nevrátila JSON — API je jinde, než popis naznačuje.");
   return null;
 }
 
 /** Skutecny dotaz na nemovitost, kdyz uz vime, jak se autentizovat. */
-async function krok3(hlavicky: Record<string, string>) {
+async function krok3(hlavicky: Record<string, string>, zaklad: string) {
   console.log("\n=== 3. Dotaz na konkrétní údaje ===");
   const cesty = [
     "/AplikacniSluzby",
@@ -158,7 +161,7 @@ async function krok3(hlavicky: Record<string, string>) {
     "/Parcela/Vyhledani",
   ];
   for (const c of cesty) {
-    const v = await zkus(c, hlavicky);
+    const v = await zkus(zaklad + c, hlavicky);
     console.log(`\n[${v.status}] ${v.url}`);
     console.log(`  ${zkratka(v.telo, 1500)}`);
   }
@@ -166,8 +169,8 @@ async function krok3(hlavicky: Record<string, string>) {
 
 async function main() {
   await krok1();
-  const hlavicky = await krok2();
-  if (hlavicky) await krok3(hlavicky);
+  const nalez = await krok2();
+  if (nalez) await krok3(nalez.hlavicky, nalez.zaklad);
   console.log("\nHotovo. Sonda nic nemění, jen čte.");
 }
 
