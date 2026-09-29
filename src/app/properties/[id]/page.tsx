@@ -17,6 +17,8 @@ import { nasobitel, podilUzivatele } from "@/lib/ownership";
 import { aktualniPohled } from "@/lib/ownership.server";
 import { prisma } from "@/lib/db";
 import { OwnerManager } from "@/components/OwnerManager";
+import { Listy } from "@/components/Listy";
+import { SbalitelnaKarta } from "@/components/SbalitelnaKarta";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
 import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
@@ -127,278 +129,309 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           </div>
         </div>
 
-        <Card title="Poloha" action={
-          property.latitude != null && property.longitude != null ? (
-            <a href={`https://mapy.cz/zakladni?x=${property.longitude}&y=${property.latitude}&z=17`}
-              target="_blank" rel="noreferrer noopener" className="text-xs text-accent">Otevřít v Mapy.cz →</a>
-          ) : user.role === "OWNER" ? (
-            <Link href={`/properties/${property.id}/edit`} className="text-xs text-accent">Doplnit adresu →</Link>
-          ) : null
-        }>
-          {property.latitude != null && property.longitude != null ? (
-            <>
-              <Mapa latitude={property.latitude} longitude={property.longitude} vyskaTrida="h-64 lg:h-80" />
-              <p className="mt-2 text-xs text-ink-muted">
-                {property.scanRadiusKm
-                  ? `Srovnání se hledá v pevném okruhu ${property.scanRadiusKm} km.`
-                  : `Podle téhle polohy se hledá srovnání — od ${okruhProTyp(property.type)} km dál, dokud není dost nabídek.`}
-                {property.excludedCities && ` Nezapočítává se: ${property.excludedCities}.`}
-              </p>
-            </>
-          ) : (
-            <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
-              Nemovitost nemá uloženou polohu — byla založená dřív, než přibyl našeptávač adres.
-              Otevři úpravy, vyber adresu z našeptávače a srovnání se pak bude hledat
-              podle vzdálenosti místo podle názvu čtvrti.
-            </p>
-          )}
-        </Card>
-
-        {/* Dvě čísla, kvůli kterým se sem chodí: co to má cenu a co to nese.
-            Hero je jen jedno — dvě stejně velká by spolu soupeřila. */}
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <Hero
-            label="Odhadní tržní hodnota"
-            hodnota={czkCompact(a.currentValue)}
-            tone={a.valueGain >= 0 ? "good" : "bad"}
-            doplnek={(() => {
-              // Z kolika nabídek odhad vznikl — bez toho je číslo neprůhledné
-              const v = property.valuations[0];
-              const vzorek = v?.sampleSize ?? null;
-              return (<>
-                {czk(a.currentValue / property.areaM2)}/m² · zdroj {valuationSourceLabel(a.valuationSource)}
-                {vzorek != null && (
-                  <> · z {vzorek} {vzorek === 1 ? "nabídky" : vzorek < 5 ? "nabídek" : "nabídek"}
-                    {v?.confidence === "RUCNI" && (
-                      <span className="ml-1.5 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">
-                        ručně upraveno
-                      </span>
-                    )}
-                    {v?.confidence === "KVALIFIKOVANY" && (
-                      <span className="ml-1.5 rounded bg-good/15 px-1.5 py-0.5 text-[10px] font-medium text-good"
-                        title="Všechny srovnatelné nabídky jsou přímo z této obce">
-                        kvalifikovaný odhad
-                      </span>
-                    )}
-                  </>
-                )}
-                <span className="ml-2 block font-medium text-ink-primary sm:ml-0 sm:mt-0.5">
-                  {a.valueGain >= 0 ? "+" : ""}{czkCompact(a.valueGain)} ({pct(a.valueGainPct)}) za {a.yearsHeld.toFixed(1)} roku
-                </span>
-              </>);
-            })()}
-            vedle={
-              <Link href={`/properties/${property.id}/trh`}
-                className="btn no-print whitespace-nowrap">Ocenění a trh →</Link>
-            }
-          />
-
-          <div className="card">
-            <div className="label">Tržní nájem</div>
-            <div className="mt-1 text-3xl font-semibold leading-none tracking-tight">
-              {nejnovejsiNajem ? `${czk(nejnovejsiNajem.monthlyRent)}/měs.` : "—"}
-            </div>
-            {nejnovejsiNajem ? (
-              <div className="mt-2 text-sm text-ink-secondary">
-                {smluvniNajem > 0 ? (
-                  <>
-                    Tvůj {czk(smluvniNajem)}
-                    {(() => {
-                      const r = ((smluvniNajem - nejnovejsiNajem.monthlyRent) / nejnovejsiNajem.monthlyRent) * 100;
-                      if ((nejnovejsiNajem.sampleSize ?? 0) < 3) return " · odhad z málo nabídek, neporovnávej";
-                      if (r < -8) return ` · ${pct(Math.abs(r), 0)} pod trhem, ročně ${czk((nejnovejsiNajem.monthlyRent - smluvniNajem) * 12)}`;
-                      if (r > 8) return ` · ${pct(r, 0)} nad trhem`;
-                      return " · odpovídá trhu";
-                    })()}
-                  </>
-                ) : "Zatím nepronajato"}
-                <span className="block text-xs text-ink-muted">
-                  {nejnovejsiNajem.sampleSize} nabídek · {dateCz(nejnovejsiNajem.date)}
-                </span>
-              </div>
+        <Listy klic={`nemovitost:${property.id}`} listy={[
+          {
+            id: "prehled",
+            nazev: "Přehled",
+            obsah: (<>
+            <SbalitelnaKarta klic="poloha" title="Poloha" action={
+            property.latitude != null && property.longitude != null ? (
+              <a href={`https://mapy.cz/zakladni?x=${property.longitude}&y=${property.latitude}&z=17`}
+                target="_blank" rel="noreferrer noopener" className="text-xs text-accent">Otevřít v Mapy.cz →</a>
+            ) : user.role === "OWNER" ? (
+              <Link href={`/properties/${property.id}/edit`} className="text-xs text-accent">Doplnit adresu →</Link>
+            ) : null
+          }>
+            {property.latitude != null && property.longitude != null ? (
+              <>
+                <Mapa latitude={property.latitude} longitude={property.longitude} vyskaTrida="h-64 lg:h-80" />
+                <p className="mt-2 text-xs text-ink-muted">
+                  {property.scanRadiusKm
+                    ? `Srovnání se hledá v pevném okruhu ${property.scanRadiusKm} km.`
+                    : `Podle téhle polohy se hledá srovnání — od ${okruhProTyp(property.type)} km dál, dokud není dost nabídek.`}
+                  {property.excludedCities && ` Nezapočítává se: ${property.excludedCities}.`}
+                </p>
+              </>
             ) : (
-              <p className="mt-2 text-sm text-ink-secondary">
-                Odhad zatím nevznikl. Sken běží každou noc; ručně ho pustíš níž u tržního nájmu.
+              <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
+                Nemovitost nemá uloženou polohu — byla založená dřív, než přibyl našeptávač adres.
+                Otevři úpravy, vyber adresu z našeptávače a srovnání se pak bude hledat
+                podle vzdálenosti místo podle názvu čtvrti.
               </p>
             )}
-          </div>
-        </div>
-
-        {/* Výkonnost a kondice vedle sebe — čísla i verdikt na jedné obrazovce */}
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <div className="grid grid-cols-2 gap-3 content-start">
-            <Stat label="Čistý výnos" term="cistyVynos" value={pct(a.metrics.netYield)}
-              sub={`Hrubý ${pct(a.metrics.grossYield)} · cap rate ${pct(a.metrics.capRate)}`}
-              tone={a.metrics.netYield >= 4 ? "good" : a.metrics.netYield >= 2 ? "neutral" : "warn"} />
-            <Stat label="IRR od pořízení" term="irr" value={a.irr != null ? pct(a.irr) : "—"}
-              sub={a.estimatedYears.length ? `${a.estimatedYears.length} let odhadnuto z modelu` : "Ze skutečných toků"}
-              tone={(a.irr ?? 0) >= 5 ? "good" : "neutral"} />
-            <Stat label="Cash flow / rok" term="cashFlow" value={czkCompact(a.metrics.cashFlowAnnual)}
-              sub={`${czk(a.metrics.cashFlowAnnual / 12)} měsíčně`}
-              tone={a.metrics.cashFlowAnnual >= 0 ? "good" : "bad"} />
-            <Stat label="Vlastní kapitál" value={czkCompact(a.metrics.equity)}
-              sub={a.currentDebt > 0 ? `LTV ${pct(a.metrics.ltv)} · dluh ${czkCompact(a.currentDebt)}` : "Bez dluhu"}
-              tone={a.metrics.ltv > 80 ? "warn" : "good"} />
-          </div>
-
-          <Kondice kontroly={kontroly} />
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card title="Pořizovací kalkulace">
-            <table className="table-base">
-              <tbody>
-                <Row label="Kupní cena" value={czk(property.purchasePrice)} />
-                <Row label="Vedlejší náklady pořízení" value={czk(property.acquisitionCosts)} />
-                <Row label="Rekonstrukce" value={czk(property.renovationCosts)} />
-                <Row label="Celková investice" value={czk(a.totalInvestment)} strong />
-                <Row term="vstupniCena" label="Z toho podíl na pozemku" value={czk(property.landShareValue)} muted note="neodepisuje se" />
-                <Row term="vlastniKapital" label="Vlastní vložený kapitál" value={czk(a.equityInvested)} />
-                <Row label="Datum pořízení" value={dateCz(property.purchaseDate)} />
-              </tbody>
-            </table>
-          </Card>
-
-          <Card title="Spoluvlastníci">
-            <OwnerManager
-              propertyId={property.id}
-              owners={property.owners}
-              uzivatele={uzivatele}
-              canEdit={user.role === "OWNER"}
+          </SbalitelnaKarta>
+          {/* Dvě čísla, kvůli kterým se sem chodí: co to má cenu a co to nese.
+              Hero je jen jedno — dvě stejně velká by spolu soupeřila. */}
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            <Hero
+              label="Odhadní tržní hodnota"
+              hodnota={czkCompact(a.currentValue)}
+              tone={a.valueGain >= 0 ? "good" : "bad"}
+              doplnek={(() => {
+                // Z kolika nabídek odhad vznikl — bez toho je číslo neprůhledné
+                const v = property.valuations[0];
+                const vzorek = v?.sampleSize ?? null;
+                return (<>
+                  {czk(a.currentValue / property.areaM2)}/m² · zdroj {valuationSourceLabel(a.valuationSource)}
+                  {vzorek != null && (
+                    <> · z {vzorek} {vzorek === 1 ? "nabídky" : vzorek < 5 ? "nabídek" : "nabídek"}
+                      {v?.confidence === "RUCNI" && (
+                        <span className="ml-1.5 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+                          ručně upraveno
+                        </span>
+                      )}
+                      {v?.confidence === "KVALIFIKOVANY" && (
+                        <span className="ml-1.5 rounded bg-good/15 px-1.5 py-0.5 text-[10px] font-medium text-good"
+                          title="Všechny srovnatelné nabídky jsou přímo z této obce">
+                          kvalifikovaný odhad
+                        </span>
+                      )}
+                    </>
+                  )}
+                  <span className="ml-2 block font-medium text-ink-primary sm:ml-0 sm:mt-0.5">
+                    {a.valueGain >= 0 ? "+" : ""}{czkCompact(a.valueGain)} ({pct(a.valueGainPct)}) za {a.yearsHeld.toFixed(1)} roku
+                  </span>
+                </>);
+              })()}
+              vedle={
+                <Link href={`/properties/${property.id}/trh`}
+                  className="btn no-print whitespace-nowrap">Ocenění a trh →</Link>
+              }
             />
-            {mujPodil < 1 && (
-              <p className="mt-3 rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-secondary">
-                Tvůj podíl je {Math.round(mujPodil * 1000) / 10} %. V pohledu
-                <strong> Můj podíl</strong> se všechny částky krátí na tuhle část; poměrové ukazatele
-                jako výnos nebo LTV zůstávají stejné.
-              </p>
-            )}
-          </Card>
 
-          <Card title="Dluh a zajištění">
-            <LoanManager propertyId={property.id} loans={property.loans} canEdit={user.role === "OWNER"} />
-            {activeLoans.length > 0 && (
+            <div className="card">
+              <div className="label">Tržní nájem</div>
+              <div className="mt-1 text-3xl font-semibold leading-none tracking-tight">
+                {nejnovejsiNajem ? `${czk(nejnovejsiNajem.monthlyRent)}/měs.` : "—"}
+              </div>
+              {nejnovejsiNajem ? (
+                <div className="mt-2 text-sm text-ink-secondary">
+                  {smluvniNajem > 0 ? (
+                    <>
+                      Tvůj {czk(smluvniNajem)}
+                      {(() => {
+                        const r = ((smluvniNajem - nejnovejsiNajem.monthlyRent) / nejnovejsiNajem.monthlyRent) * 100;
+                        if ((nejnovejsiNajem.sampleSize ?? 0) < 3) return " · odhad z málo nabídek, neporovnávej";
+                        if (r < -8) return ` · ${pct(Math.abs(r), 0)} pod trhem, ročně ${czk((nejnovejsiNajem.monthlyRent - smluvniNajem) * 12)}`;
+                        if (r > 8) return ` · ${pct(r, 0)} nad trhem`;
+                        return " · odpovídá trhu";
+                      })()}
+                    </>
+                  ) : "Zatím nepronajato"}
+                  <span className="block text-xs text-ink-muted">
+                    {nejnovejsiNajem.sampleSize} nabídek · {dateCz(nejnovejsiNajem.date)}
+                  </span>
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-ink-secondary">
+                  Odhad zatím nevznikl. Sken běží každou noc; ručně ho pustíš níž u tržního nájmu.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Výkonnost a kondice vedle sebe — čísla i verdikt na jedné obrazovce */}
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            <div className="grid grid-cols-2 gap-3 content-start">
+              <Stat label="Čistý výnos" term="cistyVynos" value={pct(a.metrics.netYield)}
+                sub={`Hrubý ${pct(a.metrics.grossYield)} · cap rate ${pct(a.metrics.capRate)}`}
+                tone={a.metrics.netYield >= 4 ? "good" : a.metrics.netYield >= 2 ? "neutral" : "warn"} />
+              <Stat label="IRR od pořízení" term="irr" value={a.irr != null ? pct(a.irr) : "—"}
+                sub={a.estimatedYears.length ? `${a.estimatedYears.length} let odhadnuto z modelu` : "Ze skutečných toků"}
+                tone={(a.irr ?? 0) >= 5 ? "good" : "neutral"} />
+              <Stat label="Cash flow / rok" term="cashFlow" value={czkCompact(a.metrics.cashFlowAnnual)}
+                sub={`${czk(a.metrics.cashFlowAnnual / 12)} měsíčně`}
+                tone={a.metrics.cashFlowAnnual >= 0 ? "good" : "bad"} />
+              <Stat label="Vlastní kapitál" value={czkCompact(a.metrics.equity)}
+                sub={a.currentDebt > 0 ? `LTV ${pct(a.metrics.ltv)} · dluh ${czkCompact(a.currentDebt)}` : "Bez dluhu"}
+                tone={a.metrics.ltv > 80 ? "warn" : "good"} />
+            </div>
+
+            <Kondice kontroly={kontroly} />
+          </div>
+
+          {property.notes && (
+            <Card title="Poznámky"><p className="text-sm text-ink-secondary">{property.notes}</p></Card>
+          )}
+            </>),
+          },
+          {
+            id: "najem",
+            nazev: "Nájem",
+            pocet: property.leases.length,
+            obsah: (<>
+            <SbalitelnaKarta klic="najem" title="Nájem a nájemci">
+              <LeaseManager propertyId={property.id} leases={property.leases} canEdit={user.role === "OWNER"} />
               <div className="mt-4 border-t border-line pt-3">
                 <table className="table-base">
                   <tbody>
-                    <Row term="ltv" label="LTV" value={pct(a.metrics.ltv)} />
-                    <Row term="dscr" label="DSCR" value={isFinite(a.metrics.dscr) ? num(a.metrics.dscr, 2) : "—"}
-                      note={a.metrics.dscr < 1.2 ? "pod bankovním limitem 1,2" : "zdravé krytí"} />
-                    <Row term="jistinaUroky" label={`Úroky ${year}`} value={czk(a.annualInterest)} note="daňově uznatelné" />
+                    <Row label="Provozní náklady / rok" value={czk(a.annualOperatingExpenses)} />
+                    <Row term="nakladovost" label="Nákladovost" value={pct(a.metrics.expenseRatio)} note="podíl na nájmu" />
+                    <Row term="breakeven" label="Breakeven nájem" value={`${czk(a.metrics.breakevenRentMonthly)}/měs.`}
+                      note="při něm je cash flow nulový" />
                   </tbody>
                 </table>
-                {a.fixationAlert && (
-                  <p className="mt-2 rounded-lg bg-warn/10 px-2.5 py-1.5 text-xs text-warn">
-                    Fixace u {a.fixationAlert.lender} končí za {Math.round(a.fixationAlert.monthsLeft)} měsíců — začni poptávat refinancování.
-                  </p>
-                )}
               </div>
-            )}
-          </Card>
-
-          <Card title="Nájem a nájemci">
-            <LeaseManager propertyId={property.id} leases={property.leases} canEdit={user.role === "OWNER"} />
-            <div className="mt-4 border-t border-line pt-3">
+            </SbalitelnaKarta>
+            </>),
+          },
+          {
+            id: "sluzby",
+            nazev: "Služby",
+            pocet: property.services.length,
+            obsah: (<>
+            <SbalitelnaKarta klic="sluzby" title="Služby a dodavatelé" action={<Link href="/savings" className="text-xs text-accent">Kde ušetřit →</Link>}>
+              <ServiceManager propertyId={property.id} services={property.services} canEdit={user.role === "OWNER"} />
+            </SbalitelnaKarta>
+            </>),
+          },
+          {
+            id: "finance",
+            nazev: "Finance",
+            obsah: (<>
+            <SbalitelnaKarta klic="kalkulace" title="Pořizovací kalkulace">
               <table className="table-base">
                 <tbody>
-                  <Row label="Provozní náklady / rok" value={czk(a.annualOperatingExpenses)} />
-                  <Row term="nakladovost" label="Nákladovost" value={pct(a.metrics.expenseRatio)} note="podíl na nájmu" />
-                  <Row term="breakeven" label="Breakeven nájem" value={`${czk(a.metrics.breakevenRentMonthly)}/měs.`}
-                    note="při něm je cash flow nulový" />
+                  <Row label="Kupní cena" value={czk(property.purchasePrice)} />
+                  <Row label="Vedlejší náklady pořízení" value={czk(property.acquisitionCosts)} />
+                  <Row label="Rekonstrukce" value={czk(property.renovationCosts)} />
+                  <Row label="Celková investice" value={czk(a.totalInvestment)} strong />
+                  <Row term="vstupniCena" label="Z toho podíl na pozemku" value={czk(property.landShareValue)} muted note="neodepisuje se" />
+                  <Row term="vlastniKapital" label="Vlastní vložený kapitál" value={czk(a.equityInvested)} />
+                  <Row label="Datum pořízení" value={dateCz(property.purchaseDate)} />
                 </tbody>
               </table>
-            </div>
-          </Card>
-        </div>
-
-        {amortByYear.length > 0 && (
-          <Card title="Umořování úvěru — kolik jde na jistinu a kolik bance">
-            <AmortizationChart data={amortByYear} />
-          </Card>
-        )}
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card title="Ocenění a trh" action={
-            <Link href={`/properties/${property.id}/trh`} className="text-xs text-accent">Otevřít →</Link>
-          }>
-            <table className="table-base">
-              <tbody>
-                <Row label="Odhad hodnoty" value={property.valuations[0] ? czk(property.valuations[0].value) : "—"}
-                  note={property.valuations[0]
-                    ? `z ${property.valuations[0].sampleSize ?? "?"} nabídek · ${dateCz(property.valuations[0].date)}`
-                    : "zatím nevznikl"} />
-                <Row label="Odhad nájmu" value={nejnovejsiNajem ? `${czk(nejnovejsiNajem.monthlyRent)}/měs.` : "—"}
-                  note={nejnovejsiNajem ? `z ${nejnovejsiNajem.sampleSize ?? "?"} nabídek` : "zatím nevznikl"} />
-              </tbody>
-            </table>
-            <p className="mt-3 text-xs text-ink-muted">
-              Historie ocenění, srovnatelné nabídky, ruční korekce a postup, jak odhad vzniká —
-              všechno na vlastní stránce, ať tady nestíní výkonnosti.
-            </p>
-          </Card>
-
-          <Card title="Služby a dodavatelé" action={<Link href="/savings" className="text-xs text-accent">Kde ušetřit →</Link>}>
-            <ServiceManager propertyId={property.id} services={property.services} canEdit={user.role === "OWNER"} />
-          </Card>
-        </div>
-
-        <Card title="Pohyby">
-          <TransactionManager propertyId={property.id} transactions={recentTx} canEdit={user.role === "OWNER"} />
-          {property.transactions.length > recentTx.length && (
-            <p className="mt-3 text-xs text-ink-muted">
-              Zobrazeno posledních {recentTx.length} z {property.transactions.length} pohybů.{" "}
-              <Link href="/cashflow" className="text-accent">Všechny v Cash flow →</Link>
-            </p>
+            </SbalitelnaKarta>
+            <SbalitelnaKarta klic="dluh" title="Dluh a zajištění">
+              <LoanManager propertyId={property.id} loans={property.loans} canEdit={user.role === "OWNER"} />
+              {activeLoans.length > 0 && (
+                <div className="mt-4 border-t border-line pt-3">
+                  <table className="table-base">
+                    <tbody>
+                      <Row term="ltv" label="LTV" value={pct(a.metrics.ltv)} />
+                      <Row term="dscr" label="DSCR" value={isFinite(a.metrics.dscr) ? num(a.metrics.dscr, 2) : "—"}
+                        note={a.metrics.dscr < 1.2 ? "pod bankovním limitem 1,2" : "zdravé krytí"} />
+                      <Row term="jistinaUroky" label={`Úroky ${year}`} value={czk(a.annualInterest)} note="daňově uznatelné" />
+                    </tbody>
+                  </table>
+                  {a.fixationAlert && (
+                    <p className="mt-2 rounded-lg bg-warn/10 px-2.5 py-1.5 text-xs text-warn">
+                      Fixace u {a.fixationAlert.lender} končí za {Math.round(a.fixationAlert.monthsLeft)} měsíců — začni poptávat refinancování.
+                    </p>
+                  )}
+                </div>
+              )}
+            </SbalitelnaKarta>
+          {amortByYear.length > 0 && (
+            <SbalitelnaKarta klic="amortizace" title="Umořování úvěru — kolik jde na jistinu a kolik bance">
+              <AmortizationChart data={amortByYear} />
+            </SbalitelnaKarta>
           )}
-        </Card>
 
-        {/* Odpisy jsou daňová administrativa, ne výkonnost — patří dozadu
-            a sbalené. Kdo je zrovna řeší, rozklikne si je. */}
-        <details className="card group">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
-            <span className="text-sm font-medium">
-              {lzeOdepisovat
+            <SbalitelnaKarta klic="spoluvlastnici" title="Spoluvlastníci">
+              <OwnerManager
+                propertyId={property.id}
+                owners={property.owners}
+                uzivatele={uzivatele}
+                canEdit={user.role === "OWNER"}
+              />
+              {mujPodil < 1 && (
+                <p className="mt-3 rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-secondary">
+                  Tvůj podíl je {Math.round(mujPodil * 1000) / 10} %. V pohledu
+                  <strong> Můj podíl</strong> se všechny částky krátí na tuhle část; poměrové ukazatele
+                  jako výnos nebo LTV zůstávají stejné.
+                </p>
+              )}
+            </SbalitelnaKarta>
+            </>),
+          },
+          {
+            id: "pohyby",
+            nazev: "Pohyby",
+            pocet: property.transactions.length,
+            obsah: (<>
+          <SbalitelnaKarta klic="pohyby" title="Pohyby">
+            <TransactionManager propertyId={property.id} transactions={recentTx} canEdit={user.role === "OWNER"} />
+            {property.transactions.length > recentTx.length && (
+              <p className="mt-3 text-xs text-ink-muted">
+                Zobrazeno posledních {recentTx.length} z {property.transactions.length} pohybů.{" "}
+                <Link href="/cashflow" className="text-accent">Všechny v Cash flow →</Link>
+              </p>
+            )}
+          </SbalitelnaKarta>
+            </>),
+          },
+          {
+            id: "trh",
+            nazev: "Trh",
+            obsah: (<>
+            <SbalitelnaKarta klic="oceneni" title="Ocenění a trh" action={
+              <Link href={`/properties/${property.id}/trh`} className="text-xs text-accent">Otevřít →</Link>
+            }>
+              <table className="table-base">
+                <tbody>
+                  <Row label="Odhad hodnoty" value={property.valuations[0] ? czk(property.valuations[0].value) : "—"}
+                    note={property.valuations[0]
+                      ? `z ${property.valuations[0].sampleSize ?? "?"} nabídek · ${dateCz(property.valuations[0].date)}`
+                      : "zatím nevznikl"} />
+                  <Row label="Odhad nájmu" value={nejnovejsiNajem ? `${czk(nejnovejsiNajem.monthlyRent)}/měs.` : "—"}
+                    note={nejnovejsiNajem ? `z ${nejnovejsiNajem.sampleSize ?? "?"} nabídek` : "zatím nevznikl"} />
+                </tbody>
+              </table>
+              <p className="mt-3 text-xs text-ink-muted">
+                Historie ocenění, srovnatelné nabídky, ruční korekce a postup, jak odhad vzniká —
+                všechno na vlastní stránce, ať tady nestíní výkonnosti.
+              </p>
+            </SbalitelnaKarta>
+            </>),
+          },
+          {
+            id: "dane",
+            nazev: "Daně",
+            obsah: (<>
+            {/* Odpisy jsou daňová administrativa, ne výkonnost — karta se
+                otevírá sbalená, kdo je zrovna řeší, rozklikne si je. */}
+            <SbalitelnaKarta
+              klic="odpisy"
+              vychoziSbalena
+              title={lzeOdepisovat
                 ? `Odpisy — ${property.depreciationMethod === "STRAIGHT" ? "rovnoměrné" : "zrychlené"}, ${property.depreciationGroup}. skupina`
                 : "Odpisy"}
-            </span>
-            <span className="text-xs text-ink-muted">
-              {lzeOdepisovat ? `letos ${czk(a.depreciationThisYear)} · rozbalit` : "rozbalit"}
-            </span>
-          </summary>
-
-          <div className="mt-3 border-t border-line pt-3">
-            {!lzeOdepisovat ? (
-              <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
-                {NEMOVITOST_MAP.get(property.type)?.upozorneni
-                  ?? "Tenhle druh nemovitosti se neodepisuje."}
-              </p>
-            ) : (<>
-              <p className="mb-3 text-xs text-ink-secondary">
-                Vstupní cena {czk(depreciationInputPrice(property))} (bez podílu na pozemku). Uplatňuje se jen při
-                skutečných výdajích, ne při paušálu.
-              </p>
-              <div className="table-scroll max-h-64 overflow-y-auto">
-                <table className="table-base">
-                  <thead><tr><th>Rok</th><th className="num">Odpis</th><th className="num">Odepsáno</th><th className="num">Zůstatková cena</th></tr></thead>
-                  <tbody>
-                    {depSchedule.slice(0, 12).map((r) => (
-                      <tr key={r.year} className={r.year === year ? "bg-accent/5" : ""}>
-                        <td>{r.year}{r.year === year && <span className="ml-1.5 text-xs text-accent">letos</span>}</td>
-                        <td className="num">{czk(r.amount)}</td>
-                        <td className="num text-ink-secondary">{czk(r.cumulative)}</td>
-                        <td className="num text-ink-secondary">{czk(r.residual)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              shrnuti={lzeOdepisovat ? `letos ${czk(a.depreciationThisYear)}` : "neodepisuje se"}
+            >
+  <div>
+                {!lzeOdepisovat ? (
+                  <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
+                    {NEMOVITOST_MAP.get(property.type)?.upozorneni
+                      ?? "Tenhle druh nemovitosti se neodepisuje."}
+                  </p>
+                ) : (<>
+                  <p className="mb-3 text-xs text-ink-secondary">
+                    Vstupní cena {czk(depreciationInputPrice(property))} (bez podílu na pozemku). Uplatňuje se jen při
+                    skutečných výdajích, ne při paušálu.
+                  </p>
+                  <div className="table-scroll max-h-64 overflow-y-auto">
+                    <table className="table-base">
+                      <thead><tr><th>Rok</th><th className="num">Odpis</th><th className="num">Odepsáno</th><th className="num">Zůstatková cena</th></tr></thead>
+                      <tbody>
+                        {depSchedule.slice(0, 12).map((r) => (
+                          <tr key={r.year} className={r.year === year ? "bg-accent/5" : ""}>
+                            <td>{r.year}{r.year === year && <span className="ml-1.5 text-xs text-accent">letos</span>}</td>
+                            <td className="num">{czk(r.amount)}</td>
+                            <td className="num text-ink-secondary">{czk(r.cumulative)}</td>
+                            <td className="num text-ink-secondary">{czk(r.residual)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>)}
               </div>
-            </>)}
-          </div>
-        </details>
+            </SbalitelnaKarta>
+            </>),
+          },
+        ]} />
 
-        {property.notes && (
-          <Card title="Poznámky"><p className="text-sm text-ink-secondary">{property.notes}</p></Card>
-        )}
       </main>
     </>
   );
