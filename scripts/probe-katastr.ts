@@ -148,22 +148,34 @@ async function krok2(): Promise<{ hlavicky: Record<string, string>; zaklad: stri
   return null;
 }
 
-/** Skutecny dotaz na nemovitost, kdyz uz vime, jak se autentizovat. */
+/**
+ * Zaklad cesty je /api/v1 a klic prosel. Zbyva zjistit, jak se jmenuji
+ * endpointy pro vyhledani jednotky, stavby a parcely — v popisu jsou uvedeny
+ * ve tvaru, ktery vraci 404.
+ */
 async function krok3(hlavicky: Record<string, string>, zaklad: string) {
-  console.log("\n=== 3. Dotaz na konkrétní údaje ===");
+  console.log("\n=== 3. Specifikace pod zakladem ===");
+  for (const c of ["/swagger.json", "/openapi.json", "/swagger/v1/swagger.json", "", "/Popis"]) {
+    const v = await zkus(zaklad + c, hlavicky);
+    console.log(`\n[${v.status}] ${v.url}  (${v.typ})`);
+    if (v.telo.startsWith("{") && vypisSpecifikaci(v.telo)) continue;
+    console.log(`  ${zkratka(v.typ.includes("json") ? v.telo : text(v.telo), 800)}`);
+  }
+
+  console.log("\n=== 4. Jména endpointů pro nemovitosti ===");
+  // Prusinovice (588903) maji katastralni uzemi 733814; cislo domovni 1 tam
+  // urcite existuje. Jde o tvar adresy, ne o konkretni vysledek.
   const cesty = [
-    "/AplikacniSluzby",
-    "/AplikacniSluzby/StavUctu",
-    "/CiselnikyUzemnichJednotek/Obce/588903",
-    "/CiselnikyUzemnichJednotek/KatastralniUzemi",
-    "/Jednotka/Vyhledani",
-    "/Stavba/Vyhledani",
-    "/Parcela/Vyhledani",
+    "/Jednotky/Vyhledani", "/Jednotka", "/Jednotky",
+    "/Stavby/Vyhledani", "/Stavba", "/Stavby",
+    "/Parcely/Vyhledani", "/Parcela", "/Parcely",
+    "/Ucastnici", "/Vlastnici", "/Rizeni",
+    "/CiselnikyIskn", "/CiselnikyUzemnichJednotek",
   ];
   for (const c of cesty) {
     const v = await zkus(zaklad + c, hlavicky);
-    console.log(`\n[${v.status}] ${v.url}`);
-    console.log(`  ${zkratka(v.telo, 1500)}`);
+    const jsonovy = v.typ.includes("json");
+    console.log(`[${v.status}] ${jsonovy ? "JSON" : "html"} ${c}  ${jsonovy ? zkratka(v.telo, 500) : ""}`);
   }
 }
 
