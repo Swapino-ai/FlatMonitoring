@@ -1,8 +1,10 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { deleteLease, saveLease, type EntityFormState } from "@/lib/entityActions";
-import { Hlaska, Pole, Rozbalovaci, SmazatTlacitko, Zaskrtavatko } from "./form";
+import {
+  Hlaska, Pole, Rozbalovaci, SmazatTlacitko, UpravaPanel, UpravitTlacitko, Zaskrtavatko, isoDatum,
+} from "./form";
 import { Badge } from "./Stat";
 import { czk, dateCz } from "@/lib/format";
 
@@ -18,18 +20,31 @@ export function LeaseManager({ propertyId, leases, canEdit }: {
   const [addState, addAction, adding] = useActionState<EntityFormState, FormData>(saveLease.bind(null, null), {});
   const [delState, delAction] = useActionState<EntityFormState, FormData>(deleteLease, {});
 
+  const [upravaId, setUpravaId] = useState<string | null>(null);
+  const [upravaState, upravaAction, upravuji] = useActionState<EntityFormState, FormData>(
+    saveLease.bind(null, upravaId), {});
+  useEffect(() => { if (upravaState.success) setUpravaId(null); }, [upravaState.success]);
+
+  const upravovana = leases.find((l) => l.id === upravaId) ?? null;
   const serazene = [...leases].sort((a, b) => Number(b.isActive) - Number(a.isActive));
 
   return (
     <div>
-      <Hlaska state={addState.error || addState.success ? addState : delState} />
+      <Hlaska state={
+        upravaState.error ? upravaState
+          : addState.error || addState.success ? addState
+          : delState.error || delState.success ? delState
+          : upravaState
+      } />
 
       {leases.length === 0 ? (
         <p className="py-3 text-center text-sm text-ink-muted">Žádná nájemní smlouva.</p>
       ) : (
         <div className="space-y-3">
           {serazene.map((l) => (
-            <div key={l.id} className={`rounded-lg border p-3 ${l.isActive ? "border-good/40 bg-good/5" : "border-line"}`}>
+            <div key={l.id} className={`rounded-lg border p-3 ${
+              upravaId === l.id ? "border-accent/40 bg-accent/5" : l.isActive ? "border-good/40 bg-good/5" : "border-line"
+            }`}>
               <div className="mb-2 flex items-start justify-between gap-2">
                 <div>
                   <span className="font-medium">{l.tenantName}</span>
@@ -39,8 +54,12 @@ export function LeaseManager({ propertyId, leases, canEdit }: {
                   )}
                 </div>
                 {canEdit && (
-                  <SmazatTlacitko action={delAction} id={l.id}
-                    potvrzeni={`Opravdu smazat smlouvu s ${l.tenantName}?`} />
+                  <div className="flex shrink-0 items-center gap-3">
+                    <UpravitTlacitko aktivni={upravaId === l.id}
+                      onClick={() => setUpravaId(upravaId === l.id ? null : l.id)} />
+                    <SmazatTlacitko action={delAction} id={l.id}
+                      potvrzeni={`Opravdu smazat smlouvu s ${l.tenantName}?`} />
+                  </div>
                 )}
               </div>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
@@ -56,36 +75,55 @@ export function LeaseManager({ propertyId, leases, canEdit }: {
         </div>
       )}
 
-      {canEdit && (
+      {canEdit && upravovana && (
+        <UpravaPanel nadpis={`Upravit smlouvu s ${upravovana.tenantName}`} onZavrit={() => setUpravaId(null)}>
+          <Formular key={upravovana.id} propertyId={propertyId} r={upravovana}
+            action={upravaAction} pending={upravuji} popisekTlacitka="Uložit změny" />
+        </UpravaPanel>
+      )}
+
+      {canEdit && !upravovana && (
         <Rozbalovaci popisek="Přidat nájemní smlouvu" zavritPo={addState.success}>
-          <form action={addAction} className="grid gap-3 sm:grid-cols-2">
-            <input type="hidden" name="propertyId" value={propertyId} />
-            <Pole label="Jméno nájemce" name="tenantName" required />
-            <Pole label="E-mail" name="tenantEmail" type="email" placeholder="nepovinné" />
-            <Pole label="Telefon" name="tenantPhone" placeholder="nepovinné" />
-            <Pole label="Den splatnosti" name="paymentDay" type="number" min={1} max={28} defaultValue={15} />
-            <Pole label="Čisté nájemné (Kč/měs.)" name="rentMonthly" type="number" required
-              hint="Bez záloh na služby — jen tohle se daní" />
-            <Pole label="Zálohy na služby (Kč/měs.)" name="utilitiesMonthly" type="number" defaultValue={0}
-              hint="Průchozí položka, nedaní se" />
-            <Pole label="Kauce (Kč)" name="deposit" type="number" defaultValue={0} />
-            <div />
-            <Pole label="Nájem od" name="startDate" type="date" required />
-            <Pole label="Nájem do" name="endDate" type="date" hint="Prázdné = na dobu neurčitou" />
-            <div className="space-y-2 sm:col-span-2">
-              <Zaskrtavatko name="indexationClause" label="Inflační doložka ve smlouvě" />
-              <Zaskrtavatko name="isActive" label="Toto je platná smlouva" defaultChecked
-                hint="Dosavadní platná smlouva se tím ukončí" />
-            </div>
-            <div className="sm:col-span-2">
-              <button type="submit" disabled={adding} className="btn btn-primary">
-                {adding ? "Ukládám…" : "Uložit smlouvu"}
-              </button>
-            </div>
-          </form>
+          <Formular propertyId={propertyId} r={null} action={addAction} pending={adding}
+            popisekTlacitka="Uložit smlouvu" />
         </Rozbalovaci>
       )}
     </div>
+  );
+}
+
+function Formular({ propertyId, r, action, pending, popisekTlacitka }: {
+  propertyId: string; r: Row | null;
+  action: (payload: FormData) => void; pending: boolean; popisekTlacitka: string;
+}) {
+  return (
+    <form action={action} className="grid gap-3 sm:grid-cols-2">
+      <input type="hidden" name="propertyId" value={propertyId} />
+      <Pole label="Jméno nájemce" name="tenantName" required defaultValue={r?.tenantName} />
+      <Pole label="E-mail" name="tenantEmail" type="email" placeholder="nepovinné" defaultValue={r?.tenantEmail ?? ""} />
+      <Pole label="Telefon" name="tenantPhone" placeholder="nepovinné" defaultValue={r?.tenantPhone ?? ""} />
+      <Pole label="Den splatnosti" name="paymentDay" type="number" min={1} max={28} defaultValue={r?.paymentDay ?? 15} />
+      <Pole label="Čisté nájemné (Kč/měs.)" name="rentMonthly" type="number" required defaultValue={r?.rentMonthly}
+        hint="Bez záloh na služby — jen tohle se daní" />
+      <Pole label="Zálohy na služby (Kč/měs.)" name="utilitiesMonthly" type="number"
+        defaultValue={r?.utilitiesMonthly ?? 0} hint="Průchozí položka, nedaní se" />
+      <Pole label="Kauce (Kč)" name="deposit" type="number" defaultValue={r?.deposit ?? 0} />
+      <div />
+      <Pole label="Nájem od" name="startDate" type="date" required defaultValue={isoDatum(r?.startDate)} />
+      <Pole label="Nájem do" name="endDate" type="date" defaultValue={isoDatum(r?.endDate)}
+        hint="Prázdné = na dobu neurčitou" />
+      <div className="space-y-2 sm:col-span-2">
+        <Zaskrtavatko name="indexationClause" label="Inflační doložka ve smlouvě"
+          defaultChecked={r?.indexationClause} />
+        <Zaskrtavatko name="isActive" label="Toto je platná smlouva" defaultChecked={r ? r.isActive : true}
+          hint="Dosavadní platná smlouva se tím ukončí" />
+      </div>
+      <div className="sm:col-span-2">
+        <button type="submit" disabled={pending} className="btn btn-primary">
+          {pending ? "Ukládám…" : popisekTlacitka}
+        </button>
+      </div>
+    </form>
   );
 }
 

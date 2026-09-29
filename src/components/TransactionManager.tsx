@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { deleteTransaction, saveTransaction, type EntityFormState } from "@/lib/entityActions";
-import { Hlaska, Pole, Rozbalovaci, SmazatTlacitko, Vyber } from "./form";
+import { Hlaska, Pole, Rozbalovaci, SmazatTlacitko, UpravaPanel, UpravitTlacitko, Vyber, isoDatum } from "./form";
 import { CATEGORIES, categoryLabel } from "@/lib/categories";
 import { czk, dateCz } from "@/lib/format";
 
@@ -14,8 +14,15 @@ interface Row {
 export function TransactionManager({ propertyId, transactions, canEdit }: {
   propertyId: string; transactions: Row[]; canEdit: boolean;
 }) {
-  const [addState, addAction, adding] = useActionState<EntityFormState, FormData>(saveTransaction, {});
+  const [addState, addAction, adding] = useActionState<EntityFormState, FormData>(saveTransaction.bind(null, null), {});
   const [delState, delAction] = useActionState<EntityFormState, FormData>(deleteTransaction, {});
+
+  const [upravaId, setUpravaId] = useState<string | null>(null);
+  const [upravaState, upravaAction, upravuji] = useActionState<EntityFormState, FormData>(
+    saveTransaction.bind(null, upravaId), {});
+  useEffect(() => { if (upravaState.success) setUpravaId(null); }, [upravaState.success]);
+
+  const upravovany = transactions.find((t) => t.id === upravaId) ?? null;
 
   // Prijmy a vydaje zvlast, at je jasne, co znamena kladna castka
   const prijmy = CATEGORIES.filter((c) => c.kind === "INCOME").map((c) => [c.key, c.label] as [string, string]);
@@ -23,7 +30,12 @@ export function TransactionManager({ propertyId, transactions, canEdit }: {
 
   return (
     <div>
-      <Hlaska state={addState.error || addState.success ? addState : delState} />
+      <Hlaska state={
+        upravaState.error ? upravaState
+          : addState.error || addState.success ? addState
+          : delState.error || delState.success ? delState
+          : upravaState
+      } />
 
       {transactions.length === 0 ? (
         <p className="py-3 text-center text-sm text-ink-muted">Žádné pohyby.</p>
@@ -34,7 +46,7 @@ export function TransactionManager({ propertyId, transactions, canEdit }: {
           </thead>
           <tbody>
             {transactions.map((t) => (
-              <tr key={t.id}>
+              <tr key={t.id} className={upravaId === t.id ? "bg-accent/5" : undefined}>
                 <td className="tabular-nums text-ink-secondary">{dateCz(t.date)}</td>
                 <td>{categoryLabel(t.category)}</td>
                 <td className="text-ink-secondary">
@@ -43,8 +55,12 @@ export function TransactionManager({ propertyId, transactions, canEdit }: {
                 </td>
                 <td className={`num font-medium ${t.amount >= 0 ? "text-good" : ""}`}>{czk(t.amount)}</td>
                 {canEdit && (
-                  <td className="text-right">
-                    <SmazatTlacitko action={delAction} id={t.id} potvrzeni="Opravdu smazat tento pohyb?" />
+                  <td>
+                    <div className="flex items-center justify-end gap-3">
+                      <UpravitTlacitko aktivni={upravaId === t.id}
+                        onClick={() => setUpravaId(upravaId === t.id ? null : t.id)} />
+                      <SmazatTlacitko action={delAction} id={t.id} potvrzeni="Opravdu smazat tento pohyb?" />
+                    </div>
                   </td>
                 )}
               </tr>
@@ -53,27 +69,47 @@ export function TransactionManager({ propertyId, transactions, canEdit }: {
         </table>
       )}
 
-      {canEdit && (
+      {canEdit && upravovany && (
+        <UpravaPanel nadpis={`Upravit pohyb z ${dateCz(upravovany.date)}`} onZavrit={() => setUpravaId(null)}>
+          <Formular key={upravovany.id} propertyId={propertyId} r={upravovany} kategorie={[...prijmy, ...vydaje]}
+            action={upravaAction} pending={upravuji} popisekTlacitka="Uložit změny" />
+        </UpravaPanel>
+      )}
+
+      {canEdit && !upravovany && (
         <Rozbalovaci popisek="Zaúčtovat pohyb" zavritPo={addState.success}>
-          <form action={addAction} className="grid gap-3 sm:grid-cols-2">
-            <input type="hidden" name="propertyId" value={propertyId} />
-            <Pole label="Datum" name="date" type="date" required
-              defaultValue={new Date().toISOString().slice(0, 10)} />
-            <Vyber label="Kategorie" name="category" defaultValue="RENT"
-              options={[...prijmy, ...vydaje]}
-              hint="Daňové zařazení se doplní podle kategorie" />
-            <Pole label="Částka (Kč)" name="amount" type="number" step="1" required
-              hint="Zadej kladně — znaménko určí kategorie" />
-            <Pole label="Doklad" name="documentRef" placeholder="např. FA-2026-0312" />
-            <Pole label="Popis" name="description" sirka="sm:col-span-2" placeholder="nepovinné" />
-            <div className="sm:col-span-2">
-              <button type="submit" disabled={adding} className="btn btn-primary">
-                {adding ? "Ukládám…" : "Zaúčtovat"}
-              </button>
-            </div>
-          </form>
+          <Formular propertyId={propertyId} r={null} kategorie={[...prijmy, ...vydaje]}
+            action={addAction} pending={adding} popisekTlacitka="Zaúčtovat" />
         </Rozbalovaci>
       )}
     </div>
+  );
+}
+
+function Formular({ propertyId, r, kategorie, action, pending, popisekTlacitka }: {
+  propertyId: string; r: Row | null; kategorie: [string, string][];
+  action: (payload: FormData) => void; pending: boolean; popisekTlacitka: string;
+}) {
+  return (
+    <form action={action} className="grid gap-3 sm:grid-cols-2">
+      <input type="hidden" name="propertyId" value={propertyId} />
+      <Pole label="Datum" name="date" type="date" required
+        defaultValue={isoDatum(r?.date) ?? new Date().toISOString().slice(0, 10)} />
+      <Vyber label="Kategorie" name="category" defaultValue={r?.category ?? "RENT"}
+        options={kategorie}
+        hint="Daňové zařazení se doplní podle kategorie" />
+      {/* Znamenko urcuje kategorie, takze do pole patri absolutni hodnota */}
+      <Pole label="Částka (Kč)" name="amount" type="number" step="1" required
+        defaultValue={r ? Math.abs(r.amount) : undefined}
+        hint="Zadej kladně — znaménko určí kategorie" />
+      <Pole label="Doklad" name="documentRef" placeholder="např. FA-2026-0312" defaultValue={r?.documentRef ?? ""} />
+      <Pole label="Popis" name="description" sirka="sm:col-span-2" placeholder="nepovinné"
+        defaultValue={r?.description ?? ""} />
+      <div className="sm:col-span-2">
+        <button type="submit" disabled={pending} className="btn btn-primary">
+          {pending ? "Ukládám…" : popisekTlacitka}
+        </button>
+      </div>
+    </form>
   );
 }

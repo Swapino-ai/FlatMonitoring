@@ -97,3 +97,40 @@ export function SmazatTlacitko({ action, id, potvrzeni }: {
     </form>
   );
 }
+
+/** Tlacitko pro zahajeni upravy radku. */
+export function UpravitTlacitko({ onClick, aktivni }: { onClick: () => void; aktivni?: boolean }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={`text-xs hover:underline ${aktivni ? "text-ink-muted" : "text-accent"}`}>
+      {aktivni ? "zrušit" : "upravit"}
+    </button>
+  );
+}
+
+/**
+ * Obal pro rozepsanou upravu radku. Formular se otevira pod tabulkou, ne
+ * v radku — v uzke tabulce na telefonu by se pole nevesla.
+ */
+export function UpravaPanel({ nadpis, onZavrit, children }: {
+  nadpis: string; onZavrit: () => void; children: ReactNode;
+}) {
+  return (
+    <div className="mt-3 rounded-card border border-accent/40 bg-accent/5 p-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-medium">{nadpis}</h3>
+        <button type="button" onClick={onZavrit} className="text-xs text-ink-muted hover:text-ink-primary">
+          Zavřít
+        </button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Datum pro <input type="date">; prazdne, kdyz neni zadane. */
+export function isoDatum(d: Date | string | null | undefined): string | undefined {
+  if (!d) return undefined;
+  const dd = typeof d === "string" ? new Date(d) : d;
+  return Number.isNaN(dd.getTime()) ? undefined : dd.toISOString().slice(0, 10);
+}

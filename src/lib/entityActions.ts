@@ -156,15 +156,16 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
     notes: d.notes,
   };
 
-  if (id) {
-    await prisma.lease.update({ where: { id }, data });
-  } else {
-    // Vyhodnoceni vynosu pracuje s jednou platnou smlouvou — starou proto deaktivujeme
-    if (d.isActive) {
-      await prisma.lease.updateMany({ where: { propertyId: d.propertyId, isActive: true }, data: { isActive: false } });
-    }
-    await prisma.lease.create({ data: { ...data, propertyId: d.propertyId } });
+  // Vyhodnoceni vynosu pracuje s jednou platnou smlouvou — ostatni proto deaktivujeme
+  if (d.isActive) {
+    await prisma.lease.updateMany({
+      where: { propertyId: d.propertyId, isActive: true, ...(id ? { id: { not: id } } : {}) },
+      data: { isActive: false },
+    });
   }
+
+  if (id) await prisma.lease.update({ where: { id }, data });
+  else await prisma.lease.create({ data: { ...data, propertyId: d.propertyId } });
 
   obnov(d.propertyId);
   return { success: id ? "Smlouva upravena." : "Smlouva uložena." };
@@ -254,7 +255,7 @@ const pohybSchema = z.object({
   documentRef: textNeboNic,
 });
 
-export async function saveTransaction(_prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
+export async function saveTransaction(id: string | null, _prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
   const auth = await majitel();
   if ("error" in auth) return auth;
 
@@ -269,20 +270,22 @@ export async function saveTransaction(_prev: EntityFormState, formData: FormData
   // Znamenko urcuje kategorie, ne uzivatel — vydaje se ukladaji zaporne
   const castka = kategorie.kind === "EXPENSE" ? -Math.abs(d.amount) : Math.abs(d.amount);
 
-  await prisma.transaction.create({
-    data: {
-      propertyId: d.propertyId,
-      date: new Date(d.date),
-      amount: castka,
-      category: d.category,
-      taxTreatment: kategorie.defaultTaxTreatment,
-      description: d.description,
-      documentRef: d.documentRef,
-    },
-  });
+  const data = {
+    propertyId: d.propertyId,
+    date: new Date(d.date),
+    amount: castka,
+    category: d.category,
+    taxTreatment: kategorie.defaultTaxTreatment,
+    description: d.description,
+    documentRef: d.documentRef,
+  };
+
+  // Stejny formular slouzi k zalozeni i k uprave — id rozhoduje
+  if (id) await prisma.transaction.update({ where: { id }, data });
+  else await prisma.transaction.create({ data });
 
   obnov(d.propertyId);
-  return { success: "Pohyb zaúčtován." };
+  return { success: id ? "Pohyb upraven." : "Pohyb zaúčtován." };
 }
 
 export async function deleteTransaction(_prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
