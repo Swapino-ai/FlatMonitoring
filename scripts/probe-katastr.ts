@@ -72,6 +72,26 @@ async function krok1() {
     console.log(`  ${zkratka(text(v.telo), c === "/Popis" ? 4000 : 500)}`);
   }
 
+  // Popis odkazuje na "Podrobnou specifikaci API ve standardu OpenAPI" —
+  // ten odkaz je to, co potrebujeme
+  console.log("\n--- odkazy ze stránky Popis ---");
+  const popis = await zkus("/Popis");
+  const odkazy = new Set<string>();
+  for (const m of popis.telo.matchAll(/href="([^"]+)"/g)) {
+    if (/\.(css|js|png|ico|svg|woff2?)/.test(m[1])) continue;
+    odkazy.add(m[1]);
+  }
+  for (const o of odkazy) console.log(`  ${o}`);
+
+  // Specifikace muze byt za kterymkoli z nich
+  for (const o of odkazy) {
+    if (!/spec|openapi|swagger|json|yaml/i.test(o)) continue;
+    const adresa = o.startsWith("http") ? o : new URL(o, `${ZAKLAD}/`).toString();
+    const spec = await zkus(adresa);
+    console.log(`\n[${spec.status}] ${spec.url}  (${spec.typ})`);
+    if (!vypisSpecifikaci(spec.telo)) console.log(`  ${zkratka(text(spec.telo), 2500)}`);
+  }
+
   // Swagger UI si adresu specifikace bere z initializeru — odtud se dozvime,
   // kde specifikace opravdu lezi
   console.log("\n--- adresa specifikace ze Swagger UI ---");
@@ -106,7 +126,9 @@ async function krok2(): Promise<Record<string, string> | null> {
   ];
 
   // Ciselnik kraju je nejnevinnejsi dotaz, jaky takove API muze mit
-  const testovaci = ["/api/v1/ciselniky/kraje", "/api/v1/kraje", "/ciselniky/kraje", "/api/ciselniky/kraje"];
+  // Tvary endpointu podle stranky Popis: /AplikacniSluzby/StavUctu,
+  // /CiselnikyUzemnichJednotek/Obce/588903, /Jednotka/Vyhledani
+  const testovaci = ["/AplikacniSluzby/StavUctu", "/CiselnikyUzemnichJednotek/Obce/588903"];
 
   for (const h of varianty) {
     for (const c of testovaci) {
@@ -127,11 +149,13 @@ async function krok2(): Promise<Record<string, string> | null> {
 async function krok3(hlavicky: Record<string, string>) {
   console.log("\n=== 3. Dotaz na konkrétní údaje ===");
   const cesty = [
-    "/api/v1/ciselniky/katastralniUzemi?nazev=Nov%C3%BD%20Bor",
-    "/api/v1/katastralniUzemi?nazev=Nov%C3%BD%20Bor",
-    "/api/v1/jednotky?katastralniUzemi=707333&cisloDomovni=1",
-    "/api/v1/stavby?katastralniUzemi=707333",
-    "/api/v1/parcely?katastralniUzemi=707333&parcelniCislo=1",
+    "/AplikacniSluzby",
+    "/AplikacniSluzby/StavUctu",
+    "/CiselnikyUzemnichJednotek/Obce/588903",
+    "/CiselnikyUzemnichJednotek/KatastralniUzemi",
+    "/Jednotka/Vyhledani",
+    "/Stavba/Vyhledani",
+    "/Parcela/Vyhledani",
   ];
   for (const c of cesty) {
     const v = await zkus(c, hlavicky);
