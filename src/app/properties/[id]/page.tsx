@@ -127,6 +127,33 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           </div>
         </div>
 
+        <Card title="Poloha" action={
+          property.latitude != null && property.longitude != null ? (
+            <a href={`https://mapy.cz/zakladni?x=${property.longitude}&y=${property.latitude}&z=17`}
+              target="_blank" rel="noreferrer noopener" className="text-xs text-accent">Otevřít v Mapy.cz →</a>
+          ) : user.role === "OWNER" ? (
+            <Link href={`/properties/${property.id}/edit`} className="text-xs text-accent">Doplnit adresu →</Link>
+          ) : null
+        }>
+          {property.latitude != null && property.longitude != null ? (
+            <>
+              <Mapa latitude={property.latitude} longitude={property.longitude} vyskaTrida="h-64 lg:h-80" />
+              <p className="mt-2 text-xs text-ink-muted">
+                {property.scanRadiusKm
+                  ? `Srovnání se hledá v pevném okruhu ${property.scanRadiusKm} km.`
+                  : `Podle téhle polohy se hledá srovnání — od ${okruhProTyp(property.type)} km dál, dokud není dost nabídek.`}
+                {property.excludedCities && ` Nezapočítává se: ${property.excludedCities}.`}
+              </p>
+            </>
+          ) : (
+            <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
+              Nemovitost nemá uloženou polohu — byla založená dřív, než přibyl našeptávač adres.
+              Otevři úpravy, vyber adresu z našeptávače a srovnání se pak bude hledat
+              podle vzdálenosti místo podle názvu čtvrti.
+            </p>
+          )}
+        </Card>
+
         {/* Dvě čísla, kvůli kterým se sem chodí: co to má cenu a co to nese.
             Hero je jen jedno — dvě stejně velká by spolu soupeřila. */}
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
@@ -215,35 +242,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           </div>
 
           <Kondice kontroly={kontroly} />
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <Card title="Poloha" action={
-            property.latitude != null && property.longitude != null ? (
-              <a href={`https://mapy.cz/zakladni?x=${property.longitude}&y=${property.latitude}&z=17`}
-                target="_blank" rel="noreferrer noopener" className="text-xs text-accent">Otevřít v Mapy.cz →</a>
-            ) : user.role === "OWNER" ? (
-              <Link href={`/properties/${property.id}/edit`} className="text-xs text-accent">Doplnit adresu →</Link>
-            ) : null
-          }>
-            {property.latitude != null && property.longitude != null ? (
-              <>
-                <Mapa latitude={property.latitude} longitude={property.longitude} vyskaTrida="h-48 lg:h-56" />
-                <p className="mt-2 text-xs text-ink-muted">
-                  {property.scanRadiusKm
-                    ? `Srovnání se hledá v pevném okruhu ${property.scanRadiusKm} km.`
-                    : `Podle téhle polohy se hledá srovnání — od ${okruhProTyp(property.type)} km dál, dokud není dost nabídek.`}
-                  {property.excludedCities && ` Nezapočítává se: ${property.excludedCities}.`}
-                </p>
-              </>
-            ) : (
-              <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
-                Nemovitost nemá uloženou polohu — byla založená dřív, než přibyl našeptávač adres.
-                Otevři úpravy, vyber adresu z našeptávače a srovnání se pak bude hledat
-                podle vzdálenosti místo podle názvu čtvrti.
-              </p>
-            )}
-          </Card>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
