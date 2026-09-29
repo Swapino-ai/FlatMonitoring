@@ -74,12 +74,12 @@ model Property {
   /// podle vzdusne vzdalenosti misto shody nazvu ctvrti — byt na hranici
   /// Vinohrad a Zizkova ma bliz k nabidkam za rohem nez k druhemu konci
   /// "sve" ctvrti.
-  latitude    Float?
-  longitude   Float?
+  latitude  Float?
+  longitude Float?
   /// Kraj ve tvaru pro adresu Sreality, napr. "ustecky-kraj". Zaloha pro male
   /// obce, ktere na Sreality vlastni vypis nemaji (Bohusovice nad Ohri vraci
   /// 404). Okres neexistuje v zadnem tvaru — overeno sondou.
-  region      String?
+  region    String?
 
   /// Okruh pro hledani srovnatelnych nabidek v km. Null = automaticky podle
   /// druhu nemovitosti s rozsirovanim, dokud neni dost vzorku. Rucne zadany
@@ -118,8 +118,9 @@ model Property {
   owners        PropertyOwner[]
   rentEstimates RentEstimate[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  cadastre  CadastreRecord?
 }
 
 /// Hypoteka / uver — "zda vazne dluh na nich"
@@ -340,7 +341,7 @@ model ScanRun {
   finishedAt DateTime?
 
   /// CRON_NAJEM | CRON_TRH | RUCNI
-  trigger String
+  trigger  String
   /// SALE | RENT
   dealType String
 
@@ -382,5 +383,43 @@ model ExcludedListing {
   createdAt  DateTime @default(now())
 
   @@unique([propertyId, source, externalId])
+  @@index([propertyId])
+}
+
+/**
+ * Udaje z katastru nemovitosti. Drzi se ulozene, protoze API ma kvotu 500
+ * volani za obdobi a katastr se meni zridka — ptat se pri kazdem zobrazeni
+ * stranky by kvotu snedlo za den.
+ */
+model CadastreRecord {
+  id         String   @id @default(cuid())
+  propertyId String   @unique
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  obecKod       Int?
+  obecNazev     String?
+  castObceNazev String?
+
+  katastralniUzemiKod   Int?
+  katastralniUzemiNazev String?
+
+  lvCislo      Int? // cislo listu vlastnictvi stavby
+  stavbaId     Int?
+  typStavby    String?
+  cisloDomovni Int?
+
+  zpusobVyuziti  String?
+  zpusobyOchrany String?
+  parcely        String? // "st. 684" nebo vic parcel oddelenych carkou
+
+  /**
+   * Vsechny jednotky v dome — ze kterych si uzivatel vybere tu svou.
+   */
+  jednotky      Json?
+  cisloJednotky String?
+
+  nactenoKdy  DateTime  @default(now())
+  aktualnostK DateTime?
+
   @@index([propertyId])
 }

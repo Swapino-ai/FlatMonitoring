@@ -19,6 +19,7 @@ import { prisma } from "@/lib/db";
 import { OwnerManager } from "@/components/OwnerManager";
 import { Listy } from "@/components/Listy";
 import { SbalitelnaKarta } from "@/components/SbalitelnaKarta";
+import { KatastrKarta, type JednotkaVolba } from "@/components/KatastrKarta";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
 import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
@@ -57,6 +58,9 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     method: property.depreciationMethod as "STRAIGHT" | "ACCELERATED",
     startYear: property.depreciationStart ?? new Date(property.purchaseDate).getFullYear(),
   });
+
+  // Katastr se nacita zvlast — v prehledech portfolia by jen zdrzoval
+  const katastr = await prisma.cadastreRecord.findUnique({ where: { propertyId: property.id } });
 
   // Nejnovejsi odhad najmu — patri nahoru vedle hodnoty, ne az pod finance
   const nejnovejsiNajem = await prisma.rentEstimate.findFirst({
@@ -253,6 +257,41 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           {property.notes && (
             <Card title="Poznámky"><p className="text-sm text-ink-secondary">{property.notes}</p></Card>
           )}
+            </>),
+          },
+          {
+            id: "katastr",
+            nazev: "Katastr",
+            obsah: (<>
+            <SbalitelnaKarta klic="katastr" title="Katastr nemovitostí" action={
+              katastr?.katastralniUzemiKod != null ? (
+                <a href={`https://nahlizenidokn.cuzk.gov.cz/VyberBudovu.aspx?typ=Stavba&ku=${katastr.katastralniUzemiKod}`}
+                  target="_blank" rel="noreferrer noopener" className="text-xs text-accent">
+                  Nahlížení do KN →
+                </a>
+              ) : null
+            }>
+              <KatastrKarta
+                propertyId={property.id}
+                canEdit={user.role === "OWNER"}
+                adresa={`${property.street}, ${property.city}`}
+                data={katastr && {
+                  obecNazev: katastr.obecNazev,
+                  castObceNazev: katastr.castObceNazev,
+                  katastralniUzemiKod: katastr.katastralniUzemiKod,
+                  katastralniUzemiNazev: katastr.katastralniUzemiNazev,
+                  lvCislo: katastr.lvCislo,
+                  typStavby: katastr.typStavby,
+                  cisloDomovni: katastr.cisloDomovni,
+                  zpusobVyuziti: katastr.zpusobVyuziti,
+                  zpusobyOchrany: katastr.zpusobyOchrany,
+                  parcely: katastr.parcely,
+                  jednotky: (katastr.jednotky as JednotkaVolba[] | null) ?? [],
+                  cisloJednotky: katastr.cisloJednotky,
+                  nactenoKdy: katastr.nactenoKdy,
+                }}
+              />
+            </SbalitelnaKarta>
             </>),
           },
           {
