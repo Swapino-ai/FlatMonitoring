@@ -1,95 +1,43 @@
 /**
- * Druha sonda katastru: jak vypada odpoved pro skutecnou nemovitost.
+ * Druha sonda katastru: jak se ciselniky filtruji a co vrati skutecna adresa.
  *
- * Prvni sonda nasla zaklad /api/v1 a jmena endpointu. Tohle zjistuje tvar dat,
- * aby se parser psal podle skutecne odpovedi a ne podle domnenky. Cte
- * nemovitosti z databaze, prelozi obec na katastralni uzemi a vypise, co
- * /Jednotky/Vyhledani vrati. Nic nemeni.
+ * Prvni pokus ukazal, ze parametr "nazev" ciselniky ignoruji — vraci cely
+ * seznam od Abertam dal. Ostatni parametry API jsou psane velkym pismenem
+ * (KodCastiObce), takze se zkousi "Nazev". Zaroven se overi, jestli jde cast
+ * obce dohledat podle kodu obce.
  */
-import { prisma } from "../src/lib/db";
 
 const KLIC = process.env.KATASTR_API_KEY ?? "";
 const ZAKLAD = "https://api-kn.cuzk.gov.cz/api/v1";
 
-async function ptejSe(cesta: string) {
-  const r = await fetch(ZAKLAD + cesta, {
-    headers: { Accept: "application/json", ApiKey: KLIC },
-  });
+async function ptejSe(cesta: string, popis: string) {
+  const r = await fetch(ZAKLAD + cesta, { headers: { Accept: "application/json", ApiKey: KLIC } });
   const telo = await r.text();
-  return { status: r.status, telo };
-}
-
-/** Z ulice "Korunní 734/15" vytahne cislo popisne (734) a orientacni (15). */
-function cislaZUlice(ulice: string): { popisne: number | null; orientacni: string | null } {
-  const m = ulice.match(/(\d+)\s*\/\s*(\d+[a-zA-Z]?)/);
-  if (m) return { popisne: Number(m[1]), orientacni: m[2] };
-  const samotne = ulice.match(/(\d+)/);
-  return { popisne: samotne ? Number(samotne[1]) : null, orientacni: null };
+  console.log(`\n[${r.status}] ${popis}\n  ${cesta}\n  ${telo.slice(0, 1200)}`);
+  return telo;
 }
 
 async function main() {
-  if (!KLIC) {
-    console.log("KATASTR_API_KEY není nastavený.");
-    return;
-  }
+  if (!KLIC) { console.log("KATASTR_API_KEY není nastavený."); return; }
 
-  const stav = await ptejSe("/AplikacniSluzby/StavUctu");
-  console.log(`Stav účtu: ${stav.telo}\n`);
+  console.log("=== Jak se filtrují číselníky ===");
+  await ptejSe("/CiselnikyUzemnichJednotek/Obce?Nazev=Litom%C4%9B%C5%99ice", "Obce, parametr Nazev");
+  await ptejSe("/CiselnikyUzemnichJednotek/Obce?nazevObce=Litom%C4%9B%C5%99ice", "Obce, parametr nazevObce");
+  await ptejSe("/CiselnikyUzemnichJednotek/CastiObci?Nazev=Litom%C4%9B%C5%99ice", "Části obcí, parametr Nazev");
+  await ptejSe("/CiselnikyUzemnichJednotek/CastiObci?KodObce=564567", "Části obcí podle kódu obce Litoměřic");
+  await ptejSe("/CiselnikyUzemnichJednotek/KatastralniUzemi?KodObce=564567", "Katastrální území Litoměřic");
 
-  const nemovitosti = await prisma.property.findMany({
-    select: { id: true, name: true, street: true, city: true, zip: true, type: true },
-    take: 3,
-  });
-  console.log(`Nemovitostí v databázi: ${nemovitosti.length}\n`);
+  console.log("\n=== Skutečné adresy ===");
+  // Litomerice maji kod obce 564567; cast obce se doplni z odpovedi vys.
+  // Topolcianska 437/18 je byt v bytovem dome — hleda se stavba i jednotka.
+  await ptejSe("/Stavby/Vyhledani?KodObce=564567&CisloDomovni=437&TypStavby=1", "Stavba 437 v Litoměřicích podle kódu obce");
+  await ptejSe("/Jednotky/Vyhledani?KodObce=564567&CisloDomovni=437&TypStavby=1", "Jednotky v domě 437");
+  // Garaz ma evidencni cislo, ne popisne — jiny typ stavby
+  await ptejSe("/Stavby/Vyhledani?KodObce=564567&CisloDomovni=123&TypStavby=2", "Stavba s evidenčním číslem 123");
 
-  for (const n of nemovitosti) {
-    console.log(`\n=== ${n.name} — ${n.street}, ${n.city} ===`);
-    const cisla = cislaZUlice(n.street);
-    console.log(`Z adresy: číslo popisné ${cisla.popisne}, orientační ${cisla.orientacni}`);
-
-    // Obec podle nazvu — cislenik umi hledat, zkusime oboji
-    const obce = await ptejSe(`/CiselnikyUzemnichJednotek/Obce?nazev=${encodeURIComponent(n.city)}`);
-    console.log(`\nObce [${obce.status}]: ${obce.telo.slice(0, 700)}`);
-
-    const ku = await ptejSe(`/CiselnikyUzemnichJednotek/KatastralniUzemi?nazev=${encodeURIComponent(n.city)}`);
-    console.log(`\nKatastrální území [${ku.status}]: ${ku.telo.slice(0, 700)}`);
-
-    // Casti obce potrebujeme pro KodCastiObce, ktery vyhledani jednotky chce
-    const casti = await ptejSe(`/CiselnikyUzemnichJednotek/CastiObci?nazev=${encodeURIComponent(n.city)}`);
-    console.log(`\nČásti obce [${casti.status}]: ${casti.telo.slice(0, 700)}`);
-
-    if (cisla.popisne == null) {
-      console.log("Bez čísla popisného se jednotka hledat nedá — přeskakuji.");
-      continue;
-    }
-
-    // Kod casti obce z predchozi odpovedi, kdyz nejaky prisel
-    let kodCasti: number | null = null;
-    try {
-      const d = JSON.parse(casti.telo) as { data?: { kod?: number; nazev?: string }[] };
-      kodCasti = d.data?.[0]?.kod ?? null;
-    } catch { /* odpoved nebyla JSON, vypsala se vys */ }
-
-    if (kodCasti == null) {
-      console.log("Kód části obce se nepodařilo zjistit — vyhledání jednotky přeskakuji.");
-      continue;
-    }
-
-    const jednotky = await ptejSe(
-      `/Jednotky/Vyhledani?KodCastiObce=${kodCasti}&CisloDomovni=${cisla.popisne}&TypStavby=1`,
-    );
-    console.log(`\nJEDNOTKY [${jednotky.status}]:\n${jednotky.telo.slice(0, 3000)}`);
-
-    const stavby = await ptejSe(
-      `/Stavby/Vyhledani?KodCastiObce=${kodCasti}&CisloDomovni=${cisla.popisne}&TypStavby=1`,
-    );
-    console.log(`\nSTAVBY [${stavby.status}]:\n${stavby.telo.slice(0, 2000)}`);
-  }
-
-  const konec = await ptejSe("/AplikacniSluzby/StavUctu");
-  console.log(`\nStav účtu po sondě: ${konec.telo}`);
+  await ptejSe("/AplikacniSluzby/StavUctu", "Stav účtu");
 }
 
-main().finally(() => prisma.$disconnect());
+main();
 
 export {};
