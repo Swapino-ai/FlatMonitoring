@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { deleteService, saveService, type EntityFormState } from "@/lib/entityActions";
 import {
   Hlaska, Pole, Rozbalovaci, SmazatTlacitko, TextPole, UpravaPanel, UpravitTlacitko, Vyber, Zaskrtavatko, isoDatum,
@@ -8,16 +8,20 @@ import {
 import { SERVICE_TYPES } from "@/lib/categories";
 import { czk, dateCz } from "@/lib/format";
 import { Ikona, IKONA_SLUZBY } from "./Ikony";
+import { ZalohyUpozorneni } from "./ZalohyUpozorneni";
+import { VYCHOZI_PRECTENE, type PorovnaniZaloh } from "@/lib/zalohy";
 import { Badge } from "./Stat";
 
 interface Row {
   id: string; type: string; provider: string; contractNo: string | null; monthlyCost: number;
   annualCost: number | null; contractEnd: Date | null; noticePeriodMonths: number; isBundleable: boolean;
-  notes: string | null;
+  notes: string | null; chargedToTenant: boolean;
 }
 
-export function ServiceManager({ propertyId, services, canEdit }: {
+export function ServiceManager({ propertyId, services, canEdit, porovnani }: {
   propertyId: string; services: Row[]; canEdit: boolean;
+  /** Zalohy najemce proti nakladum na preuctovane sluzby (pocita server). */
+  porovnani: PorovnaniZaloh | null;
 }) {
   const [addState, addAction, adding] = useActionState<EntityFormState, FormData>(saveService.bind(null, null), {});
   const [delState, delAction] = useActionState<EntityFormState, FormData>(deleteService, {});
@@ -39,6 +43,8 @@ export function ServiceManager({ propertyId, services, canEdit }: {
           : delState.error || delState.success ? delState
           : upravaState
       } />
+
+      <ZalohyUpozorneni porovnani={porovnani} />
 
       {services.length === 0 ? (
         <p className="py-3 text-center text-sm text-ink-muted">Žádné evidované služby.</p>
@@ -64,6 +70,11 @@ export function ServiceManager({ propertyId, services, canEdit }: {
                       </span>
                       <div className="min-w-0">
                         <div className="font-medium leading-tight">{SERVICE_TYPES[s.type] ?? s.type}</div>
+                        {s.chargedToTenant && (
+                          <div className="mt-0.5 flex items-center gap-1 text-xs font-medium text-accent">
+                            <Ikona nazev="najemce" trida="h-3.5 w-3.5" />hradí nájemce zálohou
+                          </div>
+                        )}
                         {!s.isBundleable && <div className="mt-0.5 text-xs text-ink-muted">mimo hromadnou poptávku</div>}
                         {/* Na telefonu neni misto na sloupec Dodavatel ani Vazan do:
                             jinak by akce spadly mimo obrazovku a sly by najit jen posunem. */}
@@ -131,11 +142,17 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka }: {
   propertyId: string; r: Row | null;
   action: (payload: FormData) => void; pending: boolean; popisekTlacitka: string;
 }) {
+  // Predvyplneni podle druhu: voda, teplo a odpad se obvykle preuctovavaji.
+  // Je to jen vychozi hodnota — jakmile ji clovek prepne, druh ji uz neprepise.
+  const [prect, setPrect] = useState(r ? r.chargedToTenant : VYCHOZI_PRECTENE.has("ELECTRICITY"));
+  const rucne = useRef(false);
+
   return (
     <form action={action} className="grid gap-3 sm:grid-cols-2">
       <input type="hidden" name="propertyId" value={propertyId} />
       <Vyber label="Druh služby" name="type" defaultValue={r?.type ?? "ELECTRICITY"}
-        options={Object.entries(SERVICE_TYPES) as [string, string][]} />
+        options={Object.entries(SERVICE_TYPES) as [string, string][]}
+        onChange={(druh) => { if (!r && !rucne.current) setPrect(VYCHOZI_PRECTENE.has(druh)); }} />
       <Pole label="Dodavatel" name="provider" required placeholder="např. ČEZ Prodej" defaultValue={r?.provider} />
       <Pole label="Měsíční náklad (Kč)" name="monthlyCost" type="number" defaultValue={r?.monthlyCost ?? 0} />
       <Pole label="Roční náklad (Kč)" name="annualCost" type="number" defaultValue={r?.annualCost ?? ""}
@@ -148,6 +165,11 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka }: {
       <div className="flex items-end">
         <Zaskrtavatko name="isBundleable" label="Zahrnout do hromadné poptávky"
           defaultChecked={r ? r.isBundleable : true} hint="Vypni u SVJ a regulovaných plateb" />
+      </div>
+      <div className="sm:col-span-2">
+        <Zaskrtavatko name="chargedToTenant" label="Přeúčtuje se nájemci, kryje ho záloha"
+          checked={prect} onChange={(v) => { rucne.current = true; setPrect(v); }}
+          hint="Součet takových služeb je to, co má nájemce měsíčně platit. Porovná se se zálohami ve smlouvě." />
       </div>
       <TextPole label="Poznámka" name="notes" sirka="sm:col-span-2" defaultValue={r?.notes ?? ""}
         placeholder="nepovinné" hint="Číslo odběrného místa, kontakt na technika, co bylo dohodnuto po telefonu" />

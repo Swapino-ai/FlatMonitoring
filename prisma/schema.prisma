@@ -222,6 +222,13 @@ model Service {
   isBundleable Boolean @default(true) // lze zahrnout do hromadne poptavky?
   notes        String?
 
+  /**
+   * Sluzba se preuctovava najemci a kryji ji jeho zalohy. Soucet techto sluzeb
+   * je to, co ma najemce mesicne platit; porovnava se se zalohami ve smlouve.
+   * Vychozi je false: u drivejsich sluzeb neni znamo, ktere se preuctovavaji.
+   */
+  chargedToTenant Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

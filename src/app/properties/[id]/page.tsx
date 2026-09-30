@@ -21,6 +21,7 @@ import { Listy } from "@/components/Listy";
 import { SbalitelnaKarta } from "@/components/SbalitelnaKarta";
 import { KatastrKarta, type JednotkaVolba } from "@/components/KatastrKarta";
 import { UrcitPolohu } from "@/components/UrcitPolohu";
+import { popisPorovnani, porovnejProNemovitost } from "@/lib/zalohy";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
 import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
@@ -69,6 +70,10 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     orderBy: { date: "desc" },
   });
 
+  // Zalohy najemce proti nakladum na preuctovane sluzby
+  const zalohy = porovnejProNemovitost(property.leases, property.services);
+  const zalohyNesedi = zalohy != null && zalohy.stav !== "sedi";
+
   // Kondice: par tvrdych otazek, na ktere chce clovek odpoved bez pocitani
   const kontroly: Kontrola[] = [];
   kontroly.push(a.metrics.cashFlowAnnual >= 0
@@ -90,6 +95,19 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     ? { nazev: "Obsazenost", stav: "dobra", detail: "pronajato" }
     : { nazev: "Obsazenost", stav: property.status === "VACANT" ? "spatna" : "pozor",
         detail: STATUS_LABELS[property.status].toLowerCase() + " — bez nájmu běží náklady dál" });
+
+  if (zalohy) {
+    const kc = (n: number) => `${Math.round(n).toLocaleString("cs-CZ")} Kč`;
+    kontroly.push(
+      zalohy.stav === "sedi"
+        ? { nazev: "Zálohy nájemce", stav: "dobra", detail: `sedí se službami, ${kc(zalohy.zalohy)} měsíčně` }
+        : zalohy.stav === "nedoplaci"
+          ? { nazev: "Zálohy nájemce", stav: "pozor", detail: `nekryjí služby, doplácíš ${kc(-zalohy.rozdil)} měsíčně` }
+          : zalohy.stav === "preplaci"
+            ? { nazev: "Zálohy nájemce", stav: "pozor", detail: `vyšší než služby o ${kc(zalohy.rozdil)} měsíčně, počítej s vyúčtováním` }
+            : { nazev: "Zálohy nájemce", stav: "pozor", detail: "služby nejsou označené k přeúčtování, nejdou ověřit" },
+    );
+  }
 
   if (a.fixationAlert) {
     kontroly.push({
@@ -303,9 +321,11 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             id: "najem",
             nazev: "Nájem",
             pocet: property.leases.length,
+            varovani: zalohyNesedi,
             obsah: (<>
             <SbalitelnaKarta klic="najem" title="Nájem a nájemci">
-              <LeaseManager propertyId={property.id} leases={property.leases} canEdit={user.role === "OWNER"} />
+              <LeaseManager propertyId={property.id} leases={property.leases} canEdit={user.role === "OWNER"}
+                services={property.services} porovnani={zalohy} />
               <div className="mt-4 border-t border-line pt-3">
                 <table className="table-base">
                   <tbody>
@@ -323,9 +343,11 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             id: "sluzby",
             nazev: "Služby",
             pocet: property.services.length,
+            varovani: zalohyNesedi,
             obsah: (<>
             <SbalitelnaKarta klic="sluzby" title="Služby a dodavatelé" action={<Link href="/savings" className="text-xs text-accent">Kde ušetřit →</Link>}>
-              <ServiceManager propertyId={property.id} services={property.services} canEdit={user.role === "OWNER"} />
+              <ServiceManager propertyId={property.id} services={property.services} canEdit={user.role === "OWNER"}
+                porovnani={zalohy} />
             </SbalitelnaKarta>
             </>),
           },

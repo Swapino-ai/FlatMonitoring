@@ -19,6 +19,9 @@ const CESTY: Record<string, string> = {
   penize: "M3 7a2 2 0 0 1 2-2h13v4M3 7v11a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1H5a2 2 0 0 1-2-1zM16 14h2",
   sipkaNahoru: "M7 17L17 7M9 7h8v8",
   sipkaDolu: "M17 7L7 17M15 17H7V9",
+  pozor: "M12 9v4M12 17h.01M10.3 3.9L2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z",
+  ok: "M5 12l5 5L20 7",
+  najemce: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8",
 };
 
 export type NazevIkony = keyof typeof CESTY;

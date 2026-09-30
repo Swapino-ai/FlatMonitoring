@@ -7,6 +7,8 @@ export interface List {
   nazev: string;
   /** Drobne cislo u nazvu — kolik polozek list obsahuje. */
   pocet?: number;
+  /** Na zalozce je neco, co chce pozornost — ukaze se tecka, i kdyz je otevrena jina. */
+  varovani?: boolean;
   obsah: ReactNode;
 }
 
@@ -58,6 +60,11 @@ export function Listy({ klic, listy }: { klic: string; listy: List[] }) {
                 }`}
               >
                 {l.nazev}
+                {l.varovani && (
+                  <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-warn align-middle" title="Vyžaduje pozornost">
+                    <span className="sr-only">vyžaduje pozornost</span>
+                  </span>
+                )}
                 {l.pocet != null && l.pocet > 0 && (
                   <span className={`ml-1.5 rounded-md px-1.5 py-0.5 text-[11px] ${
                     je ? "bg-white/20 text-white" : "bg-surface-sunken text-ink-muted"

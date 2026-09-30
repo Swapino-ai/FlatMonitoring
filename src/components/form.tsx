@@ -15,13 +15,16 @@ export function Pole({ label, name, hint, sirka = "", ...rest }: {
   );
 }
 
-export function Vyber({ label, name, options, defaultValue, hint, sirka = "" }: {
+export function Vyber({ label, name, options, defaultValue, hint, sirka = "", onChange }: {
   label: string; name: string; options: [string, string][]; defaultValue?: string; hint?: string; sirka?: string;
+  /** Vyber zustava neřizeny (defaultValue); tohle jen dava vedet o zmene. */
+  onChange?: (hodnota: string) => void;
 }) {
   return (
     <div className={sirka}>
       <label className="label mb-1.5 block" htmlFor={name}>{label}</label>
-      <select id={name} name={name} defaultValue={defaultValue} className="input">
+      <select id={name} name={name} defaultValue={defaultValue} className="input"
+        onChange={onChange ? (e) => onChange(e.target.value) : undefined}>
         {options.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
       </select>
       {hint && <p className="mt-1 text-xs text-ink-muted">{hint}</p>}
@@ -29,12 +32,16 @@ export function Vyber({ label, name, options, defaultValue, hint, sirka = "" }: 
   );
 }
 
-export function Zaskrtavatko({ label, name, defaultChecked, hint }: {
+export function Zaskrtavatko({ label, name, defaultChecked, hint, checked, onChange }: {
   label: string; name: string; defaultChecked?: boolean; hint?: string;
+  /** Rizena varianta: kdyz je zadano checked, o stavu rozhoduje volajici. */
+  checked?: boolean; onChange?: (hodnota: boolean) => void;
 }) {
+  const rizene = checked !== undefined;
   return (
     <label className="flex items-start gap-2 text-sm">
-      <input type="checkbox" name={name} defaultChecked={defaultChecked}
+      <input type="checkbox" name={name}
+        {...(rizene ? { checked, onChange: (e: React.ChangeEvent<HTMLInputElement>) => onChange?.(e.target.checked) } : { defaultChecked })}
         className="mt-0.5 h-4 w-4 rounded border-line accent-accent" />
       <span>
         {label}
@@ -79,12 +86,23 @@ export function Rozbalovaci({ popisek, children, otevreno = false, zavritPo }: {
   );
 }
 
-export function Hlaska({ state }: { state: { error?: string; success?: string } }) {
-  if (!state.error && !state.success) return null;
+export function Hlaska({ state }: { state: { error?: string; success?: string; warning?: string } }) {
+  if (!state.error && !state.success && !state.warning) return null;
   return (
-    <p className={`mb-3 rounded-lg px-3 py-2 text-sm ${state.error ? "bg-bad/10 text-bad" : "bg-good/10 text-good"}`}>
-      {state.error ?? state.success}
-    </p>
+    <div className="mb-3 space-y-2">
+      {(state.error || state.success) && (
+        <p className={`rounded-lg px-3 py-2 text-sm ${state.error ? "bg-bad/10 text-bad" : "bg-good/10 text-good"}`}>
+          {state.error ?? state.success}
+        </p>
+      )}
+      {/* Ulozeno, ale neco nesedi: jina barva nez chyba, protoze nic se nestalo spatne */}
+      {state.warning && (
+        <p className="flex items-start gap-2 rounded-lg bg-warn/12 px-3 py-2 text-sm text-ink-primary" role="status">
+          <Ikona nazev="pozor" trida="mt-0.5 h-4 w-4 text-warn" />
+          <span>{state.warning}</span>
+        </p>
+      )}
+    </div>
   );
 }
 

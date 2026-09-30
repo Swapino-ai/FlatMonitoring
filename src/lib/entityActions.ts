@@ -5,10 +5,13 @@ import { z } from "zod";
 import { prisma } from "./db";
 import { getSession } from "./auth";
 import { annuityPayment, balanceAt } from "./finance";
+import { popisPorovnani, porovnejProNemovitost } from "./zalohy";
 
 export interface EntityFormState {
   error?: string;
   success?: string;
+  /** Ulozeno, ale neco nesedi. Nebrani ulozeni — jen se o tom ma vedet. */
+  warning?: string;
 }
 
 /** Cislo z formulare: zvlada mezery v tisicich i desetinnou carku. */
@@ -43,6 +46,29 @@ function obnov(propertyId: string) {
   revalidatePath("/");
   revalidatePath("/cashflow");
   revalidatePath("/savings");
+}
+
+/**
+ * Po zmene smlouvy nebo sluzby zkontroluje, jestli zalohy najemce stale kryji
+ * naklady na preuctovane sluzby. Vraci text varovani, nebo undefined kdyz sedi.
+ *
+ * Neblokuje ulozeni: nesoulad muze byt cilovy (zalohy se upravuji az
+ * po vyuctovani) — jde o to, aby se o nem vedelo, ne aby se zakazal.
+ */
+async function varovaniZaloh(propertyId: string): Promise<string | undefined> {
+  const [najmy, sluzby] = await Promise.all([
+    prisma.lease.findMany({
+      where: { propertyId },
+      select: { tenantName: true, utilitiesMonthly: true, isActive: true },
+    }),
+    prisma.service.findMany({
+      where: { propertyId },
+      select: { type: true, provider: true, monthlyCost: true, annualCost: true, chargedToTenant: true },
+    }),
+  ]);
+  const p = porovnejProNemovitost(najmy, sluzby);
+  if (!p || p.stav === "sedi") return undefined;
+  return popisPorovnani(p).text;
 }
 
 // --- Úvěry ---
@@ -168,7 +194,10 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
   else await prisma.lease.create({ data: { ...data, propertyId: d.propertyId } });
 
   obnov(d.propertyId);
-  return { success: id ? "Smlouva upravena." : "Smlouva uložena." };
+  return {
+    success: id ? "Smlouva upravena." : "Smlouva uložena.",
+    warning: await varovaniZaloh(d.propertyId),
+  };
 }
 
 export async function deleteLease(_prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
@@ -195,6 +224,7 @@ const sluzbaSchema = z.object({
   contractEnd: datumNeboNic,
   noticePeriodMonths: cislo(),
   isBundleable: z.preprocess((v) => v === "on" || v === true, z.boolean()),
+  chargedToTenant: z.preprocess((v) => v === "on" || v === true, z.boolean()),
   notes: textNeboNic,
 });
 
@@ -219,6 +249,7 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
     contractEnd: d.contractEnd ? new Date(d.contractEnd) : null,
     noticePeriodMonths: Math.round(d.noticePeriodMonths),
     isBundleable: d.isBundleable,
+    chargedToTenant: d.chargedToTenant,
     notes: d.notes,
   };
 
@@ -229,7 +260,10 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
   }
 
   obnov(d.propertyId);
-  return { success: id ? "Služba upravena." : "Služba uložena." };
+  return {
+    success: id ? "Služba upravena." : "Služba uložena.",
+    warning: await varovaniZaloh(d.propertyId),
+  };
 }
 
 export async function deleteService(_prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
@@ -241,7 +275,7 @@ export async function deleteService(_prev: EntityFormState, formData: FormData):
 
   await prisma.service.delete({ where: { id: service.id } });
   obnov(service.propertyId);
-  return { success: "Služba smazána." };
+  return { success: "Služba smazána.", warning: await varovaniZaloh(service.propertyId) };
 }
 
 // --- Pohyby ---

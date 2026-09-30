@@ -147,6 +147,8 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       contractStart: d(x.contractStart), contractEnd: d(x.contractEnd),
       noticePeriodMonths: Math.round(c(x.noticePeriodMonths)),
       isBundleable: x.isBundleable !== false, notes: s(x.notes),
+      // Starsi zalohy pole nemaji; chybejici hodnota znamena "nepreuctovava se"
+      chargedToTenant: x.chargedToTenant === true,
     }));
     if (services.length) obnoveno.service = (await tx.service.createMany({ data: services })).count;
 
