@@ -186,12 +186,15 @@ export function TextPole({ label, name, hint, sirka = "", ...rest }: {
  */
 export function Sekce({ nadpis, popis, children }: { nadpis: string; popis?: string; children: ReactNode }) {
   return (
-    <section className="space-y-3 sm:col-span-2">
-      <div className="border-b border-line pb-1.5">
-        <h4 className="text-sm font-semibold">{nadpis}</h4>
-        {popis && <p className="text-xs text-ink-muted">{popis}</p>}
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">{children}</div>
-    </section>
+    <details open className="group sm:col-span-2">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 border-b border-line pb-1.5 [&::-webkit-details-marker]:hidden">
+        <div>
+          <h4 className="text-sm font-semibold">{nadpis}</h4>
+          {popis && <p className="text-xs text-ink-muted">{popis}</p>}
+        </div>
+        <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0 text-ink-muted transition-transform group-open:rotate-180" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 8l5 5 5-5" /></svg>
+      </summary>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">{children}</div>
+    </details>
   );
 }
