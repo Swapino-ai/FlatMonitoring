@@ -240,9 +240,6 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
     const zmenaZaloh = stara.utilitiesMonthly !== d.utilitiesMonthly;
     if (zmenaZaloh) {
       if (!d.advanceValidFrom) return { error: "Zadej, od kdy nové zálohy platí." };
-      if (d.advanceValidFrom > dnesISO()) {
-        return { error: "Nové zálohy nemůžou platit od budoucího data. Zadej změnu, až začne platit." };
-      }
     }
 
     const { utilitiesMonthly: _z, ...bezZaloh } = data;
@@ -355,9 +352,6 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
     const zmenaNakladu = stara.monthlyCost !== d.monthlyCost || (stara.annualCost ?? null) !== (d.annualCost ?? null);
     if (zmenaNakladu) {
       if (!d.costValidFrom) return { error: "Zadej, od kdy nový náklad platí." };
-      if (d.costValidFrom > dnesISO()) {
-        return { error: "Nový náklad nemůže platit od budoucího data. Zadej změnu, až začne platit." };
-      }
     }
 
     // Naklad se meni jen pres historii; primo se neprepisuje, aby zpetna oprava
@@ -412,9 +406,6 @@ export async function novyPoplatek(_prev: EntityFormState, formData: FormData): 
 
   if (mesicne <= 0 && !rocne) return { error: "Vyplň měsíční nebo roční náklad." };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(platiOdText)) return { error: "Zadej, od kdy nový poplatek platí." };
-  if (platiOdText > dnesISO()) {
-    return { error: "Nový poplatek nemůže platit od budoucího data. Zadej změnu, až začne platit." };
-  }
 
   const stara = await prisma.service.findUnique({ where: { id }, include: { costChanges: true } });
   if (!stara) return { error: "Služba neexistuje." };

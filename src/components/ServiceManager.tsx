@@ -82,8 +82,14 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
               {services.map((s) => {
                 const zmeny = [...(historie[s.id] ?? [])]
                   .sort((a, b) => new Date(b.validFrom).getTime() - new Date(a.validFrom).getTime());
-                const aktualni = zmeny[0];
-                const drivejsi = zmeny.slice(1);
+                // Zmena s datem v budoucnosti je zapsana, ale zatim neplati
+                const dnes = dnesISO();
+                const idxAkt = Math.max(0, zmeny.findIndex((z) => new Date(z.validFrom).toISOString().slice(0, 10) <= dnes));
+                const aktualni = zmeny[idxAkt];
+                const budouci = zmeny.slice(0, idxAkt);
+                const nejblizsi = budouci[budouci.length - 1];
+                const drivejsi = zmeny.slice(idxAkt + 1);
+                const vSeznamu = [...budouci, ...drivejsi];
                 const otevrena = rozbaleno.has(s.id);
                 return (
                 <Fragment key={s.id}>
@@ -122,10 +128,15 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                     {aktualni && (
                       <div className="text-xs font-normal text-ink-muted">od {dateCz(new Date(aktualni.validFrom))}</div>
                     )}
-                    {drivejsi.length > 0 && (
+                    {nejblizsi && (
+                      <div className="mt-0.5 text-xs font-medium text-accent">
+                        od {dateCz(new Date(nejblizsi.validFrom))}: {czk(nejblizsi.monthlyCost + (nejblizsi.annualCost ?? 0) / 12)}
+                      </div>
+                    )}
+                    {vSeznamu.length > 0 && (
                       <button type="button" onClick={() => prepniHistorii(s.id)} aria-expanded={otevrena}
                         className="mt-0.5 inline-flex items-center gap-1 text-xs font-normal text-accent hover:underline">
-                        dříve ({drivejsi.length})
+                        historie ({vSeznamu.length})
                         <svg viewBox="0 0 20 20" className={`h-3 w-3 transition-transform ${otevrena ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 8l5 5 5-5" /></svg>
                       </button>
                     )}
@@ -149,18 +160,20 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                     </td>
                   )}
                 </tr>
-                {otevrena && drivejsi.length > 0 && (
+                {otevrena && vSeznamu.length > 0 && (
                   <tr className="bg-surface-sunken/50">
                     <td colSpan={canEdit ? 5 : 4} className="!py-2">
                       <ul className="ml-12 space-y-0.5 text-xs text-ink-secondary">
-                        {drivejsi.map((z, i) => {
+                        {vSeznamu.map((z) => {
                           // Vyse platila do dne pred nastupem nasledujici zmeny
-                          const nasledujici = zmeny[i];
-                          const do_ = new Date(new Date(nasledujici.validFrom).getTime() - 24 * 3600 * 1000);
-                          const odText = i === drivejsi.length - 1 ? "od začátku" : `od ${dateCz(new Date(z.validFrom))}`;
+                          const j = zmeny.indexOf(z);
+                          const planovano = j < idxAkt;
+                          const odText = j === zmeny.length - 1 ? "od začátku" : `od ${dateCz(new Date(z.validFrom))}`;
+                          const doText = j === 0 ? "dále"
+                            : `do ${dateCz(new Date(new Date(zmeny[j - 1].validFrom).getTime() - 24 * 3600 * 1000))}`;
                           return (
                             <li key={z.id} className="flex items-center gap-3">
-                              <span className="tabular-nums">{odText} do {dateCz(do_)}</span>
+                              <span className="tabular-nums">{odText} {doText}{planovano && <span className="ml-2 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase text-accent">plánováno</span>}</span>
                               <span className="ml-auto font-medium tabular-nums">{czk(z.monthlyCost + (z.annualCost ?? 0) / 12)}/měs.</span>
                               {canEdit && (
                                 <SmazatTlacitko action={smazAction} id={z.id} popisek="Smazat záznam"
@@ -202,8 +215,9 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
             <Pole label="Měsíční náklad (Kč)" name="monthlyCost" type="number" defaultValue={poplatkova.monthlyCost} />
             <Pole label="Roční náklad (Kč)" name="annualCost" type="number" defaultValue={poplatkova.annualCost ?? ""}
               hint="Když se platí jednou ročně — rozpočte se na měsíce" />
-            <DatumPole label="Nový poplatek platí od" name="costValidFrom" required max={dnesISO()}
-              defaultValue={dnesISO()} sirka="sm:col-span-2" />
+            <DatumPole label="Nový poplatek platí od" name="costValidFrom" required
+              defaultValue={dnesISO()} sirka="sm:col-span-2"
+              hint="Může být i v budoucnu — do toho dne platí dosavadní výše." />
             <div className="sm:col-span-2">
               <button type="submit" disabled={ukladamPoplatek} className="btn btn-primary">
                 {ukladamPoplatek ? "Ukládám…" : "Uložit nový poplatek"}

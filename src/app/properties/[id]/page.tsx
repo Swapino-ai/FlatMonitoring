@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { page } from "@/lib/guard";
+import { srovnejPlatnost } from "@/lib/platnost";
 import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
@@ -36,6 +37,7 @@ export const dynamic = "force-dynamic";
 export default async function PropertyDetail({ params }: { params: Promise<{ id: string }> }) {
   const user = await page();
   const { id } = await params;
+  await srovnejPlatnost();
   const property = await loadProperty(id);
   if (!property) notFound();
 

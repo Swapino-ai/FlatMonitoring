@@ -236,7 +236,7 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
         {/* Zmena zaloh se zapisuje s datem: jinak by se prepsala minulost */}
         {zmenaZaloh && (
           <Pole label="Nové zálohy platí od" name="advanceValidFrom" type="date" required
-            max={dnesISO()} defaultValue={dnesISO()} sirka="sm:col-span-2"
+            defaultValue={dnesISO()} sirka="sm:col-span-2"
             hint="Předchozí výše zůstane v historii, takže půjde zjistit, co nájemce platil dřív." />
         )}
 

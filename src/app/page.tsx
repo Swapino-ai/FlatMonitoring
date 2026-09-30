@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { page } from "@/lib/guard";
+import { srovnejPlatnost } from "@/lib/platnost";
 import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Dashboard() {
   const user = await page();
+  await srovnejPlatnost();
   const { pohled, properties, analyses, maSpoluvlastnictvi } = await nactiPortfolio(user);
   const s = summarize(analyses);
   const savings = summarizeSavings(findBundleOpportunities(properties));
