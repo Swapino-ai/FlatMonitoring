@@ -7,6 +7,7 @@ import {
 } from "./form";
 import { Badge } from "./Stat";
 import { Ikona } from "./Ikony";
+import { zkontrolujUcet } from "@/lib/ucet";
 import { UliceNaseptavac } from "./AdresaNaseptavac";
 import { DatumPole } from "./DatumPole";
 import { HistorieZmen } from "./HistorieZmen";
@@ -82,7 +83,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
                       <div className="text-xs text-ink-muted">{[l.tenantEmail, l.tenantPhone].filter(Boolean).join(" · ")}</div>
                     )}
                     {adresa && <div className="text-xs text-ink-muted">{adresa}</div>}
-                    {l.tenantAccount && <div className="text-xs text-ink-muted">účet {l.tenantAccount}</div>}
+                    {canEdit && l.tenantAccount && <div className="text-xs text-ink-muted">účet {l.tenantAccount}</div>}
                   </div>
                   {canEdit && (
                     <div className="flex shrink-0 items-center gap-0.5">
@@ -223,6 +224,10 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
   const zive = porovnejZalohy(cislo, sluzbyDnes);
   const popis = zive ? popisPorovnani(zive) : null;
 
+  const [ucet, setUcet] = useState(r?.tenantAccount ?? "");
+  const ucetKontrola = zkontrolujUcet(ucet);
+  const ucetChyba = ucetKontrola.ok ? null : ucetKontrola.chyba;
+
   const [adresa, setAdresa] = useState({
     ulice: r?.tenantStreet ?? "", obec: r?.tenantCity ?? "", psc: r?.tenantZip ?? "",
   });
@@ -248,9 +253,18 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
           onChange={(e) => setAdresa((a) => ({ ...a, obec: e.target.value }))} />
         <Pole label="PSČ" name="tenantZip" placeholder="nepovinné" value={adresa.psc}
           onChange={(e) => setAdresa((a) => ({ ...a, psc: e.target.value }))} />
-        <Pole label="Číslo účtu pro vratku" name="tenantAccount" placeholder="nepovinné, např. 123456789/0800"
-          defaultValue={r?.tenantAccount ?? ""} sirka="sm:col-span-2"
-          hint="Sem se pošle přeplatek z vyúčtování služeb. Objeví se ve vyúčtování pro nájemce." />
+        <div className="sm:col-span-2">
+          <label className="label mb-1.5 block" htmlFor="tenantAccount">Číslo účtu pro vratku</label>
+          <input id="tenantAccount" name="tenantAccount" className={`input ${ucetChyba ? "border-bad" : ""}`}
+            placeholder="nepovinné, např. 19-2000145399/0800 nebo IBAN" inputMode="text" autoComplete="off"
+            value={ucet} onChange={(e) => setUcet(e.target.value)} aria-invalid={!!ucetChyba} />
+          {ucetChyba
+            ? <p className="mt-1 text-xs text-bad">{ucetChyba}</p>
+            : <p className="mt-1 text-xs text-ink-muted">
+              {ucetKontrola.ok && ucetKontrola.hodnota ? "Číslo účtu je v pořádku. " : ""}
+              Sem se pošle přeplatek z vyúčtování služeb; objeví se ve vyúčtování pro nájemce.
+            </p>}
+        </div>
       </Sekce>
 
       <Sekce nadpis="Nájem a poplatky" popis="Doba nájmu, nájemné a zálohy na služby.">

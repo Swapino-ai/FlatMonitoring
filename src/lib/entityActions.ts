@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma } from "./db";
 import { getSession } from "./auth";
 import { annuityPayment, balanceAt } from "./finance";
+import { zkontrolujUcet } from "./ucet";
 import { platnyKDatu, popisPorovnani, porovnejProNemovitost } from "./zalohy";
 
 export interface EntityFormState {
@@ -206,6 +207,10 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const d = parsed.data;
 
+  // Cislo uctu je citlivy udaj a jde podle nej platit: kontrola tvaru i souctu, ulozi se ve sjednocenem zapisu
+  const ucet = zkontrolujUcet(d.tenantAccount ?? "");
+  if (!ucet.ok) return { error: `Číslo účtu: ${ucet.chyba}` };
+
   const data = {
     tenantName: d.tenantName,
     tenantEmail: d.tenantEmail,
@@ -213,7 +218,7 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
     tenantStreet: d.tenantStreet,
     tenantCity: d.tenantCity,
     tenantZip: d.tenantZip,
-    tenantAccount: d.tenantAccount,
+    tenantAccount: ucet.hodnota,
     startDate: new Date(d.startDate),
     endDate: d.endDate ? new Date(d.endDate) : null,
     rentMonthly: d.rentMonthly,
