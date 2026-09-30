@@ -103,6 +103,16 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     odecty: Object.fromEntries(v.readings.map((o) => [o.leaseId, o.consumption])),
     cisloFaktury: v.invoiceNo, poznamka: v.notes,
   }));
+  // Soubory k vyuctovanim (na Google Disku) podle id vyuctovani
+  const diskPripojen = (await prisma.googleConnection.count()) > 0;
+  const dokumentyDb = vyuctovani.length
+    ? await prisma.dokument.findMany({
+      where: { settlementId: { in: vyuctovani.map((v) => v.id) } }, orderBy: { createdAt: "desc" },
+    })
+    : [];
+  const dokumentyVyuctovani: Record<string, { id: string; name: string; mime: string; size: number; kategorie: string; rok: number | null; note: string | null; createdAt: Date }[]> = {};
+  for (const d of dokumentyDb) (dokumentyVyuctovani[d.settlementId!] ??= []).push(d);
+
   const najmyVyuctovani: NajemRadek[] = property.leases.map((n) => ({
     id: n.id, nazev: n.tenantName, od: iso(new Date(n.startDate)), do: n.endDate ? iso(new Date(n.endDate)) : null,
     utilitiesMonthly: n.utilitiesMonthly,
@@ -424,7 +434,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             pocet: vyuctovani.length || undefined,
             obsah: (<>
             <SbalitelnaKarta klic="vyuctovani-sluzeb" title="Vyúčtování služeb od dodavatelů">
-              <VyuctovaniSluzeb typy={typy} services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant }))}
+              <VyuctovaniSluzeb typy={typy} dokumenty={dokumentyVyuctovani} diskPripojen={diskPripojen} services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant }))}
                 leases={najmyVyuctovani} vyuctovani={vyuctovani} canEdit={user.role === "OWNER"} />
             </SbalitelnaKarta>
             <SbalitelnaKarta klic="vyuctovani-najemce" title="Vyúčtování pro nájemce" vychoziSbalena>

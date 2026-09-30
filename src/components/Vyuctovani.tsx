@@ -14,6 +14,7 @@ import { Hlaska, Pole, Rozbalovaci, SmazatTlacitko, TextPole, UpravaPanel, Uprav
 import { DatumPole } from "./DatumPole";
 import { Ikona, type NazevIkony } from "./Ikony";
 import { Badge } from "./Stat";
+import { Dokumenty, type DokumentRadek } from "./Dokumenty";
 
 export interface SluzbaRadek { id: string; type: string; provider: string; chargedToTenant: boolean }
 
@@ -34,7 +35,10 @@ const obdobi = (od: string, doDne: string) => `${dateCz(od)} – ${dateCz(doDne)
 
 // --- Vyuctovani sluzeb od dodavatelu ---
 
-export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy }: {
+export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, dokumenty, diskPripojen }: {
+  /** Dokumenty k vyuctovanim podle id vyuctovani. */
+  dokumenty: Record<string, DokumentRadek[]>;
+  diskPripojen: boolean;
   typy: TypySluzeb;
   services: SluzbaRadek[]; leases: NajemRadek[]; vyuctovani: VyuctovaniRadek[]; canEdit: boolean;
 }) {
@@ -45,6 +49,8 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy }
     saveSettlement.bind(null, upravaId), {});
   useEffect(() => { if (upravaState.success) setUpravaId(null); }, [upravaState.success]);
   const [rozbaleno, setRozbaleno] = useState<Set<string>>(new Set());
+  const [prilohy, setPrilohy] = useState<Set<string>>(new Set());
+  const prepniPrilohy = (id: string) => setPrilohy((r) => { const n = new Set(r); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const upravovane = vyuctovani.find((v) => v.id === upravaId) ?? null;
   const prepni = (id: string) => setRozbaleno((r) => { const n = new Set(r); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -105,6 +111,17 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy }
                             )}
                           </div>
                           <div className="flex items-center gap-0.5">
+                            <button type="button" onClick={() => prepniPrilohy(v.id)} aria-expanded={prilohy.has(v.id)}
+                              title={`Soubory k vyúčtování (${(dokumenty[v.id] ?? []).length})`} aria-label="Soubory k vyúčtování"
+                              className={`relative inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
+                                prilohy.has(v.id) ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-accent-soft hover:text-accent"}`}>
+                              <Ikona nazev="dokument" />
+                              {(dokumenty[v.id] ?? []).length > 0 && (
+                                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
+                                  {(dokumenty[v.id] ?? []).length}
+                                </span>
+                              )}
+                            </button>
                             {vicNajemcu && <button type="button" onClick={() => prepni(v.id)} aria-expanded={otevrene}
                               title="Rozúčtování na nájemce" aria-label="Rozúčtování na nájemce"
                               className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
@@ -113,6 +130,7 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy }
                             </button>}
                             {canEdit && (
                               <>
+                                <span className="mx-1.5 h-5 w-px bg-line" aria-hidden />
                                 <UpravitTlacitko aktivni={upravaId === v.id}
                                   onClick={() => setUpravaId(upravaId === v.id ? null : v.id)} />
                                 <SmazatTlacitko action={delAction} id={v.id}
@@ -121,6 +139,23 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy }
                             )}
                           </div>
                         </div>
+                        {prilohy.has(v.id) && (
+                          <div className="border-t border-line/70 px-3.5 py-3">
+                            {diskPripojen || (dokumenty[v.id] ?? []).length > 0 ? (
+                              <Dokumenty
+                                kontext={{ kategorie: "SLUZBA_VYUCTOVANI", sluzbaId: v.serviceId, settlementId: v.id, rok: Number(v.do.slice(0, 4)) }}
+                                dokumenty={dokumenty[v.id] ?? []} canEdit={canEdit && diskPripojen}
+                                nadpis="Přidat soubor k vyúčtování"
+                                popis="Přetáhni sem fakturu nebo vyúčtování od dodavatele (PDF, sken, foto)."
+                                prazdne="K tomuto vyúčtování zatím není žádný soubor." />
+                            ) : (
+                              <p className="text-sm text-ink-secondary">
+                                Google Disk zatím není připojený, soubory nejde nahrát. Připoj ho ve{" "}
+                                <a href="/sprava" className="text-accent hover:underline">Správě</a>.
+                              </p>
+                            )}
+                          </div>
+                        )}
                         {otevrene && vicNajemcu && (
                           <div className="border-t border-line/70 bg-surface-sunken/50 px-3.5 py-2.5">
                             {rozdel.chyba ? (
