@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { addUser, changePassword, deleteUser, updateUser, type UserFormState } from "@/lib/userActions";
 import { Badge, Card } from "./Stat";
+import { SbalitelnaKarta } from "./SbalitelnaKarta";
 import { UliceNaseptavac } from "./AdresaNaseptavac";
 import { SmazatTlacitko, UpravaPanel, UpravitTlacitko } from "./form";
 
@@ -140,7 +141,7 @@ export function UserManager({ users, currentUserId }: { users: Row[]; currentUse
         )}
       </Card>
 
-      <Card title="Přidat účet">
+      <SbalitelnaKarta klic="uzivatele-pridat" title="Přidat účet" vychoziSbalena>
         <form action={addAction} className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="label mb-1.5 block" htmlFor="new-name">Jméno</label>
@@ -171,7 +172,7 @@ export function UserManager({ users, currentUserId }: { users: Row[]; currentUse
             </p>
           </div>
         </form>
-      </Card>
+      </SbalitelnaKarta>
     </div>
   );
 }
