@@ -140,7 +140,18 @@ body {
     @apply -mx-1 overflow-x-auto px-1;
   }
   .table-base th {
-    @apply border-b border-line px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted;
+    @apply whitespace-nowrap border-b border-line px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted;
+  }
+  /* Hlavicka sloupce s cisly patri na stejnou stranu jako cisla pod ni. Bez
+     tohoto pravidla vyhrava text-left u "th" a hlavicka se cislum vzdaluje. */
+  .table-base th.num {
+    @apply text-right;
+  }
+  .table-base tbody tr {
+    @apply transition-colors;
+  }
+  .table-base tbody tr:hover {
+    background-color: rgb(var(--surface-sunken) / 0.55);
   }
   .table-base td {
     @apply border-b border-line/60 px-3 py-2.5 text-ink-primary;

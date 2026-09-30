@@ -7,6 +7,8 @@ import {
 } from "./form";
 import { SERVICE_TYPES } from "@/lib/categories";
 import { czk, dateCz } from "@/lib/format";
+import { Ikona, IKONA_SLUZBY } from "./Ikony";
+import { Badge } from "./Stat";
 
 interface Row {
   id: string; type: string; provider: string; contractNo: string | null; monthlyCost: number;
@@ -41,42 +43,70 @@ export function ServiceManager({ propertyId, services, canEdit }: {
       {services.length === 0 ? (
         <p className="py-3 text-center text-sm text-ink-muted">Žádné evidované služby.</p>
       ) : (
-        <table className="table-base">
-          <thead>
-            <tr><th>Služba</th><th>Dodavatel</th><th className="num">Měsíčně</th><th>Vázán do</th>{canEdit && <th />}</tr>
-          </thead>
-          <tbody>
-            {services.map((s) => (
-              <tr key={s.id} className={upravaId === s.id ? "bg-accent/5" : undefined}>
-                <td>
-                  {SERVICE_TYPES[s.type] ?? s.type}
-                  {!s.isBundleable && <span className="ml-1.5 text-xs text-ink-muted">(mimo balík)</span>}
-                </td>
-                <td className="text-ink-secondary">
-                  {s.provider}
-                  {s.notes && <span className="block text-xs text-ink-muted">{s.notes}</span>}
-                </td>
-                <td className="num">{czk(s.monthlyCost + (s.annualCost ?? 0) / 12)}</td>
-                <td className="text-ink-secondary">{s.contractEnd ? dateCz(s.contractEnd) : "volné"}</td>
-                {canEdit && (
+        <div className="table-scroll">
+          <table className="table-base">
+            <thead>
+              <tr>
+                <th>Služba</th>
+                <th className="hidden sm:table-cell">Dodavatel</th>
+                <th className="num">Měsíčně</th>
+                <th className="hidden sm:table-cell">Vázán do</th>
+                {canEdit && <th className="w-[5.5rem]"><span className="sr-only">Akce</span></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {services.map((s) => (
+                <tr key={s.id} className={upravaId === s.id ? "!bg-accent-soft/60" : undefined}>
                   <td>
-                    <div className="flex items-center justify-end gap-3">
-                      <UpravitTlacitko aktivni={upravaId === s.id}
-                        onClick={() => setUpravaId(upravaId === s.id ? null : s.id)} />
-                      <SmazatTlacitko action={delAction} id={s.id}
-                        potvrzeni={`Opravdu smazat ${SERVICE_TYPES[s.type] ?? s.type} od ${s.provider}?`} />
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
+                        <Ikona nazev={IKONA_SLUZBY[s.type] ?? "tri"} />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="font-medium leading-tight">{SERVICE_TYPES[s.type] ?? s.type}</div>
+                        {!s.isBundleable && <div className="mt-0.5 text-xs text-ink-muted">mimo hromadnou poptávku</div>}
+                        {/* Na telefonu neni misto na sloupec Dodavatel ani Vazan do:
+                            jinak by akce spadly mimo obrazovku a sly by najit jen posunem. */}
+                        <div className="mt-1 sm:hidden">
+                          <div className="text-sm text-ink-secondary">{s.provider}</div>
+                          {s.notes && <div className="line-clamp-2 text-xs text-ink-muted">{s.notes}</div>}
+                          <div className="mt-1"><KonecVazby datum={s.contractEnd} /></div>
+                        </div>
+                      </div>
                     </div>
                   </td>
-                )}
+                  <td className="hidden max-w-[26rem] align-middle sm:table-cell">
+                    <div className="font-medium leading-tight">{s.provider}</div>
+                    {s.notes && (
+                      <div className="mt-0.5 line-clamp-2 text-xs text-ink-muted" title={s.notes}>{s.notes}</div>
+                    )}
+                  </td>
+                  <td className="num font-semibold">{czk(s.monthlyCost + (s.annualCost ?? 0) / 12)}</td>
+                  <td className="hidden sm:table-cell"><KonecVazby datum={s.contractEnd} /></td>
+                  {canEdit && (
+                    <td>
+                      <div className="flex items-center justify-end gap-0.5">
+                        <UpravitTlacitko aktivni={upravaId === s.id}
+                          onClick={() => setUpravaId(upravaId === s.id ? null : s.id)} />
+                        <SmazatTlacitko action={delAction} id={s.id}
+                          potvrzeni={`Opravdu smazat ${SERVICE_TYPES[s.type] ?? s.type} od ${s.provider}?`} />
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-surface-sunken/60">
+                <td className="rounded-bl-xl px-3 py-3 font-semibold">Celkem měsíčně</td>
+                <td className="hidden sm:table-cell" />
+                <td className="num px-3 py-3 text-base font-bold">{czk(celkem)}</td>
+                <td className="hidden sm:table-cell" />
+                {canEdit && <td className="rounded-br-xl" />}
               </tr>
-            ))}
-            <tr>
-              <td colSpan={2} className="font-medium">Celkem</td>
-              <td className="num font-medium">{czk(celkem)}</td>
-              <td colSpan={canEdit ? 2 : 1} />
-            </tr>
-          </tbody>
-        </table>
+            </tfoot>
+          </table>
+        </div>
       )}
 
       {canEdit && upravovana && (
@@ -127,5 +157,26 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka }: {
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Dokdy je clovek vazan. Volna smlouva neni udalost, tak je jen tlumene;
+ * blizici se konec je to, co chce clovek videt, aby stihl prejit jinam.
+ */
+function KonecVazby({ datum }: { datum: Date | null }) {
+  if (!datum) return <span className="text-xs text-ink-muted">volné</span>;
+
+  const konec = new Date(datum);
+  const mesicu = Math.ceil((konec.getTime() - Date.now()) / (30.44 * 24 * 3600 * 1000));
+
+  // Uz skoncila: fakticky volne, datum jen v title pro pripad, ze ho nekdo hleda
+  if (mesicu <= 0) return <span className="text-xs text-ink-muted" title={`Vazba skončila ${dateCz(konec)}`}>volné</span>;
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2 text-sm">
+      <span className="tabular-nums text-ink-secondary">{dateCz(konec)}</span>
+      {mesicu <= 3 && <Badge tone="warn">za {mesicu} {mesicu === 1 ? "měsíc" : "měs."}</Badge>}
+    </span>
   );
 }

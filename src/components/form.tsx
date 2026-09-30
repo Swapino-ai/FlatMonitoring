@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { Ikona } from "./Ikony";
 
 export function Pole({ label, name, hint, sirka = "", ...rest }: {
   label: string; name: string; hint?: string; sirka?: string;
@@ -87,23 +88,36 @@ export function Hlaska({ state }: { state: { error?: string; success?: string } 
   );
 }
 
-export function SmazatTlacitko({ action, id, potvrzeni }: {
-  action: (payload: FormData) => void; id: string; potvrzeni: string;
+/**
+ * Ikona misto slova: v tabulce zabira misto jedno tlacitko misto peti pismen
+ * a poznava se driv. Popisek je v title a aria-label, ne jen ve tvaru ikony.
+ */
+const IKONOVE_TLACITKO =
+  "inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent";
+
+export function SmazatTlacitko({ action, id, potvrzeni, popisek = "Smazat" }: {
+  action: (payload: FormData) => void; id: string; potvrzeni: string; popisek?: string;
 }) {
   return (
-    <form action={action} onSubmit={(e) => { if (!confirm(potvrzeni)) e.preventDefault(); }}>
+    <form action={action} onSubmit={(e) => { if (!confirm(potvrzeni)) e.preventDefault(); }} className="inline-flex">
       <input type="hidden" name="id" value={id} />
-      <button type="submit" className="text-xs text-bad hover:underline">Smazat</button>
+      <button type="submit" title={popisek} aria-label={popisek}
+        className={`${IKONOVE_TLACITKO} hover:bg-bad/10 hover:text-bad`}>
+        <Ikona nazev="kos" />
+      </button>
     </form>
   );
 }
 
-/** Tlacitko pro zahajeni upravy radku. */
+/** Tlacitko pro zahajeni upravy radku. Aktivni (rozeditovany) radek je zvyraznen. */
 export function UpravitTlacitko({ onClick, aktivni }: { onClick: () => void; aktivni?: boolean }) {
+  const popisek = aktivni ? "Zrušit úpravu" : "Upravit";
   return (
-    <button type="button" onClick={onClick}
-      className={`text-xs hover:underline ${aktivni ? "text-ink-muted" : "text-accent"}`}>
-      {aktivni ? "zrušit" : "upravit"}
+    <button type="button" onClick={onClick} title={popisek} aria-label={popisek} aria-pressed={aktivni}
+      className={`${IKONOVE_TLACITKO} ${
+        aktivni ? "bg-accent-soft text-accent" : "hover:bg-accent-soft hover:text-accent"
+      }`}>
+      <Ikona nazev="pero" />
     </button>
   );
 }

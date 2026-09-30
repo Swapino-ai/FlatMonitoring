@@ -5,6 +5,7 @@ import { deleteTransaction, saveTransaction, type EntityFormState } from "@/lib/
 import { Hlaska, Pole, Rozbalovaci, SmazatTlacitko, UpravaPanel, UpravitTlacitko, Vyber, isoDatum } from "./form";
 import { CATEGORIES, categoryLabel } from "@/lib/categories";
 import { czk, dateCz } from "@/lib/format";
+import { Ikona } from "./Ikony";
 
 interface Row {
   id: string; date: Date; amount: number; category: string;
@@ -42,21 +43,37 @@ export function TransactionManager({ propertyId, transactions, canEdit }: {
       ) : (
         <table className="table-base">
           <thead>
-            <tr><th>Datum</th><th>Kategorie</th><th>Popis</th><th className="num">Částka</th>{canEdit && <th />}</tr>
+            <tr>
+              <th>Datum</th><th>Kategorie</th><th>Popis</th><th className="num">Částka</th>
+              {canEdit && <th className="w-[5.5rem]"><span className="sr-only">Akce</span></th>}
+            </tr>
           </thead>
           <tbody>
             {transactions.map((t) => (
               <tr key={t.id} className={upravaId === t.id ? "bg-accent/5" : undefined}>
                 <td className="tabular-nums text-ink-secondary">{dateCz(t.date)}</td>
-                <td>{categoryLabel(t.category)}</td>
-                <td className="text-ink-secondary">
-                  {t.description}
-                  {t.documentRef && <span className="ml-1.5 text-xs text-ink-muted">{t.documentRef}</span>}
+                <td>
+                  <div className="flex items-center gap-2.5">
+                    {/* Smer penez je videt driv, nez se precte kategorie. Neni to jedina
+                        informace: znamenko u castky a barva jen doplnuji. */}
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                      t.amount >= 0 ? "bg-good/12 text-good" : "bg-surface-sunken text-ink-muted"
+                    }`} title={t.amount >= 0 ? "Příjem" : "Výdaj"}>
+                      <Ikona nazev={t.amount >= 0 ? "sipkaDolu" : "sipkaNahoru"} trida="h-4 w-4" />
+                    </span>
+                    <span className="font-medium">{categoryLabel(t.category)}</span>
+                  </div>
                 </td>
-                <td className={`num font-medium ${t.amount >= 0 ? "text-good" : ""}`}>{czk(t.amount)}</td>
+                <td className="max-w-[24rem] text-ink-secondary">
+                  <span className="line-clamp-2" title={t.description ?? undefined}>{t.description}</span>
+                  {t.documentRef && <span className="text-xs text-ink-muted">{t.documentRef}</span>}
+                </td>
+                <td className={`num font-semibold ${t.amount >= 0 ? "text-good" : ""}`}>
+                  {t.amount > 0 ? "+" : ""}{czk(t.amount)}
+                </td>
                 {canEdit && (
                   <td>
-                    <div className="flex items-center justify-end gap-3">
+                    <div className="flex items-center justify-end gap-0.5">
                       <UpravitTlacitko aktivni={upravaId === t.id}
                         onClick={() => setUpravaId(upravaId === t.id ? null : t.id)} />
                       <SmazatTlacitko action={delAction} id={t.id} potvrzeni="Opravdu smazat tento pohyb?" />
