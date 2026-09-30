@@ -418,6 +418,13 @@ model CadastreRecord {
   jednotky      Json?
   cisloJednotky String?
 
+  /**
+   * Odkaz do Nahlizeni vlozeny rucne. U jednotky si ho aplikace slozi sama
+   * z identifikatoru, u stavby ale Nahlizeni pouziva sifrovany token, ktery
+   * zvenku vyrobit nejde — proto ho lze jednou vlozit a dal uz jen klikat.
+   */
+  nahlizeniOdkaz String?
+
   nactenoKdy  DateTime  @default(now())
   aktualnostK DateTime?
 

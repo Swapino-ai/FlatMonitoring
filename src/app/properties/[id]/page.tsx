@@ -288,6 +288,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                   parcely: katastr.parcely,
                   jednotky: (katastr.jednotky as JednotkaVolba[] | null) ?? [],
                   cisloJednotky: katastr.cisloJednotky,
+                  nahlizeniOdkaz: katastr.nahlizeniOdkaz,
                   nactenoKdy: katastr.nactenoKdy,
                 }}
               />

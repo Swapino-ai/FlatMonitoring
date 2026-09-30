@@ -97,6 +97,31 @@ export async function vyberJednotku(propertyId: string, cisloJednotky: string): 
   return { success: cisloJednotky ? `Jednotka ${cisloJednotky} uložena.` : "Výběr jednotky zrušen." };
 }
 
+/**
+ * Rucne vlozeny odkaz do Nahlizeni.
+ *
+ * U stavby Nahlizeni pouziva sifrovany token misto identifikatoru, takze odkaz
+ * nejde slozit. Vlozit ho jednou rucne je rychlejsi nez ho pokazde hledat.
+ */
+export async function ulozOdkazNahlizeni(propertyId: string, odkaz: string): Promise<KatastrStav> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+
+  const cisty = odkaz.trim();
+  if (cisty && !cisty.startsWith("https://nahlizenidokn.cuzk.gov.cz/")) {
+    return { error: "Odkaz musí vést do Nahlížení do KN (nahlizenidokn.cuzk.gov.cz)." };
+  }
+
+  await prisma.cadastreRecord.upsert({
+    where: { propertyId },
+    update: { nahlizeniOdkaz: cisty || null },
+    create: { propertyId, nahlizeniOdkaz: cisty || null },
+  });
+
+  revalidatePath(`/properties/${propertyId}`);
+  return { success: cisty ? "Odkaz uložen." : "Odkaz smazán." };
+}
+
 /** Kolik volani z kvoty uz padlo — aby se uzivatel nedivil, az prestane fungovat. */
 export async function zjistiKvotu(): Promise<{ text: string; varovat: boolean } | null> {
   const auth = await majitel();

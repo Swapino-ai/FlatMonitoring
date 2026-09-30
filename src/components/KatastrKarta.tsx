@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { dohledejKatastr, vyberJednotku, zjistiKvotu, type KatastrStav } from "@/lib/katastrActions";
+import {
+  dohledejKatastr, ulozOdkazNahlizeni, vyberJednotku, zjistiKvotu, type KatastrStav,
+} from "@/lib/katastrActions";
 import { Hlaska } from "./form";
 
 /** Zkopiruje hodnotu, at se do Nahlizeni neprepisuje rucne. */
@@ -46,6 +48,7 @@ export interface KatastrData {
   parcely: string | null;
   jednotky: JednotkaVolba[];
   cisloJednotky: string | null;
+  nahlizeniOdkaz: string | null;
   nactenoKdy: Date;
 }
 
@@ -75,6 +78,8 @@ export function KatastrKarta({ propertyId, data, canEdit, adresa }: {
   const [stav, setStav] = useState<KatastrStav>({});
   // Vybrana jednotka nese id z katastru, pres ktere jde otevrit primo v Nahlizeni
   const mojeJednotka = data?.jednotky.find((j) => j.popis === data.cisloJednotky) ?? null;
+  // U jednotky si odkaz slozime, u stavby ho musel uzivatel jednou vlozit
+  const odkaz = mojeJednotka ? odkazNaJednotku(mojeJednotka.id) : data?.nahlizeniOdkaz ?? null;
   const [kvota, setKvota] = useState<{ text: string; varovat: boolean } | null>(null);
   const [bezi, start] = useTransition();
 
@@ -115,10 +120,12 @@ export function KatastrKarta({ propertyId, data, canEdit, adresa }: {
             </tbody>
           </table>
 
-          {mojeJednotka && (
-            <a href={odkazNaJednotku(mojeJednotka.id)} target="_blank" rel="noreferrer noopener"
+          {odkaz && (
+            <a href={odkaz} target="_blank" rel="noreferrer noopener"
               className="btn btn-primary mt-4 w-full justify-center sm:w-auto">
-              Otevřít jednotku {mojeJednotka.popis} v Nahlížení do KN →
+              {mojeJednotka
+                ? `Otevřít jednotku ${mojeJednotka.popis} v Nahlížení do KN →`
+                : "Otevřít v Nahlížení do KN →"}
             </a>
           )}
 
@@ -166,6 +173,8 @@ export function KatastrKarta({ propertyId, data, canEdit, adresa }: {
         </p>
       )}
 
+      {canEdit && data && !mojeJednotka && <RucniOdkaz propertyId={propertyId} odkaz={data.nahlizeniOdkaz} />}
+
       {canEdit && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button type="button" className="btn" disabled={bezi} onClick={nacti}>
@@ -191,5 +200,47 @@ function Radek({ label, value, zvyraznit, kopie }: {
         {kopie && value !== "—" && <Zkopirovat hodnota={kopie} />}
       </td>
     </tr>
+  );
+}
+
+/**
+ * Rucne vlozeny odkaz do Nahlizeni.
+ *
+ * U bytu se odkaz sklada z identifikatoru jednotky. U stavby — garaze, domu —
+ * pouziva Nahlizeni sifrovany token, ktery zvenku sestavit nejde. Vlozit ho
+ * jednou je porad lepsi nez ho pokazde hledat znovu.
+ */
+function RucniOdkaz({ propertyId, odkaz }: { propertyId: string; odkaz: string | null }) {
+  const [hodnota, setHodnota] = useState(odkaz ?? "");
+  const [stav, setStav] = useState<KatastrStav>({});
+  const [bezi, start] = useTransition();
+
+  return (
+    <div className="mt-4 border-t border-line pt-3">
+      <label className="label mb-1.5 block" htmlFor="nahlizeni">Odkaz do Nahlížení</label>
+      <div className="flex flex-wrap gap-2">
+        <input
+          id="nahlizeni"
+          className="input min-w-0 flex-1"
+          value={hodnota}
+          placeholder="https://nahlizenidokn.cuzk.gov.cz/ZobrazObjekt.aspx?encrypted=…"
+          onChange={(e) => setHodnota(e.target.value)}
+        />
+        <button type="button" className="btn" disabled={bezi}
+          onClick={() => start(async () => setStav(await ulozOdkazNahlizeni(propertyId, hodnota)))}>
+          {bezi ? "Ukládám…" : "Uložit"}
+        </button>
+      </div>
+      <p className="mt-1 text-xs text-ink-muted">
+        U staveb Nahlížení místo čísla používá zašifrovaný token, který zvenku sestavit nejde.
+        Najdi stavbu jednou v Nahlížení, zkopíruj adresu z prohlížeče a vlož ji sem — pak už
+        stačí klikat.
+      </p>
+      {(stav.error || stav.success) && (
+        <p className={`mt-2 text-xs ${stav.error ? "text-bad" : "text-good"}`}>
+          {stav.error ?? stav.success}
+        </p>
+      )}
+    </div>
   );
 }
