@@ -3,7 +3,7 @@ import "@fontsource-variable/plus-jakarta-sans";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FlatMonitoring — přehled nemovitostního portfolia",
+  title: "F(a)latMonitoring — přehled nemovitostního portfolia",
   description: "Návratnost investic, dluhy, úspory a daňové podklady pro byty v nájmu.",
 };
 

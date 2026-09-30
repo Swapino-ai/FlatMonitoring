@@ -1,4 +1,4 @@
-# FlatMonitoring
+# F(a)latMonitoring
 
 Přehled nemovitostního portfolia pro soukromého investora do bytů.
 Běží na Vercelu, data v Postgresu na Neonu.

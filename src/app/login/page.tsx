@@ -25,7 +25,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-lg font-bold text-white">
             FM
           </div>
-          <h1 className="text-xl font-semibold">FlatMonitoring</h1>
+          <h1 className="text-xl font-semibold">F(a)latMonitoring</h1>
           <p className="mt-1 text-sm text-ink-secondary">Přehled nemovitostního portfolia</p>
         </div>
 

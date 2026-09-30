@@ -64,7 +64,7 @@ export function Nav({ user, verze }: { user: { name: string; role: string }; ver
             <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-accent text-white">
               <Ikona nazev="nemovitosti" />
             </span>
-            <span>FlatMonitoring</span>
+            <span>F(a)latMonitoring</span>
           </Link>
 
           {/* Na velkych obrazovkach horni menu; na telefonu ho nahrazuje spodni lista */}

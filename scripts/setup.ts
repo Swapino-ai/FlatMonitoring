@@ -62,7 +62,7 @@ async function collectCredentials(): Promise<Credentials | null> {
 }
 
 async function main() {
-  console.log("FlatMonitoring — příprava\n" + "=".repeat(30));
+  console.log("F(a)latMonitoring — příprava\n" + "=".repeat(30));
 
   // 1) .env a pripojeni k databazi
   step(1, "Konfigurace");

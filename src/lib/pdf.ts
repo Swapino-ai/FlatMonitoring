@@ -51,7 +51,7 @@ export async function renderReportPdf(opts: PdfOptions): Promise<Buffer> {
       footerTemplate: `
         <div style="width:100%;padding:0 12mm;font-family:system-ui,sans-serif;font-size:8px;color:#8f8e88;
                     display:flex;justify-content:space-between;">
-          <span>FlatMonitoring — report portfolia</span>
+          <span>F(a)latMonitoring — report portfolia</span>
           <span>Strana <span class="pageNumber"></span> z <span class="totalPages"></span></span>
         </div>`,
     });

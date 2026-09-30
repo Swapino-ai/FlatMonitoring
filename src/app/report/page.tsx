@@ -43,7 +43,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
         <div>
           <div className="flex items-center gap-2.5">
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-xs font-bold text-white">FM</span>
-            <span className="text-sm font-medium text-ink-secondary">FlatMonitoring</span>
+            <span className="text-sm font-medium text-ink-secondary">F(a)latMonitoring</span>
           </div>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight">Report nemovitostního portfolia</h1>
           <p className="mt-1 text-sm text-ink-secondary">
@@ -234,7 +234,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
       )}
 
       <footer className="border-t border-line pt-4 text-xs text-ink-muted">
-        Vygenerováno aplikací FlatMonitoring {dateCz(new Date())}. Údaje vychází z vlastní evidence a nabídkových cen z
+        Vygenerováno aplikací F(a)latMonitoring {dateCz(new Date())}. Údaje vychází z vlastní evidence a nabídkových cen z
         veřejných inzertních portálů. Daňová část je podkladem pro přiznání, nenahrazuje daňového poradce.
       </footer>
     </main>
