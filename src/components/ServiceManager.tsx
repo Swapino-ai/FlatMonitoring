@@ -80,7 +80,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                 <th className="hidden sm:table-cell">Dodavatel</th>
                 <th className="num">Měsíčně</th>
                 <th className="hidden sm:table-cell">Vázán do</th>
-                {canEdit && <th className="w-[5.5rem]"><span className="sr-only">Akce</span></th>}
+                {canEdit && <th className="w-[7.5rem]"><span className="sr-only">Akce</span></th>}
               </tr>
             </thead>
             <tbody>
@@ -127,24 +127,23 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                     )}
                   </td>
                   <td className="num">
-                    <div className="font-semibold">{czk(vyse)}</div>
-                    {aktualni && (
-                      <div className={`text-xs ${planovano ? "font-medium text-accent" : "font-normal text-ink-muted"}`}>
-                        od {dateCz(new Date(aktualni.validFrom))} dále{planovano && " (plánováno)"}
-                      </div>
-                    )}
-                    {vSeznamu.length > 0 && (
-                      <button type="button" onClick={() => prepniHistorii(s.id)} aria-expanded={otevrena}
-                        className="mt-0.5 inline-flex items-center gap-1 text-xs font-normal text-accent hover:underline">
-                        historie ({vSeznamu.length})
-                        <svg viewBox="0 0 20 20" className={`h-3 w-3 transition-transform ${otevrena ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 8l5 5 5-5" /></svg>
-                      </button>
-                    )}
+                    <div className={`font-semibold ${planovano ? "text-accent" : ""}`}
+                      title={aktualni ? `${planovano ? "Plánováno od" : "Platí od"} ${dateCz(new Date(aktualni.validFrom))}` : undefined}>
+                      {czk(vyse)}
+                    </div>
                   </td>
                   <td className="hidden sm:table-cell"><KonecVazby datum={s.contractEnd} /></td>
                   {canEdit && (
                     <td>
                       <div className="flex items-center justify-end gap-0.5">
+                        {vSeznamu.length > 0 && (
+                          <button type="button" onClick={() => prepniHistorii(s.id)} aria-expanded={otevrena}
+                            title={`Historie poplatků (${vSeznamu.length})`} aria-label="Historie poplatků"
+                            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
+                              otevrena ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-accent-soft hover:text-accent"}`}>
+                            <Ikona nazev="historie" />
+                          </button>
+                        )}
                         <button type="button" title="Nový poplatek od data" aria-label="Nový poplatek od data"
                           aria-pressed={poplatekId === s.id}
                           onClick={() => { setUpravaId(null); setPoplatekId(poplatekId === s.id ? null : s.id); }}
