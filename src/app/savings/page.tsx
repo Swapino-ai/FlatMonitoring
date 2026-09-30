@@ -4,6 +4,7 @@ import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { Napoveda } from "@/components/Napoveda";
 import { nactiPortfolio } from "@/lib/pohled";
+import { nactiTypySluzeb } from "@/lib/typySluzeb";
 import { findBundleOpportunities, summarizeSavings } from "@/lib/savings";
 import { czk, dateCz, pct } from "@/lib/format";
 
@@ -12,7 +13,8 @@ export const dynamic = "force-dynamic";
 export default async function SavingsPage() {
   const user = await page();
   const { properties } = await nactiPortfolio(user);
-  const opportunities = findBundleOpportunities(properties);
+  const nazvyDruhu = Object.fromEntries(Object.entries(await nactiTypySluzeb()).map(([k, t]) => [k, t.name]));
+  const opportunities = findBundleOpportunities(properties, new Date(), nazvyDruhu);
   const s = summarizeSavings(opportunities);
 
   return (

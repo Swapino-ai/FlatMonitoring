@@ -29,7 +29,8 @@ import type { SluzbaVyuctovani } from "@/lib/vyuctovani";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
 import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
-import { categoryLabel, SERVICE_TYPES } from "@/lib/categories";
+import { categoryLabel, nazevDruhu } from "@/lib/categories";
+import { nactiTypySluzeb } from "@/lib/typySluzeb";
 import { czk, czkCompact, dateCz, num, pct, STATUS_LABELS } from "@/lib/format";
 import { NEMOVITOST_MAP, nazevNemovitosti } from "@/lib/catalogs";
 import { okruhProTyp } from "@/lib/geo";
@@ -40,6 +41,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const user = await page();
   const { id } = await params;
   await srovnejPlatnost();
+  const typy = await nactiTypySluzeb();
   const property = await loadProperty(id);
   if (!property) notFound();
 
@@ -108,7 +110,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     tenantStreet: n.tenantStreet, tenantCity: n.tenantCity, tenantZip: n.tenantZip, tenantAccount: user.role === "OWNER" ? n.tenantAccount : null,
   }));
   const sluzbyVyuctovani: SluzbaVyuctovani[] = property.services.map((sl) => ({
-    id: sl.id, nazev: `${SERVICE_TYPES[sl.type] ?? sl.type}`, dodavatel: sl.provider, prectena: sl.chargedToTenant,
+    id: sl.id, nazev: nazevDruhu(typy, sl.type), dodavatel: sl.provider, prectena: sl.chargedToTenant,
     vyuctovani: vyuctovani.filter((v) => v.serviceId === sl.id),
   }));
 
@@ -380,7 +382,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             varovani: zalohyNesedi,
             obsah: (<>
             <SbalitelnaKarta klic="najem" title="Nájem a nájemci">
-              <LeaseManager propertyId={property.id} leases={property.leases}
+              <LeaseManager typy={typy} propertyId={property.id} leases={property.leases}
                 nemovitost={{ nazev: property.name, adresa: `${property.street}, ${property.zip} ${property.city}` }}
                 pronajimatele={property.owners.map((o) => ({
                   name: o.user.name,
@@ -411,7 +413,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             varovani: zalohyNesedi,
             obsah: (<>
             <SbalitelnaKarta klic="sluzby" title="Služby a dodavatelé" action={<Link href="/savings" className="text-xs text-accent">Kde ušetřit →</Link>}>
-              <ServiceManager propertyId={property.id} services={property.services} canEdit={user.role === "OWNER"}
+              <ServiceManager typy={typy} propertyId={property.id} services={property.services} canEdit={user.role === "OWNER"}
                 porovnani={zalohy} historie={historieNakladu} />
             </SbalitelnaKarta>
             </>),
@@ -422,7 +424,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             pocet: vyuctovani.length || undefined,
             obsah: (<>
             <SbalitelnaKarta klic="vyuctovani-sluzeb" title="Vyúčtování služeb od dodavatelů">
-              <VyuctovaniSluzeb services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant }))}
+              <VyuctovaniSluzeb typy={typy} services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant }))}
                 leases={najmyVyuctovani} vyuctovani={vyuctovani} canEdit={user.role === "OWNER"} />
             </SbalitelnaKarta>
             <SbalitelnaKarta klic="vyuctovani-najemce" title="Vyúčtování pro nájemce" vychoziSbalena>

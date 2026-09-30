@@ -5,12 +5,12 @@ import { deleteService, novyPoplatek, saveService, smazZmenuNakladu, type Entity
 import {
   Hlaska, Pole, Rozbalovaci, SmazatTlacitko, TextPole, UpravaPanel, UpravitTlacitko, Vyber, Zaskrtavatko, isoDatum,
 } from "./form";
-import { SERVICE_TYPES } from "@/lib/categories";
+import { nazevDruhu, type TypySluzeb } from "@/lib/categories";
 import { czk, dateCz } from "@/lib/format";
-import { Ikona, IKONA_SLUZBY } from "./Ikony";
+import { Ikona, type NazevIkony } from "./Ikony";
 import { DatumPole } from "./DatumPole";
 import { ZalohyUpozorneni } from "./ZalohyUpozorneni";
-import { VYCHOZI_PRECTENE, type PorovnaniZaloh } from "@/lib/zalohy";
+import type { PorovnaniZaloh } from "@/lib/zalohy";
 import { Badge } from "./Stat";
 
 interface Row {
@@ -23,7 +23,9 @@ export interface ZmenaNakladuRadek { id: string; validFrom: Date | string; month
 
 const dnesISO = () => new Date().toISOString().slice(0, 10);
 
-export function ServiceManager({ propertyId, services, canEdit, porovnani, historie }: {
+export function ServiceManager({ propertyId, services, canEdit, porovnani, historie, typy }: {
+  /** Druhy sluzeb (upravitelne ve Sprave). */
+  typy: TypySluzeb;
   propertyId: string; services: Row[]; canEdit: boolean;
   /** Zalohy najemce proti nakladum na preuctovane sluzby (pocita server). */
   porovnani: PorovnaniZaloh | null;
@@ -100,10 +102,10 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                   <td>
                     <div className="flex items-center gap-3">
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
-                        <Ikona nazev={IKONA_SLUZBY[s.type] ?? "tri"} />
+                        <Ikona nazev={(typy[s.type]?.icon ?? "tri") as NazevIkony} />
                       </span>
                       <div className="min-w-0">
-                        <div className="font-medium leading-tight">{SERVICE_TYPES[s.type] ?? s.type}</div>
+                        <div className="font-medium leading-tight">{nazevDruhu(typy, s.type)}</div>
                         {s.chargedToTenant && (
                           <div className="mt-0.5 flex items-center gap-1 text-xs font-medium text-accent">
                             <Ikona nazev="najemce" trida="h-3.5 w-3.5" />hradí nájemce zálohou
@@ -154,7 +156,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                         <UpravitTlacitko aktivni={upravaId === s.id}
                           onClick={() => { setPoplatekId(null); setUpravaId(upravaId === s.id ? null : s.id); }} />
                         <SmazatTlacitko action={delAction} id={s.id}
-                          potvrzeni={`Opravdu smazat ${SERVICE_TYPES[s.type] ?? s.type} od ${s.provider}?`} />
+                          potvrzeni={`Opravdu smazat ${nazevDruhu(typy, s.type)} od ${s.provider}?`} />
                       </div>
                     </td>
                   )}
@@ -202,7 +204,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
       )}
 
       {canEdit && poplatkova && (
-        <UpravaPanel nadpis={`Nový poplatek: ${SERVICE_TYPES[poplatkova.type] ?? poplatkova.type} · ${poplatkova.provider}`}
+        <UpravaPanel nadpis={`Nový poplatek: ${nazevDruhu(typy, poplatkova.type)} · ${poplatkova.provider}`}
           onZavrit={() => setPoplatekId(null)}>
           <form action={poplatekAction} key={poplatkova.id} className="grid gap-3 sm:grid-cols-2">
             <input type="hidden" name="id" value={poplatkova.id} />
@@ -226,16 +228,16 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
       )}
 
       {canEdit && upravovana && (
-        <UpravaPanel nadpis={`Upravit ${SERVICE_TYPES[upravovana.type] ?? upravovana.type}`}
+        <UpravaPanel nadpis={`Upravit ${nazevDruhu(typy, upravovana.type)}`}
           onZavrit={() => setUpravaId(null)}>
-          <Formular key={upravovana.id} propertyId={propertyId} r={upravovana}
+          <Formular key={upravovana.id} typy={typy} propertyId={propertyId} r={upravovana}
             action={upravaAction} pending={upravuji} popisekTlacitka="Uložit změny" />
         </UpravaPanel>
       )}
 
       {canEdit && !upravovana && !poplatkova && (
         <Rozbalovaci popisek="Přidat službu nebo dodavatele" zavritPo={addState.success}>
-          <Formular propertyId={propertyId} r={null} action={addAction} pending={adding}
+          <Formular typy={typy} propertyId={propertyId} r={null} action={addAction} pending={adding}
             popisekTlacitka="Uložit službu" />
         </Rozbalovaci>
       )}
@@ -243,13 +245,14 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   );
 }
 
-function Formular({ propertyId, r, action, pending, popisekTlacitka }: {
+function Formular({ propertyId, r, action, pending, popisekTlacitka, typy }: {
+  typy: TypySluzeb;
   propertyId: string; r: Row | null;
   action: (payload: FormData) => void; pending: boolean; popisekTlacitka: string;
 }) {
   // Predvyplneni podle druhu: voda, teplo a odpad se obvykle preuctovavaji.
   // Je to jen vychozi hodnota — jakmile ji clovek prepne, druh ji uz neprepise.
-  const [prect, setPrect] = useState(r ? r.chargedToTenant : VYCHOZI_PRECTENE.has("ELECTRICITY"));
+  const [prect, setPrect] = useState(r ? r.chargedToTenant : (typy.ELECTRICITY?.chargedByDefault ?? false));
   const rucne = useRef(false);
 
   const [mesicne, setMesicne] = useState(String(r?.monthlyCost ?? 0));
@@ -259,8 +262,8 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka }: {
     <form action={action} className="grid gap-3 sm:grid-cols-2">
       <input type="hidden" name="propertyId" value={propertyId} />
       <Vyber label="Druh služby" name="type" defaultValue={r?.type ?? "ELECTRICITY"}
-        options={Object.entries(SERVICE_TYPES) as [string, string][]}
-        onChange={(druh) => { if (!r && !rucne.current) setPrect(VYCHOZI_PRECTENE.has(druh)); }} />
+        options={Object.entries(typy).map(([k, t]) => [k, t.name] as [string, string])}
+        onChange={(druh) => { if (!r && !rucne.current) setPrect(typy[druh]?.chargedByDefault ?? false); }} />
       <Pole label="Dodavatel" name="provider" required placeholder="např. ČEZ Prodej" defaultValue={r?.provider} />
       {r ? (
         // Naklad se u existujici sluzby meni ikonou "Nový poplatek": tak zustane historie

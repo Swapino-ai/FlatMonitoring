@@ -70,3 +70,23 @@ export const SERVICE_TYPES: Record<string, string> = {
   WASTE: "Odpad",
   OTHER: "Ostatní",
 };
+
+/** Druh sluzby tak, jak ho vidi obrazovky: nazev, ikona a vychozi prepinac "preuctuje se najemci". */
+export interface DruhSluzby { name: string; icon: string; chargedByDefault: boolean }
+export type TypySluzeb = Record<string, DruhSluzby>;
+
+const VYCHOZI_PRECTENE_KLICE = new Set(["WATER", "HEATING", "GAS", "WASTE"]);
+const VYCHOZI_IKONY: Record<string, string> = {
+  ELECTRICITY: "blesk", GAS: "plamen", WATER: "kapka", HEATING: "teplomer", INTERNET: "wifi",
+  INSURANCE: "stit", SVJ_FEE: "budova", MANAGEMENT: "kufr", WASTE: "odpad", OTHER: "tri",
+};
+
+/** Vychozi druhy — zaklad, kdyz v databazi jeste zadne nejsou. */
+export const VYCHOZI_DRUHY: TypySluzeb = Object.fromEntries(
+  Object.entries(SERVICE_TYPES).map(([key, name]) => [key, {
+    name, icon: VYCHOZI_IKONY[key] ?? "tri", chargedByDefault: VYCHOZI_PRECTENE_KLICE.has(key),
+  }]),
+);
+
+/** Nazev druhu; neznamy klic se ukaze tak, jak je, at sluzba nezmizi. */
+export const nazevDruhu = (typy: TypySluzeb, key: string) => typy[key]?.name ?? SERVICE_TYPES[key] ?? key;

@@ -37,7 +37,7 @@ function bundleDiscountPct(units: number, type: string): number {
   return base * (multiplier[type] ?? 1);
 }
 
-export function findBundleOpportunities(properties: PropertyWithRelations[], asOf = new Date()): BundleOpportunity[] {
+export function findBundleOpportunities(properties: PropertyWithRelations[], asOf = new Date(), nazvy?: Record<string, string>): BundleOpportunity[] {
   const byType = new Map<string, { service: PropertyWithRelations["services"][number]; property: PropertyWithRelations }[]>();
 
   for (const p of properties) {
@@ -87,7 +87,7 @@ export function findBundleOpportunities(properties: PropertyWithRelations[], asO
 
     out.push({
       type,
-      typeLabel: SERVICE_TYPES[type] ?? type,
+      typeLabel: nazvy?.[type] ?? SERVICE_TYPES[type] ?? type,
       propertyCount: entries.length,
       providerCount: providers.length,
       providers,
@@ -99,15 +99,15 @@ export function findBundleOpportunities(properties: PropertyWithRelations[], asO
       totalSavingAnnual: Math.max(0, totalSavingAnnual),
       negotiableNow,
       lockedUntil: locked,
-      recommendation: buildRecommendation(type, entries.length, providers.length, negotiableNow, discount),
+      recommendation: buildRecommendation(type, entries.length, providers.length, negotiableNow, discount, nazvy?.[type]),
     });
   }
 
   return out.sort((a, b) => b.totalSavingAnnual - a.totalSavingAnnual);
 }
 
-function buildRecommendation(type: string, units: number, providerCount: number, negotiableNow: number, discount: number): string {
-  const label = SERVICE_TYPES[type] ?? type;
+function buildRecommendation(type: string, units: number, providerCount: number, negotiableNow: number, discount: number, nazev?: string): string {
+  const label = nazev ?? SERVICE_TYPES[type] ?? type;
   if (type === "SVJ_FEE") {
     return `Příspěvek SVJ je dán rozhodnutím shromáždění — prostor je v prosazení nižšího přídělu do fondu oprav, ne ve změně dodavatele.`;
   }

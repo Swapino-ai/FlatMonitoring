@@ -10,6 +10,7 @@ import { nactiPortfolio } from "@/lib/pohled";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { MapaPortfolia, type BodMapy } from "@/components/MapaPortfolia";
 import { cashFlowSeries, equitySeries } from "@/lib/series";
+import { nactiTypySluzeb } from "@/lib/typySluzeb";
 import { findBundleOpportunities, summarizeSavings } from "@/lib/savings";
 import { czk, czkCompact, dateCz, pct, STATUS_LABELS } from "@/lib/format";
 
@@ -20,7 +21,8 @@ export default async function Dashboard() {
   await srovnejPlatnost();
   const { pohled, properties, analyses, maSpoluvlastnictvi } = await nactiPortfolio(user);
   const s = summarize(analyses);
-  const savings = summarizeSavings(findBundleOpportunities(properties));
+  const nazvyDruhu = Object.fromEntries(Object.entries(await nactiTypySluzeb()).map(([k, t]) => [k, t.name]));
+  const savings = summarizeSavings(findBundleOpportunities(properties, new Date(), nazvyDruhu));
 
   const equity = equitySeries(properties);
   const cashflow = cashFlowSeries(properties);

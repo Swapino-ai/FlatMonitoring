@@ -5,6 +5,8 @@ import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Card, Stat, StatGrid } from "@/components/Stat";
 import { DataTransfer } from "@/components/DataTransfer";
+import { DruhySluzebManager } from "@/components/DruhySluzebManager";
+import { nactiTypySluzeb } from "@/lib/typySluzeb";
 import { UklidDat } from "@/components/UklidDat";
 import { TestMapy } from "@/components/TestMapy";
 import { prisma } from "@/lib/db";
@@ -32,6 +34,11 @@ export default async function SpravaPage() {
     prisma.scanRun.findFirst({ orderBy: { startedAt: "desc" }, select: { startedAt: true, status: true } }),
   ]);
 
+  const typy = await nactiTypySluzeb();
+  const pouziti = Object.fromEntries(
+    (await prisma.service.groupBy({ by: ["type"], _count: { _all: true } })).map((g) => [g.type, g._count._all]),
+  );
+
   return (
     <>
       <Nav user={user} verze={<Verze />} />
@@ -52,6 +59,14 @@ export default async function SpravaPage() {
             sub={poslendiBeh?.status === "SELHALO" ? "selhal" : poslendiBeh ? "v pořádku" : "zatím neproběhl"}
             tone={poslendiBeh?.status === "SELHALO" ? "bad" : poslendiBeh ? "good" : "warn"} />
         </StatGrid>
+
+        <Card title="Druhy služeb">
+          <p className="mb-3 text-sm text-ink-secondary">
+            Přejmenuj druh, změň ikonu, nebo přidej vlastní. Označení „přeúčtovat“ jen předvyplní novou službu.
+            Číslo vpravo je, kolik služeb druh používá; smazat jde jen nepoužívaný.
+          </p>
+          <DruhySluzebManager typy={typy} pouziti={pouziti} />
+        </Card>
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Card title="Nájemníci" action={<Link href="/najemnici" className="text-xs text-accent">Otevřít →</Link>}>

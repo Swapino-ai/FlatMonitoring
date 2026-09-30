@@ -8,11 +8,11 @@ import {
   pridejDny, prunik, rozuctuj, vyuctovaniNajemce,
   type NajemVstup, type SluzbaVyuctovani, type VyuctovaniVstup,
 } from "@/lib/vyuctovani";
-import { SERVICE_TYPES } from "@/lib/categories";
+import { nazevDruhu, type TypySluzeb } from "@/lib/categories";
 import { czk, dateCz } from "@/lib/format";
 import { Hlaska, Pole, Rozbalovaci, SmazatTlacitko, TextPole, UpravaPanel, UpravitTlacitko, Vyber } from "./form";
 import { DatumPole } from "./DatumPole";
-import { Ikona, IKONA_SLUZBY } from "./Ikony";
+import { Ikona, type NazevIkony } from "./Ikony";
 import { Badge } from "./Stat";
 
 export interface SluzbaRadek { id: string; type: string; provider: string; chargedToTenant: boolean }
@@ -30,12 +30,12 @@ export interface VyuctovaniRadek extends VyuctovaniVstup {
 
 const dnesISO = () => new Date().toISOString().slice(0, 10);
 const cislo = (t: string) => Number(t.replace(/\s/g, "").replace(",", "."));
-const nazevSluzby = (s: SluzbaRadek) => `${SERVICE_TYPES[s.type] ?? s.type} · ${s.provider}`;
 const obdobi = (od: string, doDne: string) => `${dateCz(od)} – ${dateCz(doDne)}`;
 
 // --- Vyuctovani sluzeb od dodavatelu ---
 
-export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit }: {
+export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy }: {
+  typy: TypySluzeb;
   services: SluzbaRadek[]; leases: NajemRadek[]; vyuctovani: VyuctovaniRadek[]; canEdit: boolean;
 }) {
   const [addState, addAction, adding] = useActionState<VyuctovaniFormState, FormData>(saveSettlement.bind(null, null), {});
@@ -69,9 +69,9 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit }: {
               <div key={s.id}>
                 <div className="mb-2 flex items-center gap-2.5">
                   <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent-soft text-accent">
-                    <Ikona nazev={IKONA_SLUZBY[s.type] ?? "tri"} trida="h-4 w-4" />
+                    <Ikona nazev={(typy[s.type]?.icon ?? "tri") as NazevIkony} trida="h-4 w-4" />
                   </span>
-                  <div className="text-sm font-semibold">{nazevSluzby(s)}</div>
+                  <div className="text-sm font-semibold">{`${nazevDruhu(typy, s.type)} · ${s.provider}`}</div>
                   {s.chargedToTenant && <Badge tone="neutral">přeúčtuje se nájemci</Badge>}
                 </div>
                 <div className="divide-y divide-line/70 rounded-xl border border-line">
@@ -174,14 +174,14 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit }: {
 
       {canEdit && upravovane && (
         <UpravaPanel nadpis={`Upravit vyúčtování ${obdobi(upravovane.od, upravovane.do)}`} onZavrit={() => setUpravaId(null)}>
-          <Formular key={upravovane.id} r={upravovane} services={services} leases={leases} vyuctovani={vyuctovani}
+          <Formular typy={typy} key={upravovane.id} r={upravovane} services={services} leases={leases} vyuctovani={vyuctovani}
             action={upravaAction} pending={upravuji} popisekTlacitka="Uložit změny" />
         </UpravaPanel>
       )}
 
       {canEdit && !upravovane && (
         <Rozbalovaci popisek="Přidat vyúčtování od dodavatele" zavritPo={addState.success}>
-          <Formular r={null} services={services} leases={leases} vyuctovani={vyuctovani}
+          <Formular typy={typy} r={null} services={services} leases={leases} vyuctovani={vyuctovani}
             action={addAction} pending={adding} popisekTlacitka="Uložit vyúčtování" />
         </Rozbalovaci>
       )}
@@ -189,7 +189,8 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit }: {
   );
 }
 
-function Formular({ r, services, leases, vyuctovani, action, pending, popisekTlacitka }: {
+function Formular({ r, services, leases, vyuctovani, action, pending, popisekTlacitka, typy }: {
+  typy: TypySluzeb;
   r: VyuctovaniRadek | null; services: SluzbaRadek[]; leases: NajemRadek[]; vyuctovani: VyuctovaniRadek[];
   action: (payload: FormData) => void; pending: boolean; popisekTlacitka: string;
 }) {
@@ -229,7 +230,7 @@ function Formular({ r, services, leases, vyuctovani, action, pending, popisekTla
         <label className="label mb-1.5 block" htmlFor="serviceId">Služba</label>
         <select id="serviceId" name="serviceId" className="input" value={sluzbaId}
           onChange={(e) => setSluzbaId(e.target.value)}>
-          {services.map((s) => <option key={s.id} value={s.id}>{nazevSluzby(s)}</option>)}
+          {services.map((s) => <option key={s.id} value={s.id}>{`${nazevDruhu(typy, s.type)} · ${s.provider}`}</option>)}
         </select>
       </div>
       <DatumPole key={`od-${r?.id ?? sluzbaId}`} label="Období od" name="periodFrom" required

@@ -13,7 +13,7 @@ import { DatumPole } from "./DatumPole";
 import { EvidencniList, type Pronajimatel } from "./EvidencniList";
 import { HistorieZmen } from "./HistorieZmen";
 import { ZalohyUpozorneni } from "./ZalohyUpozorneni";
-import { SERVICE_TYPES } from "@/lib/categories";
+import { nazevDruhu, type TypySluzeb } from "@/lib/categories";
 import {
   popisPorovnani, porovnejZalohy, sluzbaKDatu, type PorovnaniZaloh, type SluzbaVstup,
 } from "@/lib/zalohy";
@@ -39,7 +39,8 @@ function denPo(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function LeaseManager({ propertyId, leases, canEdit, services, porovnani, historie, nemovitost, pronajimatele }: {
+export function LeaseManager({ propertyId, leases, canEdit, services, porovnani, historie, nemovitost, pronajimatele, typy }: {
+  typy: TypySluzeb;
   /** Udaje do evidencniho listu. */
   nemovitost: { nazev: string; adresa: string };
   pronajimatele: Pronajimatel[];
@@ -178,7 +179,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
 
       {listSmlouva && (
         <UpravaPanel nadpis={`Rozpis záloh: ${listSmlouva.tenantName}`} onZavrit={() => setListId(null)}>
-          <EvidencniList key={listSmlouva.id} v={{
+          <EvidencniList key={listSmlouva.id} typy={typy} v={{
             nemovitost,
             najemce: {
               name: listSmlouva.tenantName,
@@ -190,9 +191,6 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
             zalohyAktualni: listSmlouva.utilitiesMonthly,
             zalohyHistorie: historie[listSmlouva.id] ?? [],
             odKdy: listSmlouva.startDate.toISOString().slice(0, 10),
-            doKdy: listSmlouva.endDate ? listSmlouva.endDate.toISOString().slice(0, 10) : null,
-            platebniDen: listSmlouva.paymentDay,
-            kauce: listSmlouva.deposit,
             prectene: services.filter((s) => s.chargedToTenant),
           }} />
         </UpravaPanel>
@@ -200,7 +198,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
 
       {canEdit && upravovana && (
         <UpravaPanel nadpis={`Upravit smlouvu s ${upravovana.tenantName}`} onZavrit={() => setUpravaId(null)}>
-          <Formular key={upravovana.id} propertyId={propertyId} r={upravovana} services={services}
+          <Formular typy={typy} key={upravovana.id} propertyId={propertyId} r={upravovana} services={services}
             action={upravaAction} pending={upravuji} popisekTlacitka="Uložit změny" />
           <HistorieZmen
             nadpis="Historie záloh"
@@ -233,7 +231,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
                 <strong>{dateCz(new Date(`${denPo(kopie.konec)}T00:00:00Z`))}</strong>. Všechny údaje jsou předvyplněné, uprav jen,
                 co se mění.
               </p>
-              <Formular key={`${kopie.id}-${kopie.konec}`} propertyId={propertyId} services={services}
+              <Formular typy={typy} key={`${kopie.id}-${kopie.konec}`} propertyId={propertyId} services={services}
                 r={{ ...kopirovana, startDate: new Date(`${denPo(kopie.konec)}T00:00:00Z`), endDate: null, isActive: true }}
                 kopie={{ predchoziId: kopie.id, predchoziKonec: kopie.konec }}
                 action={addAction} pending={adding} popisekTlacitka="Ukončit starou a uložit novou" />
@@ -244,7 +242,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
 
       {canEdit && !upravovana && !kopie && (
         <Rozbalovaci popisek="Přidat nájemní smlouvu" zavritPo={addState.success}>
-          <Formular propertyId={propertyId} r={null} services={services} action={addAction} pending={adding}
+          <Formular typy={typy} propertyId={propertyId} r={null} services={services} action={addAction} pending={adding}
             popisekTlacitka="Uložit smlouvu" />
         </Rozbalovaci>
       )}
@@ -252,7 +250,8 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
   );
 }
 
-function Formular({ propertyId, r, services, action, pending, popisekTlacitka, kopie }: {
+function Formular({ propertyId, r, services, action, pending, popisekTlacitka, kopie, typy }: {
+  typy: TypySluzeb;
   propertyId: string; r: Row | null; kopie?: { predchoziId: string; predchoziKonec: string }; services: SluzbaVstup[];
   action: (payload: FormData) => void; pending: boolean; popisekTlacitka: string;
 }) {
@@ -344,7 +343,7 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
                     <ul className="mt-2 space-y-0.5 text-xs text-ink-secondary">
                       {zive.polozky.map((p, i) => (
                         <li key={i} className="flex justify-between gap-4">
-                          <span>{SERVICE_TYPES[p.type] ?? p.type} · {p.provider}</span>
+                          <span>{nazevDruhu(typy, p.type)} · {p.provider}</span>
                           <span className="tabular-nums">{Math.round(p.castka).toLocaleString("cs-CZ")}&nbsp;Kč</span>
                         </li>
                       ))}

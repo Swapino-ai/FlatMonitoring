@@ -7,6 +7,7 @@ import { Card } from "@/components/Stat";
 import { EquityChart, CashFlowChart, YieldBarChart, ExpenseBreakdownChart } from "@/components/charts";
 import { analyzeProperty, loadProperties, summarize } from "@/lib/portfolio";
 import { cashFlowSeries, equitySeries, expenseBreakdown } from "@/lib/series";
+import { nactiTypySluzeb } from "@/lib/typySluzeb";
 import { findBundleOpportunities, summarizeSavings } from "@/lib/savings";
 import { buildTaxReport } from "@/lib/taxReport";
 import { PrintTrigger } from "@/components/PrintTrigger";
@@ -27,7 +28,8 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
   const equity = equitySeries(properties);
   const cashflow = cashFlowSeries(properties);
   const expenses = expenseBreakdown(properties, year).map((e) => ({ kategorie: categoryLabel(e.kategorie), castka: e.castka }));
-  const opportunities = findBundleOpportunities(properties);
+  const nazvyDruhu = Object.fromEntries(Object.entries(await nactiTypySluzeb()).map(([k, t]) => [k, t.name]));
+  const opportunities = findBundleOpportunities(properties, new Date(), nazvyDruhu);
   const savings = summarizeSavings(opportunities);
   const tax = buildTaxReport(properties, year);
 

@@ -554,3 +554,13 @@ model Tenant {
 
   @@index([email])
 }
+
+/// Druhy sluzeb, ktere jde upravovat (nazev, ikona, zda se obvykle preuctovava najemci).
+/// Sluzba na druh odkazuje klicem v Service.type; vychozi druhy se zalozi pri prvnim pouziti.
+model ServiceType {
+  key              String  @id
+  name             String
+  icon             String  @default("tri")
+  chargedByDefault Boolean @default(false)
+  sort             Int     @default(0)
+}

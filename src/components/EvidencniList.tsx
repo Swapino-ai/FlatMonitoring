@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { czk, dateCz } from "@/lib/format";
-import { SERVICE_TYPES } from "@/lib/categories";
+import { nazevDruhu, type TypySluzeb } from "@/lib/categories";
 import { mesicniNaklad, platnyKDatu, sluzbaKDatu, type SluzbaVstup } from "@/lib/zalohy";
 import { DatumPole } from "./DatumPole";
 
@@ -16,9 +16,6 @@ export interface EvidencniVstup {
   zalohyAktualni: number;
   zalohyHistorie: { validFrom: Date | string; amount: number }[];
   odKdy: string;
-  doKdy: string | null;
-  platebniDen: number;
-  kauce: number;
   /** Sluzby preuctovane najemci; cena a poznamka se berou ke zvolenemu dni. */
   prectene: SluzbaVstup[];
 }
@@ -49,7 +46,7 @@ function Radek({ t, v }: { t: string; v: React.ReactNode }) {
  * Evidencni list bytu / rozpis najmu pro najemce: kdo, kde, kolik se plati a od kdy.
  * Hodnoty se berou ke zvolenemu dni — zalohy mohly mezitim zmenit.
  */
-export function EvidencniList({ v }: { v: EvidencniVstup }) {
+export function EvidencniList({ v, typy }: { v: EvidencniVstup; typy: TypySluzeb }) {
   const vychozi = v.odKdy > dnes() ? v.odKdy : dnes();
   const [platnyOd, setPlatnyOd] = useState<string | null>(vychozi);
   const den = platnyOd ?? vychozi;
@@ -139,7 +136,7 @@ export function EvidencniList({ v }: { v: EvidencniVstup }) {
                 {sluzby.map((s, i) => (
                   <tr key={i}>
                     <td className="px-4 py-2 pl-7">
-                      <div className="font-medium">{SERVICE_TYPES[s.type] ?? s.type}</div>
+                      <div className="font-medium">{nazevDruhu(typy, s.type)}</div>
                       <div className="text-xs text-ink-muted">{s.provider}</div>
                       {s.poznamka && (
                         <div className="mt-1 whitespace-pre-line border-l-2 border-accent/40 pl-2 text-[11px] leading-snug text-ink-secondary">
@@ -175,11 +172,6 @@ export function EvidencniList({ v }: { v: EvidencniVstup }) {
             </table>
           </section>
 
-          <div className="grid gap-x-6 gap-y-1 text-xs text-ink-secondary sm:grid-cols-3">
-            <div>Splatnost: do <strong>{v.platebniDen}.</strong> dne v měsíci</div>
-            <div>Kauce: <strong>{czk(v.kauce)}</strong></div>
-            <div>Nájem od <strong>{dateCz(v.odKdy)}</strong>{v.doKdy ? <> do <strong>{dateCz(v.doKdy)}</strong></> : " na dobu neurčitou"}</div>
-          </div>
         </div>
 
         <footer className="mt-10 grid grid-cols-2 gap-10 break-inside-avoid text-center text-sm">
