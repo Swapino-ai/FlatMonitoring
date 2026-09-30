@@ -1,6 +1,7 @@
 import { page } from "@/lib/guard";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { SbalitelnaKarta } from "@/components/SbalitelnaKarta";
 import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
@@ -105,9 +106,17 @@ export default async function ProvozPage() {
           </Card>
         ) : (
           [...dny.entries()].map(([den, radky]) => (
-            <Card key={den} title={den} action={
-              <span className="text-xs text-ink-muted">{radky.length} skenů</span>
-            }>
+            <SbalitelnaKarta key={den} klic={`provoz:${den}`} title={den} vychoziSbalena
+              action={<span className="text-xs text-ink-muted">{radky.length} skenů</span>}
+              shrnuti={(() => {
+                const chyb = radky.filter((b) => b.status === "SELHALO").length;
+                const prazdnych = radky.filter((b) => b.status === "PRAZDNY").length;
+                return [
+                  `${radky.length} skenů`,
+                  chyb > 0 ? `${chyb} selhalo` : null,
+                  prazdnych > 0 ? `${prazdnych} bez dat` : null,
+                ].filter(Boolean).join(" · ");
+              })()}>
               <div className="table-scroll">
                 <table className="table-base">
                   <thead>
@@ -156,7 +165,7 @@ export default async function ProvozPage() {
                   </tbody>
                 </table>
               </div>
-            </Card>
+            </SbalitelnaKarta>
           ))
         )}
       </main>
