@@ -130,7 +130,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                     <div className="font-semibold">{czk(vyse)}</div>
                     {aktualni && (
                       <div className={`text-xs ${planovano ? "font-medium text-accent" : "font-normal text-ink-muted"}`}>
-                        od {dateCz(new Date(aktualni.validFrom))}{planovano && " (plánováno)"}
+                        od {dateCz(new Date(aktualni.validFrom))} dále{planovano && " (plánováno)"}
                       </div>
                     )}
                     {vSeznamu.length > 0 && (

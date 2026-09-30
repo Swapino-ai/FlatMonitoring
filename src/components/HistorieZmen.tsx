@@ -38,6 +38,10 @@ export function HistorieZmen({ nadpis, radky, action, potvrzeni }: {
           <li key={r.id} className="flex items-center justify-between gap-3 py-1.5">
             <span className="tabular-nums text-ink-secondary">
               {i === 0 ? "od začátku" : `od ${dateCz(new Date(r.validFrom))}`}
+              {" "}
+              {i === razene.length - 1
+                ? "dále"
+                : `do ${dateCz(new Date(new Date(razene[i + 1].validFrom).getTime() - 24 * 3600 * 1000))}`}
             </span>
             <span className="ml-auto font-medium tabular-nums">{r.hodnota}</span>
             <SmazatTlacitko action={smaz} id={r.id} potvrzeni={potvrzeni} />
