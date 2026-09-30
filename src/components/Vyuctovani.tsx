@@ -86,6 +86,11 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit }: {
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3.5 py-2.5">
                           <div className="min-w-0 flex-1">
                             <div className="text-sm font-medium tabular-nums">{obdobi(v.od, v.do)}</div>
+                            {rozdel.vlastnik.dnu > 0 && v.rezim === "DAYS" && (
+                              <div className="text-xs text-warn">
+                                {rozdel.vlastnik.dnu} dní bez nájemce · {czk(rozdel.vlastnik.podil)} nese vlastník
+                              </div>
+                            )}
                             <div className="text-xs text-ink-muted">
                               {v.cisloFaktury ? `č. ${v.cisloFaktury} · ` : ""}
                               {v.rezim === "READINGS" ? `podle odečtů${v.jednotka ? ` (${v.jednotka})` : ""}` : "podle dnů"}
@@ -296,6 +301,32 @@ function Formular({ r, services, leases, vyuctovani, action, pending, popisekTla
         </div>
       )}
       {nahled?.chyba && <p className="text-xs text-bad sm:col-span-2">{nahled.chyba}</p>}
+
+      {/* Nejvyse jeden najemce: nedeli se, ale dny bez nej nese vlastnik — na to se ma upozornit */}
+      {!delit && od && doDne && od <= doDne && naklad !== "" && (() => {
+        const n = rozuctuj({
+          id: "n", od, do: doDne, naklad: cislo(naklad) || 0, zalohyDodavateli: 0, rezim: "DAYS", odecty: {},
+        }, leases);
+        if (n.vlastnik.dnu === 0) return null;
+        const jmeno = dotcene[0]?.nazev;
+        return (
+          <div className="flex items-start gap-2.5 rounded-xl bg-warn/15 px-3.5 py-2.5 text-sm sm:col-span-2" role="status">
+            <Ikona nazev="pozor" trida="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+            <div>
+              <div className="font-semibold">
+                {dotcene.length === 0
+                  ? "V tomto období nebyl v bytě žádný nájemce"
+                  : `Nájemce ${jmeno} v období bydlel jen část doby`}
+              </div>
+              <p className="mt-0.5 text-xs text-ink-secondary">
+                {n.vlastnik.dnu} z {n.dnuObdobi} dní je bez nájemce, takže {czk(n.vlastnik.podil)} ponesl{" "}
+                vlastník{dotcene.length === 1 ? ` a nájemci se účtuje jen ${czk(n.podily[0]?.podil ?? 0)}` : ""}.
+                Zkontroluj, jestli období nebo doba nájmu sedí.
+              </p>
+            </div>
+          </div>
+        );
+      })()}
 
       <TextPole label="Poznámka" name="notes" sirka="sm:col-span-2" defaultValue={r?.poznamka ?? ""} placeholder="nepovinné" />
       <div className="sm:col-span-2">

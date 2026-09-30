@@ -23,6 +23,7 @@ export async function exportujVse(): Promise<Zaloha> {
       transaction: await prisma.transaction.findMany(),
       service: await prisma.service.findMany(),
       serviceCostChange: await prisma.serviceCostChange.findMany(),
+      tenant: await prisma.tenant.findMany(),
       serviceSettlement: await prisma.serviceSettlement.findMany(),
       settlementReading: await prisma.settlementReading.findMany(),
       valuation: await prisma.valuation.findMany(),
@@ -74,6 +75,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.service.deleteMany();
     await tx.transaction.deleteMany();
     await tx.lease.deleteMany();
+    await tx.tenant.deleteMany();
     await tx.loan.deleteMany();
     await tx.property.deleteMany();
     await tx.user.deleteMany();
@@ -131,10 +133,17 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     }));
     if (loans.length) obnoveno.loan = (await tx.loan.createMany({ data: loans })).count;
 
+    const najemci = (t.tenant as any[] ?? []).map((x) => ({
+      id: String(x.id), cislo: c(x.cislo), name: String(x.name),
+      email: s(x.email), phone: s(x.phone), street: s(x.street), city: s(x.city), zip: s(x.zip),
+      account: s(x.account), notes: s(x.notes), createdAt: dPovinne(x.createdAt ?? new Date()),
+    }));
+    if (najemci.length) obnoveno.tenant = (await tx.tenant.createMany({ data: najemci })).count;
+
     const leases = (t.lease as any[] ?? []).map((x) => ({
       id: String(x.id), propertyId: String(x.propertyId), tenantName: String(x.tenantName),
       tenantEmail: s(x.tenantEmail), tenantPhone: s(x.tenantPhone),
-      tenantStreet: s(x.tenantStreet), tenantCity: s(x.tenantCity), tenantZip: s(x.tenantZip), tenantAccount: s(x.tenantAccount),
+      tenantStreet: s(x.tenantStreet), tenantCity: s(x.tenantCity), tenantZip: s(x.tenantZip), tenantAccount: s(x.tenantAccount), tenantId: s(x.tenantId),
       startDate: dPovinne(x.startDate), endDate: d(x.endDate),
       rentMonthly: c(x.rentMonthly), utilitiesMonthly: c(x.utilitiesMonthly), deposit: c(x.deposit),
       indexationClause: !!x.indexationClause, paymentDay: Math.round(c(x.paymentDay, 15)),

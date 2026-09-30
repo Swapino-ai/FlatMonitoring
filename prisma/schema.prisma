@@ -163,6 +163,10 @@ model Lease {
   propertyId String
   property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
+  // Jednoznacna identita najemce; sloupce tenant* nize jsou jeji zrcadlo pro rychle cteni
+  tenantId     String?
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
   tenantName   String
   tenantEmail  String?
   tenantPhone  String?
@@ -527,4 +531,26 @@ model SettlementReading {
   consumption  Float
 
   @@unique([settlementId, leaseId])
+}
+
+/// Databaze najemniku. Jeden clovek = jeden radek, at ma smluv kolik chce (prodlouzeni,
+/// novy byt). Kontaktni udaje se drzi tady; smlouvy je jen odkazuji.
+model Tenant {
+  id      String @id @default(cuid())
+  /// Citelne poradove cislo pro lidi (N-0001)
+  cislo   Int    @unique @default(autoincrement())
+  name    String
+  email   String?
+  phone   String?
+  street  String?
+  city    String?
+  zip     String?
+  /// Ucet pro vratku preplatku (kontrolovany tvar)
+  account String?
+  notes   String?
+
+  createdAt DateTime @default(now())
+  leases    Lease[]
+
+  @@index([email])
 }

@@ -1,5 +1,6 @@
 import { prisma } from "./db";
 import { platnyKDatu } from "./zalohy";
+import { zajistiNajemce } from "./najemci";
 
 /**
  * Sloupce `monthlyCost` a `utilitiesMonthly` drzi hodnotu platnou dnes. Kdyz
@@ -9,6 +10,7 @@ import { platnyKDatu } from "./zalohy";
  */
 export async function srovnejPlatnost(): Promise<void> {
   const dnes = new Date();
+  await zajistiNajemce();
 
   const sluzby = await prisma.service.findMany({
     where: { costChanges: { some: {} } },

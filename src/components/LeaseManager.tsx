@@ -22,6 +22,7 @@ interface Row {
   id: string; tenantName: string; tenantEmail: string | null; tenantPhone: string | null;
   tenantStreet: string | null; tenantCity: string | null; tenantZip: string | null;
   tenantAccount: string | null;
+  tenantId: string | null;
   startDate: Date; endDate: Date | null; rentMonthly: number; utilitiesMonthly: number;
   deposit: number; indexationClause: boolean; paymentDay: number; isActive: boolean;
 }
@@ -238,6 +239,7 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
   return (
     <form action={action} className="grid gap-x-3 gap-y-5 sm:grid-cols-2">
       <input type="hidden" name="propertyId" value={propertyId} />
+      <input type="hidden" name="tenantId" value={r?.tenantId ?? ""} />
       {kopie && <input type="hidden" name="predchoziId" value={kopie.predchoziId} />}
       {kopie && <input type="hidden" name="predchoziKonec" value={kopie.predchoziKonec} />}
 

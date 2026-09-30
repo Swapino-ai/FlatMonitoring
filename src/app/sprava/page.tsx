@@ -54,6 +54,11 @@ export default async function SpravaPage() {
         </StatGrid>
 
         <div className="grid gap-4 lg:grid-cols-2">
+          <Card title="Nájemníci" action={<Link href="/najemnici" className="text-xs text-accent">Otevřít →</Link>}>
+            <p className="text-sm text-ink-secondary">
+              Databáze nájemníků s jednoznačným číslem. Jeden člověk je jeden záznam, i když má smluv víc.
+            </p>
+          </Card>
           <Card title="Uživatelé" action={<Link href="/users" className="text-xs text-accent">Otevřít →</Link>}>
             <p className="text-sm text-ink-secondary">
               Účty majitele a partnera, hesla a role. Partner vidí portfolio jen ke čtení.

@@ -6,6 +6,7 @@ import { prisma } from "./db";
 import { getSession } from "./auth";
 import { annuityPayment, balanceAt } from "./finance";
 import { zkontrolujUcet } from "./ucet";
+import { synchronizujSmlouvy, urciNajemce } from "./najemci";
 import { platnyKDatu, popisPorovnani, porovnejProNemovitost } from "./zalohy";
 
 export interface EntityFormState {
@@ -183,6 +184,7 @@ const najemSchema = z.object({
   tenantCity: textNeboNic,
   tenantZip: textNeboNic,
   tenantAccount: textNeboNic,
+  tenantId: textNeboNic,
   /** Od kdy plati nova vyse zaloh; potreba jen pri zmene zaloh u existujici smlouvy. */
   advanceValidFrom: datumNeboNic,
   startDate: z.string().min(1, "Zadej začátek nájmu."),
@@ -211,7 +213,14 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
   const ucet = zkontrolujUcet(d.tenantAccount ?? "");
   if (!ucet.ok) return { error: `Číslo účtu: ${ucet.chyba}` };
 
+  // Najemce ma vlastni identitu (tabulka Tenant); smlouva na nej jen odkazuje
+  const najemceId = await urciNajemce({
+    name: d.tenantName, email: d.tenantEmail, phone: d.tenantPhone,
+    street: d.tenantStreet, city: d.tenantCity, zip: d.tenantZip, account: ucet.hodnota,
+  }, d.tenantId);
+
   const data = {
+    tenantId: najemceId,
     tenantName: d.tenantName,
     tenantEmail: d.tenantEmail,
     tenantPhone: d.tenantPhone,
@@ -289,6 +298,9 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
   } else {
     await prisma.lease.create({ data: { ...data, propertyId: d.propertyId } });
   }
+
+  // Ostatni smlouvy stejneho najemce dostanou stejne kontaktni udaje
+  await synchronizujSmlouvy(najemceId);
 
   obnov(d.propertyId);
   return {
