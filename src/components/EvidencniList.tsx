@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { czk, dateCz } from "@/lib/format";
 import { SERVICE_TYPES } from "@/lib/categories";
-import { platnyKDatu } from "@/lib/zalohy";
+import { mesicniNaklad, platnyKDatu, sluzbaKDatu, type SluzbaVstup } from "@/lib/zalohy";
 import { DatumPole } from "./DatumPole";
 
 export interface Pronajimatel { name: string; adresa: string }
@@ -19,7 +19,8 @@ export interface EvidencniVstup {
   doKdy: string | null;
   platebniDen: number;
   kauce: number;
-  prectene: { type: string; provider: string }[];
+  /** Sluzby preuctovane najemci; cena a poznamka se berou ke zvolenemu dni. */
+  prectene: SluzbaVstup[];
 }
 
 const dnes = () => new Date().toISOString().slice(0, 10);
@@ -57,6 +58,12 @@ export function EvidencniList({ v }: { v: EvidencniVstup }) {
   const platne = platnyKDatu(v.zalohyHistorie, new Date(`${den}T00:00:00Z`));
   const zalohy = platne ? platne.amount : v.zalohyAktualni;
   const celkem = v.najemne + zalohy;
+  const sluzby = v.prectene.map((s) => {
+    const k = sluzbaKDatu(s, new Date(`${den}T00:00:00Z`));
+    return { type: s.type, provider: s.provider, poznamka: s.notes?.trim() || null, castka: mesicniNaklad(k) };
+  });
+  const souctuSluzeb = sluzby.reduce((a, s) => a + s.castka, 0);
+  const rozdil = zalohy - souctuSluzeb;
 
   return (
     <div>
@@ -124,19 +131,37 @@ export function EvidencniList({ v }: { v: EvidencniVstup }) {
                   </td>
                   <td className="px-4 py-2.5 text-right text-base font-semibold tabular-nums">{czk(v.najemne)}</td>
                 </tr>
+                <tr className="bg-surface-sunken/40">
+                  <td className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-ink-muted" colSpan={2}>
+                    Zálohy na služby spojené s užíváním bytu
+                  </td>
+                </tr>
+                {sluzby.map((s, i) => (
+                  <tr key={i}>
+                    <td className="px-4 py-2 pl-7">
+                      <div className="font-medium">{SERVICE_TYPES[s.type] ?? s.type}</div>
+                      <div className="text-xs text-ink-muted">{s.provider}</div>
+                      {s.poznamka && (
+                        <div className="mt-1 whitespace-pre-line border-l-2 border-accent/40 pl-2 text-[11px] leading-snug text-ink-secondary">
+                          {s.poznamka}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right align-top tabular-nums">{czk(s.castka)}</td>
+                  </tr>
+                ))}
+                {sluzby.length === 0 && (
+                  <tr><td className="px-4 py-2 pl-7 text-xs text-ink-muted" colSpan={2}>Žádná služba není přeúčtovaná nájemci.</td></tr>
+                )}
                 <tr>
                   <td className="px-4 py-2.5">
-                    <div className="font-medium">Zálohy na služby spojené s užíváním bytu</div>
-                    {v.prectene.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {v.prectene.map((s, i) => (
-                          <span key={i} className="rounded-md bg-surface-sunken px-1.5 py-0.5 text-[11px] text-ink-secondary">
-                            {SERVICE_TYPES[s.type] ?? s.type}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div className="mt-1 text-[11px] text-ink-muted">Zálohy se vyúčtují podle skutečných nákladů.</div>
+                    <div className="font-medium">Zálohy na služby celkem</div>
+                    <div className="text-[11px] text-ink-muted">
+                      Zálohy se vyúčtují podle skutečných nákladů.
+                      {sluzby.length > 0 && Math.abs(rozdil) >= 1 && (
+                        <> Náklady služeb jsou nyní {czk(souctuSluzeb)}, záloha je {rozdil > 0 ? "vyšší" : "nižší"} o {czk(Math.abs(rozdil))}.</>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-2.5 text-right align-top text-base font-semibold tabular-nums">{czk(zalohy)}</td>
                 </tr>

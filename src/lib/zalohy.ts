@@ -39,6 +39,8 @@ export interface SluzbaVstup {
   monthlyCost: number;
   annualCost: number | null;
   chargedToTenant: boolean;
+  /** Poznamka ke sluzbe (odberne misto, dohodnute podminky) — jde do evidencniho listu. */
+  notes?: string | null;
   /** Bez historie plati aktualni hodnota po cele obdobi. */
   historie?: ZmenaNakladu[];
 }

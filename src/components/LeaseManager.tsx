@@ -193,7 +193,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
             doKdy: listSmlouva.endDate ? listSmlouva.endDate.toISOString().slice(0, 10) : null,
             platebniDen: listSmlouva.paymentDay,
             kauce: listSmlouva.deposit,
-            prectene: services.filter((s) => s.chargedToTenant).map((s) => ({ type: s.type, provider: s.provider })),
+            prectene: services.filter((s) => s.chargedToTenant),
           }} />
         </UpravaPanel>
       )}
