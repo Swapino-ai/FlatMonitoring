@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
+// Jen animace slucovani; vzhled kolecka s poctem je vlastni (viz globals.css)
+import "leaflet.markercluster/dist/MarkerCluster.css";
 import { ikonaDomecek } from "@/lib/mapaIkona";
 
 export interface BodMapy {
@@ -65,6 +67,9 @@ export function MapaPortfolia({ body, vyskaTrida = "h-72 lg:h-[26rem]" }: {
 
     (async () => {
       const L = (await import("leaflet")).default;
+      // Plugin se pripoji ke globalnimu L, ktery Leaflet vytvori az pri nacteni,
+      // proto se nacita az po nem a az v prohlizeci.
+      await import("leaflet.markercluster");
       if (zruseno || !uzel.current) return;
 
       const kontejner = uzel.current as HTMLDivElement & { _leaflet_id?: number };
@@ -75,6 +80,9 @@ export function MapaPortfolia({ body, vyskaTrida = "h-72 lg:h-[26rem]" }: {
 
       const m = L.map(uzel.current, {
         attributionControl: true,
+        // Slucovani potrebuje znat nejvetsi priblizeni uz od zacatku; bez toho
+        // by plugin zavisel na poradi, v jakem se pridaji vrstvy.
+        maxZoom: 19,
         // Kolecko priblizuje mapu tam, kde mys existuje. Na dotyku kolecko neni
         // a jeden prst musi dal posouvat stranku.
         scrollWheelZoom: !dotyk,
@@ -96,12 +104,42 @@ export function MapaPortfolia({ body, vyskaTrida = "h-72 lg:h-[26rem]" }: {
       const ikonaBezna = ikonaDomecek(L);
       const ikonaVolna = ikonaDomecek(L, "var(--status-warning)");
 
+      // Blizke nemovitosti se slouci do kolecka s poctem a po priblizeni se
+      // rozpadnou. Dve nemovitosti nekolik set metru od sebe by jinak na
+      // zaberu celeho portfolia splynuly a jedna by zakryla druhou.
+      const bezPohybu = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const data = new Map<L.Marker, BodMapy>();
+      const skupina = L.markerClusterGroup({
+        maxClusterRadius: 48,
+        showCoverageOnHover: false,
+        zoomToBoundsOnClick: true,
+        // Stejne souradnice (dve jednotky v jednom dome) nejdou oddelit
+        // priblizenim; na nejvetsim priblizeni se rozlozi do kruhu.
+        spiderfyOnMaxZoom: true,
+        animate: !bezPohybu,
+        iconCreateFunction: (c) => {
+          const deti = c.getAllChildMarkers().map((k) => data.get(k)).filter((x): x is BodMapy => !!x);
+          const volne = deti.filter((d) => d.neobsazeno).length;
+          const nazvy = deti.map((d) => d.nazev).join(", ");
+          // Cislo a nazvy nesou informaci; oranzova tecka jen upozornuje, ze
+          // ve skupine je neobsazena nemovitost.
+          return L.divIcon({
+            className: "",
+            html: `<div class="fm-cl" title="${esc(nazvy)}${volne ? ` (neobsazeno: ${volne})` : ""}">
+              <span>${deti.length}</span>${volne ? '<i class="fm-cl-dot"></i>' : ""}</div>`,
+            iconSize: [46, 46],
+            iconAnchor: [23, 23],
+          });
+        },
+      });
+
       for (const b of body) {
         const z = L.marker([b.lat, b.lon], {
           icon: b.neobsazeno ? ikonaVolna : ikonaBezna,
           title: b.nazev,
           riseOnHover: true,
-        }).addTo(m);
+        });
+        data.set(z, b);
 
         if (dotyk) {
           z.bindPopup(popisek(b, true), { className: "fm-tip", offset: [0, -34], closeButton: false, maxWidth: 260 });
@@ -114,10 +152,13 @@ export function MapaPortfolia({ body, vyskaTrida = "h-72 lg:h-[26rem]" }: {
           });
           z.on("click", () => router.push(`/properties/${b.id}`));
         }
+        skupina.addLayer(z);
       }
+      m.addLayer(skupina);
 
       // Okraj 64 px kolem vsech bodu a strop priblizeni. Bez stropu by jedna
       // nemovitost zaostrila mapu na uroven domu a nebylo by poznat, kde je.
+      // Slucovani se pocita az z tohoto vyrezu.
       const hranice = L.latLngBounds(body.map((b) => [b.lat, b.lon] as [number, number]));
       m.fitBounds(hranice, { padding: [64, 64], maxZoom: 14 });
 

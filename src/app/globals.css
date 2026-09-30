@@ -269,3 +269,19 @@ body {
   display: block; margin-top: 12px; text-align: center; padding: 8px 12px; border-radius: 10px;
   background: rgb(var(--accent)); color: #fff !important; font-weight: 600; text-decoration: none;
 }
+
+/* Kolecko se sloucenymi nemovitostmi na mape portfolia. */
+.fm-cl {
+  position: relative;
+  width: 46px; height: 46px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgb(var(--accent)); color: #fff;
+  font-family: var(--font-sans); font-weight: 700; font-size: 16px;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 7px rgb(var(--accent) / 0.22), 0 4px 12px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+.fm-cl-dot {
+  position: absolute; top: -3px; right: -3px; width: 14px; height: 14px; border-radius: 50%;
+  background: rgb(var(--status-warning)); border: 2px solid #fff;
+}
