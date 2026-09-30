@@ -8,33 +8,45 @@ export interface Navrh {
 }
 
 /**
- * Jeden radek misto ctyr poli. Napis "Korunni 15 Praha" a ulice, mesto, PSC
- * i mestska cast se doplni samy — vcetne souradnic, podle kterych se pak
- * hledaji srovnatelne nabidky v okruhu.
+ * Pole "Ulice a cislo" s naseptavacem. Hleda se podle toho, co uzivatel pise
+ * primo do pole — zadny dalsi vyhledavaci radek. Vyber doplni ulici a pres
+ * `onVybrano` i mesto, PSC, cast a souradnice.
  *
- * Rucni vyplneni zustava: naseptavac muze byt nedostupny a bez adresy by
- * nesla nemovitost zalozit.
+ * Rucni psani zustava: naseptavac muze byt nedostupny a adresa nemusi v
+ * registru byt.
  */
-export function AdresaNaseptavac({ onVybrano }: { onVybrano: (n: Navrh) => void }) {
-  const [dotaz, setDotaz] = useState("");
+export function UliceNaseptavac({
+  label = "Ulice a číslo", name, value, onChange, onVybrano, required, hint, error, placeholder, className = "",
+}: {
+  label?: string;
+  name: string;
+  value: string;
+  onChange: (text: string) => void;
+  onVybrano: (n: Navrh) => void;
+  required?: boolean;
+  hint?: string;
+  error?: string;
+  placeholder?: string;
+  className?: string;
+}) {
   const [navrhy, setNavrhy] = useState<Navrh[]>([]);
-  const [poznamka, setPoznamka] = useState("");
   const [hleda, setHleda] = useState(false);
   const [otevreno, setOtevreno] = useState(false);
   const [zvyrazneny, setZvyrazneny] = useState(-1);
   const obal = useRef<HTMLDivElement>(null);
+  // Po vyberu se text pole zmeni; to nesmi spustit dalsi hledani
+  const preskocit = useRef(false);
 
-  // Na kazde pismeno se neptame — uzivatel pise rychleji, nez sit odpovida
   useEffect(() => {
-    if (dotaz.trim().length < 3) { setNavrhy([]); setPoznamka(""); return; }
+    if (preskocit.current) { preskocit.current = false; return; }
+    if (value.trim().length < 3) { setNavrhy([]); return; }
     const prerus = new AbortController();
     const casovac = setTimeout(async () => {
       setHleda(true);
       try {
-        const r = await fetch(`/api/adresy?q=${encodeURIComponent(dotaz)}`, { signal: prerus.signal });
+        const r = await fetch(`/api/adresy?q=${encodeURIComponent(value)}`, { signal: prerus.signal });
         const d = await r.json();
         setNavrhy(d.navrhy ?? []);
-        setPoznamka(d.poznamka ?? "");
         setOtevreno(true);
         setZvyrazneny(-1);
       } catch {
@@ -44,9 +56,8 @@ export function AdresaNaseptavac({ onVybrano }: { onVybrano: (n: Navrh) => void 
       }
     }, 300);
     return () => { clearTimeout(casovac); prerus.abort(); };
-  }, [dotaz]);
+  }, [value]);
 
-  // Klik mimo zavre nabídku
   useEffect(() => {
     const zavri = (e: MouseEvent) => {
       if (obal.current && !obal.current.contains(e.target as Node)) setOtevreno(false);
@@ -56,8 +67,8 @@ export function AdresaNaseptavac({ onVybrano }: { onVybrano: (n: Navrh) => void 
   }, []);
 
   function vyber(n: Navrh) {
+    preskocit.current = true;
     onVybrano(n);
-    setDotaz("");
     setNavrhy([]);
     setOtevreno(false);
   }
@@ -71,22 +82,26 @@ export function AdresaNaseptavac({ onVybrano }: { onVybrano: (n: Navrh) => void 
   }
 
   return (
-    <div ref={obal} className="relative sm:col-span-2">
-      <label className="label mb-1.5 block" htmlFor="adresa-hledani">Najít adresu</label>
+    <div ref={obal} className={`relative ${className}`}>
+      <label className="label mb-1.5 block" htmlFor={name}>{label}</label>
       <input
-        id="adresa-hledani"
+        id={name}
+        name={name}
         type="text"
         className="input"
-        placeholder="Začni psát, např. Korunní 15 Praha"
-        value={dotaz}
-        onChange={(e) => setDotaz(e.target.value)}
+        value={value}
+        required={required}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
         onKeyDown={klavesa}
         onFocus={() => navrhy.length > 0 && setOtevreno(true)}
         autoComplete="off"
+        role="combobox"
+        aria-expanded={otevreno && navrhy.length > 0}
+        aria-autocomplete="list"
       />
-      <p className="mt-1 text-xs text-ink-muted">
-        {hleda ? "Hledám…" : poznamka || "Vyplní ulici, město, PSČ i čtvrť. Pole níž jde kdykoli přepsat ručně."}
-      </p>
+      {error ? <p className="mt-1 text-xs text-bad">{error}</p>
+        : <p className="mt-1 text-xs text-ink-muted">{hleda ? "Hledám…" : hint}</p>}
 
       {otevreno && navrhy.length > 0 && (
         <ul className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-line bg-surface-card shadow-lg">

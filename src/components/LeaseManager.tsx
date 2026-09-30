@@ -7,6 +7,7 @@ import {
 } from "./form";
 import { Badge } from "./Stat";
 import { Ikona } from "./Ikony";
+import { UliceNaseptavac } from "./AdresaNaseptavac";
 import { HistorieZmen } from "./HistorieZmen";
 import { ZalohyUpozorneni } from "./ZalohyUpozorneni";
 import { SERVICE_TYPES } from "@/lib/categories";
@@ -138,6 +139,10 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka }:
   const zive = porovnejZalohy(cislo, sluzbyDnes);
   const popis = zive ? popisPorovnani(zive) : null;
 
+  const [adresa, setAdresa] = useState({
+    ulice: r?.tenantStreet ?? "", obec: r?.tenantCity ?? "", psc: r?.tenantZip ?? "",
+  });
+
   // Zmena zaloh u existujici smlouvy potrebuje datum, od ktereho plati
   const zmenaZaloh = r != null && cislo !== r.utilitiesMonthly;
 
@@ -149,10 +154,14 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka }:
         <Pole label="Jméno nájemce" name="tenantName" required defaultValue={r?.tenantName} sirka="sm:col-span-2" />
         <Pole label="E-mail" name="tenantEmail" type="email" placeholder="nepovinné" defaultValue={r?.tenantEmail ?? ""} />
         <Pole label="Telefon" name="tenantPhone" placeholder="nepovinné" defaultValue={r?.tenantPhone ?? ""} />
-        <Pole label="Ulice a číslo" name="tenantStreet" placeholder="nepovinné" defaultValue={r?.tenantStreet ?? ""}
-          sirka="sm:col-span-2" hint="Trvalé bydliště nebo adresa pro doručování" />
-        <Pole label="Obec" name="tenantCity" placeholder="nepovinné" defaultValue={r?.tenantCity ?? ""} />
-        <Pole label="PSČ" name="tenantZip" placeholder="nepovinné" defaultValue={r?.tenantZip ?? ""} />
+        <UliceNaseptavac name="tenantStreet" value={adresa.ulice} className="sm:col-span-2"
+          placeholder="nepovinné" hint="Trvalé bydliště nebo adresa pro doručování"
+          onChange={(t) => setAdresa((a) => ({ ...a, ulice: t }))}
+          onVybrano={(n) => setAdresa({ ulice: n.ulice, obec: n.mesto || adresa.obec, psc: n.psc || adresa.psc })} />
+        <Pole label="Obec" name="tenantCity" placeholder="nepovinné" value={adresa.obec}
+          onChange={(e) => setAdresa((a) => ({ ...a, obec: e.target.value }))} />
+        <Pole label="PSČ" name="tenantZip" placeholder="nepovinné" value={adresa.psc}
+          onChange={(e) => setAdresa((a) => ({ ...a, psc: e.target.value }))} />
       </Sekce>
 
       <Sekce nadpis="Nájem a poplatky" popis="Doba nájmu, nájemné a zálohy na služby.">

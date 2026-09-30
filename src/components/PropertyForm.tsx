@@ -7,7 +7,7 @@ import { saveProperty, type FormState } from "@/lib/actions";
 import { Card } from "./Stat";
 import { Pole } from "./form";
 import { KRAJE, NEMOVITOST_MAP, TYPY_NEMOVITOSTI } from "@/lib/catalogs";
-import { AdresaNaseptavac, type Navrh } from "./AdresaNaseptavac";
+import { UliceNaseptavac, type Navrh } from "./AdresaNaseptavac";
 import { Mapa } from "./Mapa";
 
 type Values = Partial<{
@@ -101,10 +101,10 @@ export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik 
             ["RENTED", "Pronajato"], ["VACANT", "Volné"], ["RENOVATION", "Rekonstrukce"],
             ["FOR_SALE", "Na prodej"], ["SOLD", "Prodáno"],
           ]} />
-          <AdresaNaseptavac onVybrano={prevezmi} />
-
-          <Field label="Ulice a číslo" name="street" value={adresa.street} onChange={zmen("street")}
-            required errors={state.fieldErrors} />
+          <UliceNaseptavac name="street" value={adresa.street} required
+            onChange={(t) => setAdresa((a) => ({ ...a, street: t, latitude: null, longitude: null }))}
+            onVybrano={prevezmi} error={state.fieldErrors?.street}
+            hint="Začni psát a vyber z nabídky — doplní se město, PSČ i čtvrť." />
           <div className="grid grid-cols-2 gap-4">
             <Field label="Město" name="city" value={adresa.city} onChange={zmen("city")}
               required errors={state.fieldErrors} />
