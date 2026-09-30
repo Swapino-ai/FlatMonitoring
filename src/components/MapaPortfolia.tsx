@@ -75,8 +75,9 @@ export function MapaPortfolia({ body, vyskaTrida = "h-72 lg:h-[26rem]" }: {
 
       const m = L.map(uzel.current, {
         attributionControl: true,
-        // Kolecko mysi by na dlouhe strance misto scrollovani priblizovalo mapu
-        scrollWheelZoom: false,
+        // Kolecko priblizuje mapu tam, kde mys existuje. Na dotyku kolecko neni
+        // a jeden prst musi dal posouvat stranku.
+        scrollWheelZoom: !dotyk,
         // Na telefonu by jeden prst chytil mapu a stranka by prestala jit posouvat
         dragging: !dotyk,
       });

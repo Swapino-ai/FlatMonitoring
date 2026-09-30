@@ -61,8 +61,9 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
 
       const m = L.map(uzel.current, {
         attributionControl: true,
-        // Kolecko mysi by na dlouhe strance misto scrollovani priblizovalo mapu
-        scrollWheelZoom: false,
+        // Na pocitaci kolecko priblizuje; na telefonu se zapne az klepnutim,
+        // jinak by mapa chytala prst pri posouvani stranky
+        scrollWheelZoom: !naDotyk,
         // Na telefonu se posouvani zapne az klepnutim do mapy
         dragging: !naDotyk,
       }).setView(start, latitude != null ? zoom : 7);
