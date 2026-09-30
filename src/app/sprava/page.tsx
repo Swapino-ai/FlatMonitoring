@@ -5,6 +5,10 @@ import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Card, Stat, StatGrid } from "@/components/Stat";
 import { DataTransfer } from "@/components/DataTransfer";
+import { GoogleDiskKarta } from "@/components/GoogleDiskKarta";
+import { Dokumenty } from "@/components/Dokumenty";
+import { jeNastaveno, odkazNaSlozku } from "@/lib/googleDrive";
+import { headers } from "next/headers";
 import { DruhySluzebManager } from "@/components/DruhySluzebManager";
 import { nactiTypySluzeb } from "@/lib/typySluzeb";
 import { UklidDat } from "@/components/UklidDat";
@@ -18,7 +22,7 @@ export const dynamic = "force-dynamic";
  * skenu a udrzba dat. Drzime to pohromadě a mimo hlavni menu, at nestini
  * tomu, kvuli cemu se do aplikace chodi.
  */
-export default async function SpravaPage() {
+export default async function SpravaPage({ searchParams }: { searchParams: Promise<{ google?: string }> }) {
   const user = await page();
   if (user.role !== "OWNER") redirect("/");
 
@@ -34,6 +38,14 @@ export default async function SpravaPage() {
     prisma.scanRun.findFirst({ orderBy: { startedAt: "desc" }, select: { startedAt: true, status: true } }),
   ]);
 
+  const { google } = await searchParams;
+  const spojeni = await prisma.googleConnection.findUnique({ where: { id: "main" } });
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  const zkusebni = spojeni
+    ? await prisma.dokument.findMany({ where: { kategorie: "OSTATNI" }, orderBy: { createdAt: "desc" }, take: 20 })
+    : [];
   const typy = await nactiTypySluzeb();
   const pouziti = Object.fromEntries(
     (await prisma.service.groupBy({ by: ["type"], _count: { _all: true } })).map((g) => [g.type, g._count._all]),
@@ -59,6 +71,24 @@ export default async function SpravaPage() {
             sub={poslendiBeh?.status === "SELHALO" ? "selhal" : poslendiBeh ? "v pořádku" : "zatím neproběhl"}
             tone={poslendiBeh?.status === "SELHALO" ? "bad" : poslendiBeh ? "good" : "warn"} />
         </StatGrid>
+
+        <Card title="Google Disk — úložiště dokumentů">
+          <GoogleDiskKarta
+            nastaveno={jeNastaveno()}
+            pripojeno={spojeni ? { email: spojeni.email, rootUrl: odkazNaSlozku(spojeni.rootFolderId), kdy: spojeni.connectedAt.toISOString() } : null}
+            redirectUri={`${proto}://${host}/api/google/callback`}
+            vysledek={google ?? null}
+          />
+          {spojeni && (
+            <div className="mt-4 border-t border-line pt-4">
+              <h3 className="mb-2 text-sm font-semibold">Vyzkoušet nahrávání</h3>
+              <Dokumenty kontext={{ kategorie: "OSTATNI" }} dokumenty={zkusebni} canEdit
+                nadpis="Nahrát do složky Ostatní"
+                popis="Přetáhni sem libovolný soubor. Uloží se do F(a)latMonitoring / Ostatní na Disku."
+                prazdne="Zatím nic nenahráno." />
+            </div>
+          )}
+        </Card>
 
         <Card title="Druhy služeb">
           <p className="mb-3 text-sm text-ink-secondary">

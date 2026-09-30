@@ -564,3 +564,44 @@ model ServiceType {
   chargedByDefault Boolean @default(false)
   sort             Int     @default(0)
 }
+
+/// Propojeni s Google Diskem (jeden zaznam). Soubory se ukladaji jen tam, v databazi je jen odkaz.
+/// Pristup je pres OAuth s rozsahem drive.file: aplikace vidi jen to, co sama na Disk nahrala.
+model GoogleConnection {
+  id           String   @id @default("main")
+  email        String?
+  refreshToken String
+  rootFolderId String
+  connectedAt  DateTime @default(now())
+}
+
+/// Pamet slozek na Disku: logicka cesta -> id slozky, aby se pri kazdem nahrani nehledalo.
+model DriveFolder {
+  klic    String @id // napr. "NEM/P:abc123/C:NAJEM/T:xyz"
+  driveId String
+  nazev   String
+}
+
+/// Dokument nahrany na Google Disk. Vazby jsou volne (retezce), at smazani zaznamu nesmaze soubor.
+model Dokument {
+  id           String   @id @default(cuid())
+  driveId      String   @unique
+  name         String
+  mime         String
+  size         Int
+  kategorie    String
+  propertyId   String?
+  tenantId     String?
+  leaseId      String?
+  serviceId    String?
+  settlementId String?
+  rok          Int?
+  note         String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  @@index([propertyId, kategorie])
+  @@index([tenantId])
+  @@index([leaseId])
+  @@index([serviceId])
+}

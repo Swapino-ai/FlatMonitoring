@@ -24,6 +24,7 @@ export async function exportujVse(): Promise<Zaloha> {
       service: await prisma.service.findMany(),
       serviceCostChange: await prisma.serviceCostChange.findMany(),
       tenant: await prisma.tenant.findMany(),
+      dokument: await prisma.dokument.findMany(),
       serviceSettlement: await prisma.serviceSettlement.findMany(),
       settlementReading: await prisma.settlementReading.findMany(),
       valuation: await prisma.valuation.findMany(),
@@ -68,6 +69,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.excludedListing.deleteMany();
     await tx.valuation.deleteMany();
     await tx.propertyOwner.deleteMany();
+    await tx.dokument.deleteMany();
     await tx.settlementReading.deleteMany();
     await tx.serviceSettlement.deleteMany();
     await tx.serviceCostChange.deleteMany();
@@ -181,6 +183,14 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       monthlyCost: c(x.monthlyCost), annualCost: x.annualCost == null ? null : c(x.annualCost),
     }));
     if (zmenyNakladu.length) obnoveno.serviceCostChange = (await tx.serviceCostChange.createMany({ data: zmenyNakladu })).count;
+
+    const dokumenty = (t.dokument as any[] ?? []).map((x) => ({
+      id: String(x.id), driveId: String(x.driveId), name: String(x.name), mime: String(x.mime), size: c(x.size),
+      kategorie: String(x.kategorie), propertyId: s(x.propertyId), tenantId: s(x.tenantId), leaseId: s(x.leaseId),
+      serviceId: s(x.serviceId), settlementId: s(x.settlementId), rok: x.rok == null ? null : c(x.rok),
+      note: s(x.note), uploadedById: s(x.uploadedById), createdAt: dPovinne(x.createdAt ?? new Date()),
+    }));
+    if (dokumenty.length) obnoveno.dokument = (await tx.dokument.createMany({ data: dokumenty })).count;
 
     const vyuctovani = (t.serviceSettlement as any[] ?? []).map((x) => ({
       id: String(x.id), serviceId: String(x.serviceId),
