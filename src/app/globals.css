@@ -306,3 +306,15 @@ body {
     position: absolute; left: 0; top: 0; width: 100%; border: 0; padding: 0;
   }
 }
+
+/* Evidencni list: pri tisku jen dokument, na bilem podkladu a bez stinu */
+@media print {
+  html.tisk-dokument body * { visibility: hidden; }
+  html.tisk-dokument .tisk-dokument-obsah,
+  html.tisk-dokument .tisk-dokument-obsah * { visibility: visible; }
+  html.tisk-dokument .tisk-dokument-obsah {
+    position: absolute; left: 0; top: 0; width: 100%; max-width: none;
+    border: 0; box-shadow: none; padding: 0; border-radius: 0;
+  }
+  .tisk-dokument-obsah tfoot tr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

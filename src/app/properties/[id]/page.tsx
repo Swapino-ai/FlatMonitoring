@@ -380,7 +380,12 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             varovani: zalohyNesedi,
             obsah: (<>
             <SbalitelnaKarta klic="najem" title="Nájem a nájemci">
-              <LeaseManager propertyId={property.id} leases={property.leases} canEdit={user.role === "OWNER"}
+              <LeaseManager propertyId={property.id} leases={property.leases}
+                nemovitost={{ nazev: property.name, adresa: `${property.street}, ${property.zip} ${property.city}` }}
+                pronajimatele={property.owners.map((o) => ({
+                  name: o.user.name,
+                  adresa: [o.user.street, [o.user.zip, o.user.city].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+                }))} canEdit={user.role === "OWNER"}
                 services={sluzbyVstup} porovnani={zalohy} historie={historieZaloh} />
               <div className="mt-4 border-t border-line pt-3">
                 <table className="table-base">

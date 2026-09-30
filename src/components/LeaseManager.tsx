@@ -10,6 +10,7 @@ import { Ikona } from "./Ikony";
 import { zkontrolujUcet } from "@/lib/ucet";
 import { UliceNaseptavac } from "./AdresaNaseptavac";
 import { DatumPole } from "./DatumPole";
+import { EvidencniList, type Pronajimatel } from "./EvidencniList";
 import { HistorieZmen } from "./HistorieZmen";
 import { ZalohyUpozorneni } from "./ZalohyUpozorneni";
 import { SERVICE_TYPES } from "@/lib/categories";
@@ -38,7 +39,10 @@ function denPo(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function LeaseManager({ propertyId, leases, canEdit, services, porovnani, historie }: {
+export function LeaseManager({ propertyId, leases, canEdit, services, porovnani, historie, nemovitost, pronajimatele }: {
+  /** Udaje do evidencniho listu. */
+  nemovitost: { nazev: string; adresa: string };
+  pronajimatele: Pronajimatel[];
   propertyId: string; leases: Row[]; canEdit: boolean;
   /** Sluzby nemovitosti — zalohy se ve formulari overuji proti nim. */
   services: SluzbaVstup[];
@@ -60,6 +64,10 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
   useEffect(() => { if (addState.success) setKopie(null); }, [addState.success]);
   const kopirovana = kopie ? leases.find((l) => l.id === kopie.id) ?? null : null;
 
+  // Evidencni list (rozpis najmu) ke smlouve
+  const [listId, setListId] = useState<string | null>(null);
+  const listSmlouva = leases.find((l) => l.id === listId) ?? null;
+
   const upravovana = leases.find((l) => l.id === upravaId) ?? null;
   // Platna smlouva je videt hned, historicke jsou sbalene pod ni
   const serazene = [...leases].sort((a, b) => Number(b.isActive) - Number(a.isActive)
@@ -68,7 +76,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
   const historicke = serazene.filter((l) => !l.isActive);
   const [historieOtevrena, setHistorieOtevrena] = useState(false);
   // Upravovana nebo kopirovana smlouva nesmi zustat schovana
-  const skrytaVyber = historicke.some((l) => l.id === upravaId || l.id === kopie?.id);
+  const skrytaVyber = historicke.some((l) => l.id === upravaId || l.id === kopie?.id || l.id === listId);
 
   const karta = (l: Row) => {
             const adresa = [l.tenantStreet, [l.tenantZip, l.tenantCity].filter(Boolean).join(" ")].filter(Boolean).join(", ");
@@ -86,26 +94,38 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
                     {adresa && <div className="text-xs text-ink-muted">{adresa}</div>}
                     {canEdit && l.tenantAccount && <div className="text-xs text-ink-muted">účet {l.tenantAccount}</div>}
                   </div>
-                  {canEdit && (
-                    <div className="flex shrink-0 items-center gap-0.5">
-                      <button type="button" title="Nová smlouva z této" aria-label="Nová smlouva z této"
-                        onClick={() => {
-                          setUpravaId(null);
-                          if (kopie?.id === l.id) { setKopie(null); return; }
-                          const navrh = l.endDate ? l.endDate.toISOString().slice(0, 10) : dnesISO();
-                          setKonecVstup(navrh);
-                          setKopie({ id: l.id, konec: null });
-                        }}
-                        className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
-                          kopie?.id === l.id ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-accent-soft hover:text-accent"}`}>
-                        <Ikona nazev="kopie" />
-                      </button>
-                      <UpravitTlacitko aktivni={upravaId === l.id}
-                        onClick={() => setUpravaId(upravaId === l.id ? null : l.id)} />
-                      <SmazatTlacitko action={delAction} id={l.id}
-                        potvrzeni={`Opravdu smazat smlouvu s ${l.tenantName}?`} />
-                    </div>
-                  )}
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    {/* Prace se systemem: doklady a navazujici smlouva */}
+                    <button type="button" title="Rozpis záloh (evidenční list)" aria-label="Rozpis záloh (evidenční list)"
+                      aria-pressed={listId === l.id}
+                      onClick={() => { setUpravaId(null); setKopie(null); setListId(listId === l.id ? null : l.id); }}
+                      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
+                        listId === l.id ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-accent-soft hover:text-accent"}`}>
+                      <Ikona nazev="dokument" />
+                    </button>
+                    {canEdit && (
+                      <>
+                        <button type="button" title="Nová smlouva z této" aria-label="Nová smlouva z této"
+                          onClick={() => {
+                            setUpravaId(null); setListId(null);
+                            if (kopie?.id === l.id) { setKopie(null); return; }
+                            const navrh = l.endDate ? l.endDate.toISOString().slice(0, 10) : dnesISO();
+                            setKonecVstup(navrh);
+                            setKopie({ id: l.id, konec: null });
+                          }}
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
+                            kopie?.id === l.id ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-accent-soft hover:text-accent"}`}>
+                          <Ikona nazev="kopie" />
+                        </button>
+                        {/* Uprava zaznamu: oddelena od praci se systemem */}
+                        <span className="mx-1.5 h-5 w-px bg-line" aria-hidden />
+                        <UpravitTlacitko aktivni={upravaId === l.id}
+                          onClick={() => { setListId(null); setUpravaId(upravaId === l.id ? null : l.id); }} />
+                        <SmazatTlacitko action={delAction} id={l.id}
+                          potvrzeni={`Opravdu smazat smlouvu s ${l.tenantName}?`} />
+                      </>
+                    )}
+                  </div>
                 </div>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
                   <Radek t="Čisté nájemné" v={`${czk(l.rentMonthly)}/měs.`} />
@@ -154,6 +174,28 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
             </div>
           )}
         </div>
+      )}
+
+      {listSmlouva && (
+        <UpravaPanel nadpis={`Rozpis záloh: ${listSmlouva.tenantName}`} onZavrit={() => setListId(null)}>
+          <EvidencniList key={listSmlouva.id} v={{
+            nemovitost,
+            najemce: {
+              name: listSmlouva.tenantName,
+              adresa: [listSmlouva.tenantStreet, [listSmlouva.tenantZip, listSmlouva.tenantCity].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+              email: listSmlouva.tenantEmail, phone: listSmlouva.tenantPhone,
+            },
+            pronajimatele,
+            najemne: listSmlouva.rentMonthly,
+            zalohyAktualni: listSmlouva.utilitiesMonthly,
+            zalohyHistorie: historie[listSmlouva.id] ?? [],
+            odKdy: listSmlouva.startDate.toISOString().slice(0, 10),
+            doKdy: listSmlouva.endDate ? listSmlouva.endDate.toISOString().slice(0, 10) : null,
+            platebniDen: listSmlouva.paymentDay,
+            kauce: listSmlouva.deposit,
+            prectene: services.filter((s) => s.chargedToTenant).map((s) => ({ type: s.type, provider: s.provider })),
+          }} />
+        </UpravaPanel>
       )}
 
       {canEdit && upravovana && (
