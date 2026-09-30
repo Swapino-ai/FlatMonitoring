@@ -257,6 +257,10 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka, typy }: {
 
   const [mesicne, setMesicne] = useState(String(r?.monthlyCost ?? 0));
   const [rocne, setRocne] = useState(r?.annualCost != null ? String(r.annualCost) : "");
+  const cislo = (t: string) => Number(t.replace(/\s/g, "").replace(",", "."));
+  const zmenaNakladu = r != null && (
+    (cislo(mesicne) || 0) !== r.monthlyCost || (rocne.trim() === "" ? null : cislo(rocne)) !== (r.annualCost ?? null)
+  );
 
   return (
     <form action={action} className="grid gap-3 sm:grid-cols-2">
@@ -265,23 +269,16 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka, typy }: {
         options={Object.entries(typy).map(([k, t]) => [k, t.name] as [string, string])}
         onChange={(druh) => { if (!r && !rucne.current) setPrect(typy[druh]?.chargedByDefault ?? false); }} />
       <Pole label="Dodavatel" name="provider" required placeholder="např. ČEZ Prodej" defaultValue={r?.provider} />
-      {r ? (
-        // Naklad se u existujici sluzby meni ikonou "Nový poplatek": tak zustane historie
-        <>
-          <input type="hidden" name="monthlyCost" value={r.monthlyCost} />
-          <input type="hidden" name="annualCost" value={r.annualCost ?? ""} />
-          <p className="rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-secondary sm:col-span-2">
-            Výši poplatku měň ikonou <strong>Nový poplatek</strong> u řádku. Původní částka zůstane v historii.
-          </p>
-        </>
-      ) : (
-        <>
-          <Pole label="Měsíční náklad (Kč)" name="monthlyCost" type="number"
-            value={mesicne} onChange={(e) => setMesicne(e.target.value)} />
-          <Pole label="Roční náklad (Kč)" name="annualCost" type="number"
-            value={rocne} onChange={(e) => setRocne(e.target.value)}
-            hint="Když se platí jednou ročně — rozpočte se na měsíce" />
-        </>
+      <Pole label="Měsíční náklad (Kč)" name="monthlyCost" type="number"
+        value={mesicne} onChange={(e) => setMesicne(e.target.value)} />
+      <Pole label="Roční náklad (Kč)" name="annualCost" type="number"
+        value={rocne} onChange={(e) => setRocne(e.target.value)}
+        hint="Když se platí jednou ročně — rozpočte se na měsíce" />
+      {/* Zmena ceny u existujici sluzby se zapisuje s datem: puvodni vyse zustane v historii */}
+      {zmenaNakladu && (
+        <DatumPole label="Nový náklad platí od" name="costValidFrom" required
+          defaultValue={dnesISO()} sirka="sm:col-span-2"
+          hint="Může být i v budoucnu. Předchozí výše zůstane v historii, takže půjde zjistit, co služba stála dřív." />
       )}
       <Pole label="Číslo smlouvy" name="contractNo" placeholder="nepovinné" defaultValue={r?.contractNo ?? ""} />
       <Pole label="Smlouva vázána do" name="contractEnd" type="date" defaultValue={isoDatum(r?.contractEnd)}
