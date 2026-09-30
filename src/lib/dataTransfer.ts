@@ -80,6 +80,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       id: String(x.id), email: String(x.email).toLowerCase(), name: String(x.name),
       passwordHash: String(x.passwordHash), role: x.role === "OWNER" ? "OWNER" : "PARTNER",
       createdAt: dPovinne(x.createdAt ?? new Date()),
+      street: x.street ?? null, city: x.city ?? null, zip: x.zip ?? null, phone: x.phone ?? null,
     }));
     obnoveno.user = (await tx.user.createMany({ data: users })).count;
 

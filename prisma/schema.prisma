@@ -25,6 +25,12 @@ model User {
   role         String   @default("PARTNER") // OWNER | PARTNER
   createdAt    DateTime @default(now())
 
+  /// Kontaktni udaje; pouzivaji se v exportech a podkladech k zdaneni
+  street       String?
+  city         String?
+  zip          String?
+  phone        String?
+
   podily PropertyOwner[]
 }
 

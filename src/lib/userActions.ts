@@ -42,7 +42,11 @@ export async function addUser(_prev: UserFormState, formData: FormData): Promise
   }
 
   await prisma.user.create({
-    data: { email: d.email, name: d.name, role: d.role, passwordHash: await hashPassword(d.password) },
+    data: {
+      email: d.email, name: d.name, role: d.role, passwordHash: await hashPassword(d.password),
+      street: dobre(formData.get("street")), city: dobre(formData.get("city")),
+      zip: dobre(formData.get("zip")), phone: dobre(formData.get("phone")),
+    },
   });
 
   revalidatePath("/users");
@@ -83,4 +87,28 @@ export async function deleteUser(_prev: UserFormState, formData: FormData): Prom
   await prisma.user.delete({ where: { id } });
   revalidatePath("/users");
   return { success: `Účet ${target.email} smazán.` };
+}
+
+const dobre = (v: FormDataEntryValue | null) => String(v ?? "").trim() || null;
+
+/** Jmeno a kontaktni udaje uctu. E-mail a heslo se meni zvlast. */
+export async function updateUser(_prev: UserFormState, formData: FormData): Promise<UserFormState> {
+  const auth = await requireOwnerOrFail();
+  if ("error" in auth) return auth;
+
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Zadej jméno." };
+
+  const user = await prisma.user.update({
+    where: { id },
+    data: {
+      name,
+      street: dobre(formData.get("street")), city: dobre(formData.get("city")),
+      zip: dobre(formData.get("zip")), phone: dobre(formData.get("phone")),
+    },
+  });
+
+  revalidatePath("/users");
+  return { success: `Údaje pro ${user.email} uloženy.` };
 }
