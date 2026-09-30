@@ -58,24 +58,16 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
   const kopirovana = kopie ? leases.find((l) => l.id === kopie.id) ?? null : null;
 
   const upravovana = leases.find((l) => l.id === upravaId) ?? null;
-  const serazene = [...leases].sort((a, b) => Number(b.isActive) - Number(a.isActive));
+  // Platna smlouva je videt hned, historicke jsou sbalene pod ni
+  const serazene = [...leases].sort((a, b) => Number(b.isActive) - Number(a.isActive)
+    || b.startDate.getTime() - a.startDate.getTime());
+  const platne = serazene.filter((l) => l.isActive);
+  const historicke = serazene.filter((l) => !l.isActive);
+  const [historieOtevrena, setHistorieOtevrena] = useState(false);
+  // Upravovana nebo kopirovana smlouva nesmi zustat schovana
+  const skrytaVyber = historicke.some((l) => l.id === upravaId || l.id === kopie?.id);
 
-  return (
-    <div>
-      <Hlaska state={
-        upravaState.error ? upravaState
-          : addState.error || addState.success ? addState
-          : delState.error || delState.success ? delState
-          : upravaState
-      } />
-
-      <ZalohyUpozorneni porovnani={porovnani} />
-
-      {leases.length === 0 ? (
-        <p className="py-3 text-center text-sm text-ink-muted">Žádná nájemní smlouva.</p>
-      ) : (
-        <div className="space-y-3">
-          {serazene.map((l) => {
+  const karta = (l: Row) => {
             const adresa = [l.tenantStreet, [l.tenantZip, l.tenantCity].filter(Boolean).join(" ")].filter(Boolean).join(", ");
             return (
               <div key={l.id} className={`rounded-xl border p-3.5 ${
@@ -121,7 +113,42 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
                 </dl>
               </div>
             );
-          })}
+          };
+
+  return (
+    <div>
+      <Hlaska state={
+        upravaState.error ? upravaState
+          : addState.error || addState.success ? addState
+          : delState.error || delState.success ? delState
+          : upravaState
+      } />
+
+      <ZalohyUpozorneni porovnani={porovnani} />
+
+      {leases.length === 0 ? (
+        <p className="py-3 text-center text-sm text-ink-muted">Žádná nájemní smlouva.</p>
+      ) : (
+        <div className="space-y-3">
+          {platne.map((l) => karta(l))}
+          {platne.length === 0 && (
+            <p className="rounded-xl border border-dashed border-line px-3 py-3 text-center text-sm text-ink-muted">
+              Žádná platná smlouva.
+            </p>
+          )}
+          {historicke.length > 0 && (
+            <div>
+              <button type="button" onClick={() => setHistorieOtevrena((o) => !o)}
+                aria-expanded={historieOtevrena || skrytaVyber}
+                className="flex w-full items-center justify-between rounded-xl border border-line px-3.5 py-2.5 text-sm font-medium hover:bg-surface-sunken">
+                <span>Historické smlouvy ({historicke.length})</span>
+                <svg viewBox="0 0 20 20" className={`h-4 w-4 text-ink-muted transition-transform ${historieOtevrena || skrytaVyber ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 8l5 5 5-5" /></svg>
+              </button>
+              {(historieOtevrena || skrytaVyber) && (
+                <div className="mt-3 space-y-3">{historicke.map((l) => karta(l))}</div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
