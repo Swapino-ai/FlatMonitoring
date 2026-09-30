@@ -192,6 +192,9 @@ const najemSchema = z.object({
   indexationClause: z.preprocess((v) => v === "on" || v === true, z.boolean()),
   isActive: z.preprocess((v) => v === "on" || v === true, z.boolean()),
   notes: textNeboNic,
+  /** Nova smlouva navazuje na starou: ta konci k `predchoziKonec`. */
+  predchoziId: textNeboNic,
+  predchoziKonec: datumNeboNic,
 });
 
 export async function saveLease(id: string | null, _prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
@@ -266,13 +269,26 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
       });
       await prepocitejAktualniZalohy(tx, id);
     });
+  } else if (d.predchoziId) {
+    // Navazujici smlouva: stara se ukonci a nova zalozi spolu, aby po pade v pulce
+    // nezustalo neukoncene nebo zdvojene obdobi
+    if (!d.predchoziKonec) return { error: "Zadej, k jakému dni stará smlouva končí." };
+    const predchozi = await prisma.lease.findUnique({ where: { id: d.predchoziId } });
+    if (!predchozi) return { error: "Původní smlouva neexistuje." };
+    const konec = new Date(d.predchoziKonec);
+    if (konec < predchozi.startDate) return { error: "Stará smlouva nemůže skončit dřív, než začala." };
+    if (data.startDate <= konec) return { error: "Nová smlouva musí začít až po konci staré." };
+    await prisma.$transaction([
+      prisma.lease.update({ where: { id: predchozi.id }, data: { endDate: konec, isActive: false } }),
+      prisma.lease.create({ data: { ...data, propertyId: d.propertyId } }),
+    ]);
   } else {
     await prisma.lease.create({ data: { ...data, propertyId: d.propertyId } });
   }
 
   obnov(d.propertyId);
   return {
-    success: id ? "Smlouva upravena." : "Smlouva uložena.",
+    success: id ? "Smlouva upravena." : d.predchoziId ? "Stará smlouva ukončena, nová uložena." : "Smlouva uložena.",
     warning: await varovaniZaloh(d.propertyId),
   };
 }

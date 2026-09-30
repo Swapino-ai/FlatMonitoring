@@ -8,6 +8,7 @@ import {
 import { Badge } from "./Stat";
 import { Ikona } from "./Ikony";
 import { UliceNaseptavac } from "./AdresaNaseptavac";
+import { DatumPole } from "./DatumPole";
 import { HistorieZmen } from "./HistorieZmen";
 import { ZalohyUpozorneni } from "./ZalohyUpozorneni";
 import { SERVICE_TYPES } from "@/lib/categories";
@@ -27,6 +28,13 @@ export interface ZmenaZalohRadek { id: string; validFrom: Date | string; amount:
 
 const dnesISO = () => new Date().toISOString().slice(0, 10);
 
+/** ISO datum o den dal — nova smlouva zacina den po konci stare. */
+function denPo(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export function LeaseManager({ propertyId, leases, canEdit, services, porovnani, historie }: {
   propertyId: string; leases: Row[]; canEdit: boolean;
   /** Sluzby nemovitosti — zalohy se ve formulari overuji proti nim. */
@@ -42,6 +50,12 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
   const [upravaState, upravaAction, upravuji] = useActionState<EntityFormState, FormData>(
     saveLease.bind(null, upravaId), {});
   useEffect(() => { if (upravaState.success) setUpravaId(null); }, [upravaState.success]);
+
+  // Nova smlouva ze stare: nejdriv se zeptame na konec stare (konec === null), pak otevreme formular
+  const [kopie, setKopie] = useState<{ id: string; konec: string | null } | null>(null);
+  const [konecVstup, setKonecVstup] = useState<string | null>(null);
+  useEffect(() => { if (addState.success) setKopie(null); }, [addState.success]);
+  const kopirovana = kopie ? leases.find((l) => l.id === kopie.id) ?? null : null;
 
   const upravovana = leases.find((l) => l.id === upravaId) ?? null;
   const serazene = [...leases].sort((a, b) => Number(b.isActive) - Number(a.isActive));
@@ -78,6 +92,18 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
                   </div>
                   {canEdit && (
                     <div className="flex shrink-0 items-center gap-0.5">
+                      <button type="button" title="Nová smlouva z této" aria-label="Nová smlouva z této"
+                        onClick={() => {
+                          setUpravaId(null);
+                          if (kopie?.id === l.id) { setKopie(null); return; }
+                          const navrh = l.endDate ? l.endDate.toISOString().slice(0, 10) : dnesISO();
+                          setKonecVstup(navrh);
+                          setKopie({ id: l.id, konec: null });
+                        }}
+                        className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
+                          kopie?.id === l.id ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-accent-soft hover:text-accent"}`}>
+                        <Ikona nazev="kopie" />
+                      </button>
                       <UpravitTlacitko aktivni={upravaId === l.id}
                         onClick={() => setUpravaId(upravaId === l.id ? null : l.id)} />
                       <SmazatTlacitko action={delAction} id={l.id}
@@ -114,7 +140,36 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
         </UpravaPanel>
       )}
 
-      {canEdit && !upravovana && (
+      {canEdit && kopirovana && kopie && (
+        <UpravaPanel nadpis={`Nová smlouva ze smlouvy s ${kopirovana.tenantName}`} onZavrit={() => setKopie(null)}>
+          {kopie.konec === null ? (
+            <div className="space-y-4">
+              <DatumPole key={kopirovana.id} label="Stará smlouva končí dne" name="konecStare" required
+                min={kopirovana.startDate.toISOString().slice(0, 10)}
+                defaultValue={konecVstup ?? ""} onChange={setKonecVstup}
+                hint={konecVstup ? `Nová smlouva začne ${dateCz(new Date(`${denPo(konecVstup)}T00:00:00Z`))}.` : "Zadej platné datum."} />
+              <button type="button" className="btn btn-primary" disabled={!konecVstup}
+                onClick={() => konecVstup && setKopie({ id: kopirovana.id, konec: konecVstup })}>
+                Pokračovat
+              </button>
+            </div>
+          ) : (
+            <>
+              <p className="mb-3 rounded-lg bg-surface-sunken px-3 py-2 text-sm text-ink-secondary">
+                Stará smlouva skončí <strong>{dateCz(new Date(`${kopie.konec}T00:00:00Z`))}</strong>, nová začne{" "}
+                <strong>{dateCz(new Date(`${denPo(kopie.konec)}T00:00:00Z`))}</strong>. Všechny údaje jsou předvyplněné, uprav jen,
+                co se mění.
+              </p>
+              <Formular key={`${kopie.id}-${kopie.konec}`} propertyId={propertyId} services={services}
+                r={{ ...kopirovana, startDate: new Date(`${denPo(kopie.konec)}T00:00:00Z`), endDate: null, isActive: true }}
+                kopie={{ predchoziId: kopie.id, predchoziKonec: kopie.konec }}
+                action={addAction} pending={adding} popisekTlacitka="Ukončit starou a uložit novou" />
+            </>
+          )}
+        </UpravaPanel>
+      )}
+
+      {canEdit && !upravovana && !kopie && (
         <Rozbalovaci popisek="Přidat nájemní smlouvu" zavritPo={addState.success}>
           <Formular propertyId={propertyId} r={null} services={services} action={addAction} pending={adding}
             popisekTlacitka="Uložit smlouvu" />
@@ -124,8 +179,8 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
   );
 }
 
-function Formular({ propertyId, r, services, action, pending, popisekTlacitka }: {
-  propertyId: string; r: Row | null; services: SluzbaVstup[];
+function Formular({ propertyId, r, services, action, pending, popisekTlacitka, kopie }: {
+  propertyId: string; r: Row | null; kopie?: { predchoziId: string; predchoziKonec: string }; services: SluzbaVstup[];
   action: (payload: FormData) => void; pending: boolean; popisekTlacitka: string;
 }) {
   // Sluzby s cenou platnou dnes; drivejsi ceny do dnesniho srovnani nepatri
@@ -144,11 +199,13 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka }:
   });
 
   // Zmena zaloh u existujici smlouvy potrebuje datum, od ktereho plati
-  const zmenaZaloh = r != null && cislo !== r.utilitiesMonthly;
+  const zmenaZaloh = r != null && !kopie && cislo !== r.utilitiesMonthly;
 
   return (
     <form action={action} className="grid gap-x-3 gap-y-5 sm:grid-cols-2">
       <input type="hidden" name="propertyId" value={propertyId} />
+      {kopie && <input type="hidden" name="predchoziId" value={kopie.predchoziId} />}
+      {kopie && <input type="hidden" name="predchoziKonec" value={kopie.predchoziKonec} />}
 
       <Sekce nadpis="Nájemce" popis="Kontakt a adresa do smlouvy a k vyúčtování služeb.">
         <Pole label="Jméno nájemce" name="tenantName" required defaultValue={r?.tenantName} sirka="sm:col-span-2" />

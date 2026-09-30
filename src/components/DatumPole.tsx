@@ -39,9 +39,11 @@ function maskuj(text: string): string {
  * ovlivnit; tady je format i kalendar vzdy stejny. Formular dostane ISO
  * datum v skrytem poli, takze server se nemeni.
  */
-export function DatumPole({ label, name, hint, sirka = "", defaultValue = "", required, min, max }: {
+export function DatumPole({ label, name, hint, sirka = "", defaultValue = "", required, min, max, onChange }: {
   label: string; name: string; hint?: string; sirka?: string;
   defaultValue?: string; required?: boolean; min?: string; max?: string;
+  /** Dostane ISO datum, nebo null, dokud neni zadane platne. */
+  onChange?: (iso: string | null) => void;
 }) {
   const [text, setText] = useState(zobraz(defaultValue));
   const [otevreno, setOtevreno] = useState(false);
@@ -51,6 +53,9 @@ export function DatumPole({ label, name, hint, sirka = "", defaultValue = "", re
 
   const start = iso ?? (defaultValue ? defaultValue.slice(0, 10) : naISO(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()));
   const [zobrazeny, setZobrazeny] = useState({ r: Number(start.slice(0, 4)), m: Number(start.slice(5, 7)) - 1 });
+
+  useEffect(() => { onChange?.(iso); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iso]);
 
   const mimoRozsah = iso != null && ((min && iso < min) || (max && iso > max));
 
