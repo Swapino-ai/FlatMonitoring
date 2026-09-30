@@ -77,6 +77,8 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit }: {
                 <div className="divide-y divide-line/70 rounded-xl border border-line">
                   {radky.map((v) => {
                     const rozdel = rozuctuj(v, leases);
+                    // Rozdelovat se ma jen tam, kde v obdobi bydleli aspon dva najemci
+                    const vicNajemcu = leases.filter((l) => prunik(l.od, l.do, v.od, v.do)).length >= 2;
                     const otevrene = rozbaleno.has(v.id);
                     const vysl = v.zalohyDodavateli - v.naklad;
                     return (
@@ -98,12 +100,12 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit }: {
                             )}
                           </div>
                           <div className="flex items-center gap-0.5">
-                            <button type="button" onClick={() => prepni(v.id)} aria-expanded={otevrene}
+                            {vicNajemcu && <button type="button" onClick={() => prepni(v.id)} aria-expanded={otevrene}
                               title="Rozúčtování na nájemce" aria-label="Rozúčtování na nájemce"
                               className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
                                 otevrene ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-accent-soft hover:text-accent"}`}>
                               <Ikona nazev="najemce" />
-                            </button>
+                            </button>}
                             {canEdit && (
                               <>
                                 <UpravitTlacitko aktivni={upravaId === v.id}
@@ -114,7 +116,7 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit }: {
                             )}
                           </div>
                         </div>
-                        {otevrene && (
+                        {otevrene && vicNajemcu && (
                           <div className="border-t border-line/70 bg-surface-sunken/50 px-3.5 py-2.5">
                             {rozdel.chyba ? (
                               <p className="text-xs text-bad">{rozdel.chyba}</p>
@@ -204,7 +206,10 @@ function Formular({ r, services, leases, vyuctovani, action, pending, popisekTla
   // Najemci, kterych se obdobi tyka — u odectu se jim zadava spotreba
   const dotcene = od && doDne ? leases.filter((l) => prunik(l.od, l.do, od, doDne)) : [];
 
-  const nahled = od && doDne && od <= doDne && cislo(naklad) >= 0 && naklad !== ""
+  // Ptame se jen tehdy, kdyz v obdobi bydleli aspon dva najemci; jinak neni co delit
+  const delit = dotcene.length >= 2;
+
+  const nahled = delit && od && doDne && od <= doDne && cislo(naklad) >= 0 && naklad !== ""
     ? rozuctuj({
       id: "nahled", od, do: doDne, naklad: cislo(naklad), zalohyDodavateli: 0,
       rezim: rezim === "READINGS" ? "READINGS" : "DAYS",
@@ -232,10 +237,28 @@ function Formular({ r, services, leases, vyuctovani, action, pending, popisekTla
       <Pole label="Zálohy zaplacené dodavateli (Kč)" name="supplierAdvances" type="number" step="0.01"
         defaultValue={r?.zalohyDodavateli ?? 0} hint="Rozdíl proti nákladu je přeplatek nebo nedoplatek u dodavatele" />
       <Pole label="Číslo dokladu" name="invoiceNo" placeholder="nepovinné" defaultValue={r?.cisloFaktury ?? ""} />
-      <Vyber label="Jak rozdělit mezi nájemce" name="splitMode" defaultValue={rezim} onChange={setRezim}
-        options={[["DAYS", "Podle dnů bydlení"], ["READINGS", "Podle odečtů (spotřeby)"]]} />
+      {delit ? (
+        <div className="space-y-2 sm:col-span-2">
+          <div className="flex items-start gap-2.5 rounded-xl bg-warn/15 px-3.5 py-2.5 text-sm" role="status">
+            <Ikona nazev="pozor" trida="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+            <div>
+              <div className="font-semibold">V tomto období bydleli {dotcene.length} nájemci</div>
+              <ul className="mt-0.5 text-xs text-ink-secondary">
+                {dotcene.map((l) => (
+                  <li key={l.id}>{l.nazev}: {dateCz(l.od)} – {l.do ? dateCz(l.do) : "dosud"}</li>
+                ))}
+              </ul>
+              <p className="mt-1 text-xs text-ink-secondary">Zvol, jak se náklad mezi ně rozdělí.</p>
+            </div>
+          </div>
+          <Vyber label="Jak rozdělit mezi nájemce" name="splitMode" defaultValue={rezim} onChange={setRezim}
+            options={[["DAYS", "Podle dnů bydlení"], ["READINGS", "Podle odečtů (spotřeby)"]]} />
+        </div>
+      ) : (
+        <input type="hidden" name="splitMode" value="DAYS" />
+      )}
 
-      {rezim === "READINGS" && (
+      {delit && rezim === "READINGS" && (
         <div className="space-y-3 rounded-xl bg-surface-sunken p-3 sm:col-span-2">
           <Pole label="Jednotka spotřeby" name="readingUnit" placeholder="m³, kWh, GJ…" defaultValue={r?.jednotka ?? ""} />
           {dotcene.length === 0 && (
