@@ -2,17 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokeny. Barvy grafu pochazi z validovane palety (CVD-safe). */
+/* Design tokeny. Barvy grafu pochazi z validovane palety (CVD-safe).
+   Znackova modra (--accent) je zamerne oddelena od barev grafu: tlacitka
+   a odkazy maji mit vlastni identitu, ne pujcovat si odstin ze serie 1. */
 :root {
   color-scheme: light;
 
-  --surface-base: 250 250 248;
+  --surface-base: 234 239 247;
   --surface-card: 255 255 255;
-  --surface-sunken: 244 244 241;
-  --text-primary: 11 11 11;
-  --text-secondary: 82 81 78;
-  --text-muted: 130 129 124;
-  --border: 226 225 220;
+  --surface-sunken: 240 244 251;
+  --text-primary: 15 27 51;
+  --text-secondary: 74 88 118;
+  --text-muted: 104 118 148;
+  --border: 222 229 240;
+
+  --accent: 31 79 216;
+  --accent-soft: 227 235 255;
+
+  --shadow-card: 0 1px 2px rgba(15, 27, 51, 0.05), 0 10px 28px rgba(15, 27, 51, 0.07);
+  --shadow-pop: 0 2px 4px rgba(15, 27, 51, 0.06), 0 18px 40px rgba(15, 27, 51, 0.14);
 
   --series-1: 42 120 214;   /* modra */
   --series-2: 235 104 52;   /* oranzova */
@@ -23,23 +31,31 @@
   --series-7: 74 58 167;    /* fialova */
   --series-8: 227 73 72;    /* cervena */
 
-  --status-good: 0 131 0;
-  --status-warning: 237 161 0;
-  --status-critical: 227 73 72;
+  --status-good: 12 138 94;
+  --status-warning: 183 121 31;
+  --status-critical: 194 65 45;
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
+/* Tmava varianta je definovana jednou a pouzita dvakrat: podle systemu
+   a podle rucniho prepinace. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --surface-base: 20 20 19;
-    --surface-card: 26 26 25;
-    --surface-sunken: 33 33 31;
-    --text-primary: 255 255 255;
-    --text-secondary: 195 194 183;
-    --text-muted: 150 149 140;
-    --border: 56 56 53;
+    --surface-base: 11 15 26;
+    --surface-card: 19 25 41;
+    --surface-sunken: 26 34 55;
+    --text-primary: 236 240 250;
+    --text-secondary: 178 188 210;
+    --text-muted: 133 145 172;
+    --border: 38 47 72;
+
+    --accent: 84 126 255;
+    --accent-soft: 30 43 84;
+
+    --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 10px 28px rgba(0, 0, 0, 0.35);
+    --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 18px 40px rgba(0, 0, 0, 0.5);
 
     --series-1: 57 135 229;
     --series-2: 217 89 38;
@@ -58,13 +74,19 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --surface-base: 20 20 19;
-  --surface-card: 26 26 25;
-  --surface-sunken: 33 33 31;
-  --text-primary: 255 255 255;
-  --text-secondary: 195 194 183;
-  --text-muted: 150 149 140;
-  --border: 56 56 53;
+  --surface-base: 11 15 26;
+  --surface-card: 19 25 41;
+  --surface-sunken: 26 34 55;
+  --text-primary: 236 240 250;
+  --text-secondary: 178 188 210;
+  --text-muted: 133 145 172;
+  --border: 38 47 72;
+
+  --accent: 84 126 255;
+  --accent-soft: 30 43 84;
+
+  --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 10px 28px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 18px 40px rgba(0, 0, 0, 0.5);
 
   --series-1: 57 135 229;
   --series-2: 217 89 38;
@@ -91,7 +113,7 @@ body {
   /* min-w-0: prvek v mrizce ma vychozi min-width auto a obsah sirsi nez
      stopa mrizku roztahne — na telefonu pak cela stranka preteka do sirky. */
   .card {
-    @apply min-w-0 rounded-card border border-line bg-surface-card p-5;
+    @apply min-w-0 rounded-card border border-line/60 bg-surface-card p-5 shadow-card;
   }
   .card-title {
     @apply text-sm font-semibold text-ink-primary;
@@ -100,14 +122,14 @@ body {
     @apply text-xs font-medium uppercase tracking-wide text-ink-muted;
   }
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line px-3.5 py-2 text-sm font-medium
-           text-ink-primary transition-colors hover:bg-surface-sunken disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-surface-card px-3.5 py-2 text-sm
+           font-semibold text-ink-primary shadow-sm transition hover:bg-surface-sunken disabled:opacity-50;
   }
   .btn-primary {
-    @apply border-transparent bg-accent text-white hover:opacity-90;
+    @apply border-transparent bg-accent text-white hover:bg-accent hover:brightness-110;
   }
   .input {
-    @apply w-full rounded-lg border border-line bg-surface-card px-3 py-2 text-sm text-ink-primary
+    @apply w-full rounded-xl border border-line bg-surface-card px-3 py-2 text-sm text-ink-primary
            outline-none placeholder:text-ink-muted focus:border-accent focus:ring-2 focus:ring-accent/20;
   }
   .table-base {
@@ -126,6 +148,44 @@ body {
   .num {
     @apply whitespace-nowrap text-right tabular-nums;
   }
+
+  /* Hlavni cislo stranky je cele ve znackove barve. Misto prebarvovani kazdeho
+     potomka se lokalne prepisou tokeny — vsechny utility (text-ink-*, text-good,
+     bg-accent/15 ...) pak samy vyjdou svetle na modre. */
+  .hero-card {
+    --text-primary: 255 255 255;
+    --text-secondary: 222 231 255;
+    --text-muted: 186 202 250;
+    --border: 129 158 244;
+    --surface-sunken: 63 105 226;
+    --accent: 255 255 255;
+    --status-good: 167 243 208;
+    --status-critical: 254 205 205;
+    @apply border-transparent text-ink-primary;
+    background-color: rgb(31 79 216);
+    background-image:
+      radial-gradient(90% 130% at 100% 0%, rgba(255, 255, 255, 0.18), transparent 58%),
+      linear-gradient(160deg, rgb(52 103 240) 0%, rgb(31 79 216) 55%, rgb(24 62 178) 100%);
+    box-shadow: 0 1px 2px rgba(24, 62, 178, 0.25), 0 14px 32px rgba(31, 79, 216, 0.28);
+  }
+  /* Tlacitko na modre karte: pruhledny svetly podklad misto bileho, jinak
+     by bily text na bilem pozadi zmizel. */
+  .hero-card .btn {
+    background-color: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.32);
+    box-shadow: none;
+    color: #fff;
+  }
+  .hero-card .btn:hover {
+    background-color: rgba(255, 255, 255, 0.26);
+  }
+}
+
+/* Na telefonu je navigace ve spodni liste — obsah se pod ni nesmi schovat. */
+@media (max-width: 767px) {
+  body {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 /* --- Tiskova / PDF verze --- */
@@ -142,6 +202,20 @@ body {
   body {
     background: #fff;
   }
+  /* Modra karta by se tiskla jako plny blok inkoustu; do PDF patri bily podklad. */
+  .hero-card {
+    --text-primary: 11 11 11;
+    --text-secondary: 82 81 78;
+    --text-muted: 130 129 124;
+    --border: 226 225 220;
+    --surface-sunken: 244 244 241;
+    --accent: 31 79 216;
+    --status-good: 12 138 94;
+    --status-critical: 194 65 45;
+    background: #fff !important;
+    box-shadow: none;
+    border-color: #d8d7d2;
+  }
   .no-print {
     display: none !important;
   }
@@ -151,6 +225,7 @@ body {
   .card {
     break-inside: avoid;
     border-color: #d8d7d2;
+    box-shadow: none;
   }
   table {
     break-inside: auto;

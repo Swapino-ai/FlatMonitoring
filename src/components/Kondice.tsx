@@ -83,9 +83,12 @@ export function Hero({ label, hodnota, doplnek, tone = "neutral", vedle }: {
   tone?: "neutral" | "good" | "bad";
   vedle?: ReactNode;
 }) {
-  const barva = tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : "text-ink-primary";
+  // Na modrem podkladu nese vyznam znamenko a slovo v doplnku, ne barva cisla —
+  // zelena ani cervena na modre nejsou dost citelne, proto se tone tady nepouziva.
+  void tone;
+  const barva = "text-ink-primary";
   return (
-    <div className="card">
+    <div className="card hero-card">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <div className="label">{label}</div>

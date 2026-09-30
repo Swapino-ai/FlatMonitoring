@@ -41,8 +41,10 @@ export function Listy({ klic, listy }: { klic: string; listy: List[] }) {
 
   return (
     <div>
-      <div className="table-scroll -mx-6 px-6">
-        <div role="tablist" className="flex gap-1 border-b border-line">
+      {/* Zalozky jako segmentovany prepinac: aktivni je vyplneny, ostatni jen text.
+          Na telefonu se posouvaji do strany, ne lamou na druhy radek. */}
+      <div className="max-w-full overflow-x-auto pb-1">
+        <div role="tablist" className="flex w-fit gap-1 rounded-2xl bg-surface-card p-1 shadow-card">
           {listy.map((l) => {
             const je = l.id === aktivni;
             return (
@@ -51,16 +53,14 @@ export function Listy({ klic, listy }: { klic: string; listy: List[] }) {
                 role="tab"
                 aria-selected={je}
                 onClick={() => prepni(l.id)}
-                className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-sm transition-colors ${
-                  je
-                    ? "border-accent font-medium text-ink-primary"
-                    : "border-transparent text-ink-secondary hover:text-ink-primary"
+                className={`whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors ${
+                  je ? "bg-accent text-white" : "text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary"
                 }`}
               >
                 {l.nazev}
                 {l.pocet != null && l.pocet > 0 && (
-                  <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[11px] ${
-                    je ? "bg-accent/15 text-accent" : "bg-surface-sunken text-ink-muted"
+                  <span className={`ml-1.5 rounded-md px-1.5 py-0.5 text-[11px] ${
+                    je ? "bg-white/20 text-white" : "bg-surface-sunken text-ink-muted"
                   }`}>
                     {l.pocet}
                   </span>
