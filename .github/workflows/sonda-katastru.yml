@@ -31,3 +31,6 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npx tsx scripts/probe-katastr-jednotka.ts
+
+      - name: Detailní stránka jednotky v Nahlížení
+        run: npx tsx scripts/probe-nahlizeni.ts
