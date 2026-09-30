@@ -296,3 +296,13 @@ body {
   position: absolute; top: -3px; right: -3px; width: 14px; height: 14px; border-radius: 50%;
   background: rgb(var(--status-warning)); border: 2px solid #fff;
 }
+
+/* Vyuctovani najemce: pri tisku zustane jen ono, ne cela stranka */
+@media print {
+  html.tisk-vyuctovani body * { visibility: hidden; }
+  html.tisk-vyuctovani .vyuctovani-tisk,
+  html.tisk-vyuctovani .vyuctovani-tisk * { visibility: visible; }
+  html.tisk-vyuctovani .vyuctovani-tisk {
+    position: absolute; left: 0; top: 0; width: 100%; border: 0; padding: 0;
+  }
+}

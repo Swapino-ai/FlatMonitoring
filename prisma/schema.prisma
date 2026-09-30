@@ -187,6 +187,7 @@ model Lease {
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
   advanceChanges LeaseAdvanceChange[]
+  readings       SettlementReading[]
 }
 
 /// Penezni tok — prijmy i vydaje
@@ -243,6 +244,7 @@ model Service {
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
   costChanges ServiceCostChange[]
+  settlements ServiceSettlement[]
 }
 
 /// Odhad hodnoty — rucni, znalecky, nebo z mesicniho skenu trhu
@@ -485,4 +487,42 @@ model LeaseAdvanceChange {
 
   @@unique([leaseId, validFrom])
   @@index([leaseId])
+}
+
+/// Vyuctovani sluzby od dodavatele: od-do, skutecny naklad a zalohy, ktere se dodavateli platily.
+/// Obdobi nemusi sedet na mesic ani na smlouvu — rozuctovani na najemce se pocita ze dnu.
+model ServiceSettlement {
+  id        String   @id @default(cuid())
+  serviceId String
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  periodFrom DateTime
+  periodTo   DateTime // vcetne posledniho dne
+
+  totalCost        Float // skutecny naklad za obdobi
+  supplierAdvances Float @default(0) // zalohy zaplacene dodavateli za obdobi
+
+  splitMode        String  @default("DAYS") // DAYS | READINGS
+  readingUnit      String? // m3, kWh, GJ ...
+  ownerConsumption Float? // spotreba mimo najemniky (prazdny byt, spolecne)
+
+  invoiceNo String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  readings SettlementReading[]
+
+  @@index([serviceId, periodFrom])
+}
+
+/// Spotreba najemce za obdobi vyuctovani (odecet pri vymene najemnika).
+model SettlementReading {
+  id           String            @id @default(cuid())
+  settlementId String
+  settlement   ServiceSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  leaseId      String
+  lease        Lease             @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  consumption  Float
+
+  @@unique([settlementId, leaseId])
 }

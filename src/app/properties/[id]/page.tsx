@@ -24,6 +24,8 @@ import { KatastrKarta, type JednotkaVolba } from "@/components/KatastrKarta";
 import { UrcitPolohu } from "@/components/UrcitPolohu";
 import { ZalohyVCase } from "@/components/ZalohyVCase";
 import { casovaOsa, porovnejProNemovitost, type NajemVstup, type SluzbaVstup } from "@/lib/zalohy";
+import { VyuctovaniNajemce, VyuctovaniSluzeb, type NajemRadek, type VyuctovaniRadek } from "@/components/Vyuctovani";
+import type { SluzbaVyuctovani } from "@/lib/vyuctovani";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
 import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
@@ -83,6 +85,32 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   for (const z of zmenyNakladu) (historieNakladu[z.serviceId] ??= []).push(z);
   const historieZaloh: Record<string, typeof zmenyZaloh> = {};
   for (const z of zmenyZaloh) (historieZaloh[z.leaseId] ??= []).push(z);
+
+  // Vyuctovani od dodavatelu s odecty; obdobi jsou dny bez casu
+  const vyuctovaniDb = await prisma.serviceSettlement.findMany({
+    where: { service: { propertyId: property.id } },
+    include: { readings: true },
+    orderBy: { periodFrom: "asc" },
+  });
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const vyuctovani: VyuctovaniRadek[] = vyuctovaniDb.map((v) => ({
+    id: v.id, serviceId: v.serviceId, od: iso(v.periodFrom), do: iso(v.periodTo),
+    naklad: v.totalCost, zalohyDodavateli: v.supplierAdvances,
+    rezim: v.splitMode === "READINGS" ? "READINGS" : "DAYS",
+    jednotka: v.readingUnit, spotrebaVlastnik: v.ownerConsumption,
+    odecty: Object.fromEntries(v.readings.map((o) => [o.leaseId, o.consumption])),
+    cisloFaktury: v.invoiceNo, poznamka: v.notes,
+  }));
+  const najmyVyuctovani: NajemRadek[] = property.leases.map((n) => ({
+    id: n.id, nazev: n.tenantName, od: iso(new Date(n.startDate)), do: n.endDate ? iso(new Date(n.endDate)) : null,
+    utilitiesMonthly: n.utilitiesMonthly,
+    historieZaloh: (historieZaloh[n.id] ?? []).map((z) => ({ validFrom: z.validFrom, amount: z.amount })),
+    tenantStreet: n.tenantStreet, tenantCity: n.tenantCity, tenantZip: n.tenantZip,
+  }));
+  const sluzbyVyuctovani: SluzbaVyuctovani[] = property.services.map((sl) => ({
+    id: sl.id, nazev: `${SERVICE_TYPES[sl.type] ?? sl.type}`, dodavatel: sl.provider, prectena: sl.chargedToTenant,
+    vyuctovani: vyuctovani.filter((v) => v.serviceId === sl.id),
+  }));
 
   const sluzbyVstup: SluzbaVstup[] = property.services.map((sl) => ({
     ...sl,
@@ -380,6 +408,21 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             <SbalitelnaKarta klic="sluzby" title="Služby a dodavatelé" action={<Link href="/savings" className="text-xs text-accent">Kde ušetřit →</Link>}>
               <ServiceManager propertyId={property.id} services={property.services} canEdit={user.role === "OWNER"}
                 porovnani={zalohy} historie={historieNakladu} />
+            </SbalitelnaKarta>
+            </>),
+          },
+          {
+            id: "vyuctovani",
+            nazev: "Vyúčtování",
+            pocet: vyuctovani.length || undefined,
+            obsah: (<>
+            <SbalitelnaKarta klic="vyuctovani-sluzeb" title="Vyúčtování služeb od dodavatelů">
+              <VyuctovaniSluzeb services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant }))}
+                leases={najmyVyuctovani} vyuctovani={vyuctovani} canEdit={user.role === "OWNER"} />
+            </SbalitelnaKarta>
+            <SbalitelnaKarta klic="vyuctovani-najemce" title="Vyúčtování pro nájemce" vychoziSbalena>
+              <VyuctovaniNajemce nemovitost={property.name} adresaNemovitosti={`${property.street}, ${property.zip} ${property.city}`}
+                leases={najmyVyuctovani} services={sluzbyVyuctovani} />
             </SbalitelnaKarta>
             </>),
           },

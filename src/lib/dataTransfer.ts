@@ -23,6 +23,8 @@ export async function exportujVse(): Promise<Zaloha> {
       transaction: await prisma.transaction.findMany(),
       service: await prisma.service.findMany(),
       serviceCostChange: await prisma.serviceCostChange.findMany(),
+      serviceSettlement: await prisma.serviceSettlement.findMany(),
+      settlementReading: await prisma.settlementReading.findMany(),
       valuation: await prisma.valuation.findMany(),
       rentEstimate: await prisma.rentEstimate.findMany(),
       excludedListing: await prisma.excludedListing.findMany(),
@@ -65,6 +67,8 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.excludedListing.deleteMany();
     await tx.valuation.deleteMany();
     await tx.propertyOwner.deleteMany();
+    await tx.settlementReading.deleteMany();
+    await tx.serviceSettlement.deleteMany();
     await tx.serviceCostChange.deleteMany();
     await tx.leaseAdvanceChange.deleteMany();
     await tx.service.deleteMany();
@@ -168,6 +172,21 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       monthlyCost: c(x.monthlyCost), annualCost: x.annualCost == null ? null : c(x.annualCost),
     }));
     if (zmenyNakladu.length) obnoveno.serviceCostChange = (await tx.serviceCostChange.createMany({ data: zmenyNakladu })).count;
+
+    const vyuctovani = (t.serviceSettlement as any[] ?? []).map((x) => ({
+      id: String(x.id), serviceId: String(x.serviceId),
+      periodFrom: dPovinne(x.periodFrom), periodTo: dPovinne(x.periodTo),
+      totalCost: c(x.totalCost), supplierAdvances: c(x.supplierAdvances),
+      splitMode: x.splitMode === "READINGS" ? "READINGS" : "DAYS",
+      readingUnit: x.readingUnit ?? null, ownerConsumption: x.ownerConsumption == null ? null : c(x.ownerConsumption),
+      invoiceNo: x.invoiceNo ?? null, notes: x.notes ?? null, createdAt: dPovinne(x.createdAt ?? new Date()),
+    }));
+    if (vyuctovani.length) obnoveno.serviceSettlement = (await tx.serviceSettlement.createMany({ data: vyuctovani })).count;
+
+    const odecty = (t.settlementReading as any[] ?? []).map((x) => ({
+      id: String(x.id), settlementId: String(x.settlementId), leaseId: String(x.leaseId), consumption: c(x.consumption),
+    }));
+    if (odecty.length) obnoveno.settlementReading = (await tx.settlementReading.createMany({ data: odecty })).count;
 
     const valuations = (t.valuation as any[] ?? []).map((x) => ({
       id: String(x.id), propertyId: String(x.propertyId), date: dPovinne(x.date),
