@@ -7,6 +7,7 @@ import { CashFlowChart, EquityChart, YieldBarChart } from "@/components/charts";
 import { summarize } from "@/lib/portfolio";
 import { nactiPortfolio } from "@/lib/pohled";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
+import { MapaPortfolia, type BodMapy } from "@/components/MapaPortfolia";
 import { cashFlowSeries, equitySeries } from "@/lib/series";
 import { findBundleOpportunities, summarizeSavings } from "@/lib/savings";
 import { czk, czkCompact, dateCz, pct, STATUS_LABELS } from "@/lib/format";
@@ -27,6 +28,26 @@ export default async function Dashboard() {
     .sort((a, b) => b.vynos - a.vynos);
 
   const alerts = analyses.filter((a) => a.fixationAlert).map((a) => a.fixationAlert!);
+
+  // Mapa: prodane nemovitosti tam nepatri; ty bez souradnic se vypisou zvlast,
+  // ne tise vynechaji — jinak by clovek nevedel, proc jich je na mape min.
+  const aktivni = analyses.filter((a) => a.property.status !== "SOLD");
+  const body: BodMapy[] = aktivni
+    .filter((a) => a.property.latitude != null && a.property.longitude != null)
+    .map((a) => ({
+      id: a.property.id,
+      nazev: a.property.name,
+      adresa: `${a.property.street}, ${a.property.city}`,
+      lat: a.property.latitude as number,
+      lon: a.property.longitude as number,
+      stav: STATUS_LABELS[a.property.status],
+      neobsazeno: a.property.status === "VACANT",
+      hodnota: czkCompact(a.currentValue),
+      vynos: pct(a.metrics.netYield),
+      cashflow: czkCompact(a.metrics.cashFlowAnnual),
+      cashflowKladny: a.metrics.cashFlowAnnual >= 0,
+    }));
+  const bezPolohy = aktivni.filter((a) => a.property.latitude == null || a.property.longitude == null);
 
   return (
     <>
@@ -84,6 +105,32 @@ export default async function Dashboard() {
                 hint="NOI dělené celkovými pořizovacími náklady"
               />
             </StatGrid>
+
+            <Card title="Mapa portfolia" action={
+              body.some((b) => b.neobsazeno)
+                ? <span className="flex items-center gap-1.5 text-xs text-ink-muted">
+                    <span className="h-2.5 w-2.5 rounded-full bg-warn" aria-hidden />oranžová = neobsazeno
+                  </span>
+                : null
+            }>
+              {body.length > 0 ? (
+                <MapaPortfolia body={body} />
+              ) : (
+                <Empty>Žádná nemovitost zatím nemá uloženou polohu, takže není co zobrazit.</Empty>
+              )}
+              {bezPolohy.length > 0 && (
+                <p className="mt-3 text-xs text-ink-muted">
+                  Bez uložené polohy, a tedy mimo mapu:{" "}
+                  {bezPolohy.map((a, i) => (
+                    <span key={a.property.id}>
+                      {i > 0 && ", "}
+                      <Link href={`/properties/${a.property.id}`} className="text-accent">{a.property.name}</Link>
+                    </span>
+                  ))}
+                  . Polohu doplníš v úpravách nemovitosti.
+                </p>
+              )}
+            </Card>
 
             {(alerts.length > 0 || savings.totalIdentifiedSaving > 1000) && (
               <div className="grid gap-3 md:grid-cols-2">

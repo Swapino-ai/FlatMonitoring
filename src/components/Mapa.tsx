@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { DivIcon, Map as LeafletMap, Marker } from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { ikonaDomecek } from "@/lib/mapaIkona";
 
 /**
  * Mapa Mapy.cz. Bud jen ukazuje polohu nemovitosti, nebo necha uzivatele
@@ -32,8 +33,6 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
   // Handler drzime v ref, at prekresleni mapy nezavisi na identite funkce
   useEffect(() => { zmenaRef.current = onZmena; }, [onZmena]);
 
-  // Leaflet hleda obrazek znacky na ceste, ktera po sestaveni neexistuje.
-  // Vlastni znacka z CSS ten problem obchazi a drzi vzhled aplikace.
   const ikona = useRef<DivIcon | null>(null);
 
   useEffect(() => {
@@ -55,23 +54,7 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
       const kontejner = uzel.current as HTMLDivElement & { _leaflet_id?: number };
       if (kontejner._leaflet_id != null) delete kontejner._leaflet_id;
 
-      // Domecek v kapce — na mapovem podkladu je poznat na prvni pohled,
-      // bily kotouc kolem drzi kontrast i nad tmavou zastavbou.
-      ikona.current = L.divIcon({
-        className: "",
-        html: `
-          <svg width="34" height="44" viewBox="0 0 34 44" xmlns="http://www.w3.org/2000/svg">
-            <path d="M17 43C17 43 32 26.5 32 17A15 15 0 1 0 2 17c0 9.5 15 26 15 26z"
-              fill="rgb(var(--accent))" stroke="#fff" stroke-width="2.5"
-              style="filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))"/>
-            <circle cx="17" cy="16.5" r="9.5" fill="#fff"/>
-            <path d="M17 10.5l6.5 5.5v6.5h-4.3v-4h-4.4v4H10.5V16z"
-              fill="rgb(var(--accent))"/>
-          </svg>`,
-        iconSize: [34, 44],
-        // Spicka kapky ukazuje na misto, ne jeji stred
-        iconAnchor: [17, 43],
-      });
+      ikona.current = ikonaDomecek(L);
 
       const naDotyk = L.Browser.mobile;
       setDotykove(naDotyk);
