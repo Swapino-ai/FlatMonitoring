@@ -396,6 +396,57 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
   };
 }
 
+/**
+ * Novy poplatek sluzby od data: pridava zaznam do historie, dosavadni vyse
+ * zustava a plati do dne pred zmenou. Stejny den jako existujici zaznam ho opravi.
+ */
+export async function novyPoplatek(_prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+
+  const id = String(formData.get("id") ?? "");
+  const mesicne = Number(String(formData.get("monthlyCost") ?? "0").replace(/\s/g, "").replace(",", ".")) || 0;
+  const rocneText = String(formData.get("annualCost") ?? "").trim();
+  const rocne = rocneText === "" ? null : Number(rocneText.replace(/\s/g, "").replace(",", "."));
+  const platiOdText = String(formData.get("costValidFrom") ?? "");
+
+  if (mesicne <= 0 && !rocne) return { error: "Vyplň měsíční nebo roční náklad." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(platiOdText)) return { error: "Zadej, od kdy nový poplatek platí." };
+  if (platiOdText > dnesISO()) {
+    return { error: "Nový poplatek nemůže platit od budoucího data. Zadej změnu, až začne platit." };
+  }
+
+  const stara = await prisma.service.findUnique({ where: { id }, include: { costChanges: true } });
+  if (!stara) return { error: "Služba neexistuje." };
+  if (stara.monthlyCost === mesicne && (stara.annualCost ?? null) === (rocne ?? null)
+      && !stara.costChanges.some((z) => z.validFrom.toISOString().slice(0, 10) === platiOdText)) {
+    return { error: "Zadaná výše je stejná jako dnešní, není co zaznamenat." };
+  }
+
+  const platiOd = new Date(platiOdText);
+  await prisma.$transaction(async (tx) => {
+    if (stara.costChanges.length === 0) {
+      const predZmenou = new Date(platiOd.getTime() - DEN_MS);
+      const zacatek = stara.contractStart ?? stara.createdAt;
+      await tx.serviceCostChange.create({
+        data: {
+          serviceId: id, monthlyCost: stara.monthlyCost, annualCost: stara.annualCost,
+          validFrom: zacatek < predZmenou ? zacatek : predZmenou,
+        },
+      });
+    }
+    await tx.serviceCostChange.upsert({
+      where: { serviceId_validFrom: { serviceId: id, validFrom: platiOd } },
+      update: { monthlyCost: mesicne, annualCost: rocne },
+      create: { serviceId: id, validFrom: platiOd, monthlyCost: mesicne, annualCost: rocne },
+    });
+    await prepocitejAktualniNaklad(tx, id);
+  });
+
+  obnov(stara.propertyId);
+  return { success: "Nový poplatek zaznamenán.", warning: await varovaniZaloh(stara.propertyId) };
+}
+
 export async function deleteService(_prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
   const auth = await majitel();
   if ("error" in auth) return auth;
