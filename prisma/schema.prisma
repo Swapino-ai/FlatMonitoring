@@ -157,9 +157,13 @@ model Lease {
   propertyId String
   property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
-  tenantName  String
-  tenantEmail String?
-  tenantPhone String?
+  tenantName   String
+  tenantEmail  String?
+  tenantPhone  String?
+  // Adresa najemce: do smlouvy, k vyuctovani a k dokladum
+  tenantStreet String?
+  tenantCity   String?
+  tenantZip    String?
 
   startDate DateTime
   endDate   DateTime? // null = na dobu neurcitou
@@ -174,8 +178,9 @@ model Lease {
   isActive Boolean @default(true)
   notes    String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  advanceChanges LeaseAdvanceChange[]
 }
 
 /// Penezni tok — prijmy i vydaje
@@ -229,8 +234,9 @@ model Service {
    */
   chargedToTenant Boolean @default(false)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  costChanges ServiceCostChange[]
 }
 
 /// Odhad hodnoty — rucni, znalecky, nebo z mesicniho skenu trhu
@@ -440,4 +446,37 @@ model CadastreRecord {
   aktualnostK DateTime?
 
   @@index([propertyId])
+}
+
+/**
+ * Zmena nakladu sluzby platna od data. Aktualni hodnota zustava i na sluzbe
+ * (cte ji zbytek aplikace), historie umoznuje zpetne zjistit, co platilo kdy.
+ * Sluzba bez zaznamu ma po cele dobe aktualni hodnotu.
+ */
+model ServiceCostChange {
+  id          String   @id @default(cuid())
+  serviceId   String
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  validFrom   DateTime
+  monthlyCost Float
+  annualCost  Float?
+  createdAt   DateTime @default(now())
+
+  @@unique([serviceId, validFrom])
+  @@index([serviceId])
+}
+
+/**
+ * Zmena zaloh ve smlouve platna od data. Stejny princip jako u nakladu sluzeb.
+ */
+model LeaseAdvanceChange {
+  id        String   @id @default(cuid())
+  leaseId   String
+  lease     Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  validFrom DateTime
+  amount    Float
+  createdAt DateTime @default(now())
+
+  @@unique([leaseId, validFrom])
+  @@index([leaseId])
 }

@@ -22,7 +22,7 @@ export function ZalohyUpozorneni({ porovnani }: { porovnani: PorovnaniZaloh | nu
   }
 
   return (
-    <div className="mb-3 flex items-start gap-3 rounded-xl bg-warn/12 px-4 py-3 text-sm" role="status">
+    <div className="mb-3 flex items-start gap-3 rounded-xl bg-warn/15 px-4 py-3 text-sm" role="status">
       <Ikona nazev="pozor" trida="mt-0.5 h-[18px] w-[18px] text-warn" />
       <div className="min-w-0">
         <div className="font-semibold">{p.nadpis}</div>

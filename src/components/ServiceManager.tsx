@@ -1,13 +1,14 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState } from "react";
-import { deleteService, saveService, type EntityFormState } from "@/lib/entityActions";
+import { deleteService, saveService, smazZmenuNakladu, type EntityFormState } from "@/lib/entityActions";
 import {
   Hlaska, Pole, Rozbalovaci, SmazatTlacitko, TextPole, UpravaPanel, UpravitTlacitko, Vyber, Zaskrtavatko, isoDatum,
 } from "./form";
 import { SERVICE_TYPES } from "@/lib/categories";
 import { czk, dateCz } from "@/lib/format";
 import { Ikona, IKONA_SLUZBY } from "./Ikony";
+import { HistorieZmen } from "./HistorieZmen";
 import { ZalohyUpozorneni } from "./ZalohyUpozorneni";
 import { VYCHOZI_PRECTENE, type PorovnaniZaloh } from "@/lib/zalohy";
 import { Badge } from "./Stat";
@@ -18,10 +19,16 @@ interface Row {
   notes: string | null; chargedToTenant: boolean;
 }
 
-export function ServiceManager({ propertyId, services, canEdit, porovnani }: {
+export interface ZmenaNakladuRadek { id: string; validFrom: Date | string; monthlyCost: number; annualCost: number | null }
+
+const dnesISO = () => new Date().toISOString().slice(0, 10);
+
+export function ServiceManager({ propertyId, services, canEdit, porovnani, historie }: {
   propertyId: string; services: Row[]; canEdit: boolean;
   /** Zalohy najemce proti nakladum na preuctovane sluzby (pocita server). */
   porovnani: PorovnaniZaloh | null;
+  /** Zmeny nakladu podle sluzby (klic je id sluzby). */
+  historie: Record<string, ZmenaNakladuRadek[]>;
 }) {
   const [addState, addAction, adding] = useActionState<EntityFormState, FormData>(saveService.bind(null, null), {});
   const [delState, delAction] = useActionState<EntityFormState, FormData>(deleteService, {});
@@ -125,6 +132,15 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani }: {
           onZavrit={() => setUpravaId(null)}>
           <Formular key={upravovana.id} propertyId={propertyId} r={upravovana}
             action={upravaAction} pending={upravuji} popisekTlacitka="Uložit změny" />
+          <HistorieZmen
+            nadpis="Historie nákladu"
+            radky={(historie[upravovana.id] ?? []).map((z) => ({
+              id: z.id, validFrom: z.validFrom,
+              hodnota: `${czk(z.monthlyCost + (z.annualCost ?? 0) / 12)}/měs.`,
+            }))}
+            action={smazZmenuNakladu}
+            potvrzeni="Smazat tuto změnu nákladu? Náklad se vrátí na hodnotu platnou před ní."
+          />
         </UpravaPanel>
       )}
 
@@ -147,6 +163,15 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka }: {
   const [prect, setPrect] = useState(r ? r.chargedToTenant : VYCHOZI_PRECTENE.has("ELECTRICITY"));
   const rucne = useRef(false);
 
+  // Zmena nakladu u existujici sluzby potrebuje datum, od ktereho plati,
+  // jinak by se prepsala minulost.
+  const [mesicne, setMesicne] = useState(String(r?.monthlyCost ?? 0));
+  const [rocne, setRocne] = useState(r?.annualCost != null ? String(r.annualCost) : "");
+  const cislo = (t: string) => Number(t.replace(/\s/g, "").replace(",", "."));
+  const zmenaNakladu = r != null && (
+    (cislo(mesicne) || 0) !== r.monthlyCost || (rocne.trim() === "" ? null : cislo(rocne)) !== (r.annualCost ?? null)
+  );
+
   return (
     <form action={action} className="grid gap-3 sm:grid-cols-2">
       <input type="hidden" name="propertyId" value={propertyId} />
@@ -154,9 +179,16 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka }: {
         options={Object.entries(SERVICE_TYPES) as [string, string][]}
         onChange={(druh) => { if (!r && !rucne.current) setPrect(VYCHOZI_PRECTENE.has(druh)); }} />
       <Pole label="Dodavatel" name="provider" required placeholder="např. ČEZ Prodej" defaultValue={r?.provider} />
-      <Pole label="Měsíční náklad (Kč)" name="monthlyCost" type="number" defaultValue={r?.monthlyCost ?? 0} />
-      <Pole label="Roční náklad (Kč)" name="annualCost" type="number" defaultValue={r?.annualCost ?? ""}
+      <Pole label="Měsíční náklad (Kč)" name="monthlyCost" type="number"
+        value={mesicne} onChange={(e) => setMesicne(e.target.value)} />
+      <Pole label="Roční náklad (Kč)" name="annualCost" type="number"
+        value={rocne} onChange={(e) => setRocne(e.target.value)}
         hint="Když se platí jednou ročně — rozpočte se na měsíce" />
+      {zmenaNakladu && (
+        <Pole label="Nový náklad platí od" name="costValidFrom" type="date" required
+          max={dnesISO()} defaultValue={dnesISO()} sirka="sm:col-span-2"
+          hint="Předchozí výše zůstane v historii, takže půjde zjistit, co služba stála dřív." />
+      )}
       <Pole label="Číslo smlouvy" name="contractNo" placeholder="nepovinné" defaultValue={r?.contractNo ?? ""} />
       <Pole label="Smlouva vázána do" name="contractEnd" type="date" defaultValue={isoDatum(r?.contractEnd)}
         hint="Do kdy nelze přejít jinam" />

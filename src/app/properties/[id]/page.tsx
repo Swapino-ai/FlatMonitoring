@@ -21,7 +21,8 @@ import { Listy } from "@/components/Listy";
 import { SbalitelnaKarta } from "@/components/SbalitelnaKarta";
 import { KatastrKarta, type JednotkaVolba } from "@/components/KatastrKarta";
 import { UrcitPolohu } from "@/components/UrcitPolohu";
-import { popisPorovnani, porovnejProNemovitost } from "@/lib/zalohy";
+import { ZalohyVCase } from "@/components/ZalohyVCase";
+import { casovaOsa, porovnejProNemovitost, type NajemVstup, type SluzbaVstup } from "@/lib/zalohy";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
 import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
@@ -70,9 +71,34 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     orderBy: { date: "desc" },
   });
 
-  // Zalohy najemce proti nakladum na preuctovane sluzby
-  const zalohy = porovnejProNemovitost(property.leases, property.services);
+  // Zalohy najemce proti nakladum na preuctovane sluzby, i s historii:
+  // ceny a zalohy se v case meni a minulost se pri uprave neprepisuje.
+  const [zmenyNakladu, zmenyZaloh] = await Promise.all([
+    prisma.serviceCostChange.findMany({ where: { service: { propertyId: property.id } }, orderBy: { validFrom: "asc" } }),
+    prisma.leaseAdvanceChange.findMany({ where: { lease: { propertyId: property.id } }, orderBy: { validFrom: "asc" } }),
+  ]);
+  const historieNakladu: Record<string, typeof zmenyNakladu> = {};
+  for (const z of zmenyNakladu) (historieNakladu[z.serviceId] ??= []).push(z);
+  const historieZaloh: Record<string, typeof zmenyZaloh> = {};
+  for (const z of zmenyZaloh) (historieZaloh[z.leaseId] ??= []).push(z);
+
+  const sluzbyVstup: SluzbaVstup[] = property.services.map((sl) => ({
+    ...sl,
+    historie: (historieNakladu[sl.id] ?? []).map((z) => ({ validFrom: z.validFrom, monthlyCost: z.monthlyCost, annualCost: z.annualCost })),
+  }));
+  const najmyVstup: NajemVstup[] = property.leases.map((n) => ({
+    ...n,
+    historie: (historieZaloh[n.id] ?? []).map((z) => ({ validFrom: z.validFrom, amount: z.amount })),
+  }));
+
+  const zalohy = porovnejProNemovitost(najmyVstup, sluzbyVstup);
   const zalohyNesedi = zalohy != null && zalohy.stav !== "sedi";
+
+  // Casova osa za kazdou smlouvu, i ukoncenou; platna prvni, pak od nejnovejsi
+  const osy = najmyVstup
+    .map((n) => casovaOsa(n, sluzbyVstup))
+    .filter((o): o is NonNullable<typeof o> => o != null)
+    .sort((a, b) => Number(b.jeAktivni) - Number(a.jeAktivni) || b.od.getTime() - a.od.getTime());
 
   // Kondice: par tvrdych otazek, na ktere chce clovek odpoved bez pocitani
   const kontroly: Kontrola[] = [];
@@ -325,7 +351,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             obsah: (<>
             <SbalitelnaKarta klic="najem" title="Nájem a nájemci">
               <LeaseManager propertyId={property.id} leases={property.leases} canEdit={user.role === "OWNER"}
-                services={property.services} porovnani={zalohy} />
+                services={sluzbyVstup} porovnani={zalohy} historie={historieZaloh} />
               <div className="mt-4 border-t border-line pt-3">
                 <table className="table-base">
                   <tbody>
@@ -337,6 +363,10 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                 </table>
               </div>
             </SbalitelnaKarta>
+            <SbalitelnaKarta klic="zalohy-v-case" title="Zálohy a služby v čase" vychoziSbalena={!zalohyNesedi}
+              shrnuti={zalohy ? (zalohyNesedi ? "nesedí" : "sedí") : undefined}>
+              <ZalohyVCase osy={osy} />
+            </SbalitelnaKarta>
             </>),
           },
           {
@@ -347,7 +377,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             obsah: (<>
             <SbalitelnaKarta klic="sluzby" title="Služby a dodavatelé" action={<Link href="/savings" className="text-xs text-accent">Kde ušetřit →</Link>}>
               <ServiceManager propertyId={property.id} services={property.services} canEdit={user.role === "OWNER"}
-                porovnani={zalohy} />
+                porovnani={zalohy} historie={historieNakladu} />
             </SbalitelnaKarta>
             </>),
           },

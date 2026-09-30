@@ -69,9 +69,9 @@ export function Empty({ children }: { children: ReactNode }) {
 export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "good" | "warn" | "bad"; children: ReactNode }) {
   const cls = {
     neutral: "bg-surface-sunken text-ink-secondary",
-    good: "bg-good/12 text-good",
+    good: "bg-good/15 text-good",
     warn: "bg-warn/15 text-warn",
-    bad: "bg-bad/12 text-bad",
+    bad: "bg-bad/15 text-bad",
   }[tone];
   return <span className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}>{children}</span>;
 }

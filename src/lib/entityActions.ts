@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "./db";
 import { getSession } from "./auth";
 import { annuityPayment, balanceAt } from "./finance";
-import { popisPorovnani, porovnejProNemovitost } from "./zalohy";
+import { platnyKDatu, popisPorovnani, porovnejProNemovitost } from "./zalohy";
 
 export interface EntityFormState {
   error?: string;
@@ -59,16 +59,46 @@ async function varovaniZaloh(propertyId: string): Promise<string | undefined> {
   const [najmy, sluzby] = await Promise.all([
     prisma.lease.findMany({
       where: { propertyId },
-      select: { tenantName: true, utilitiesMonthly: true, isActive: true },
+      select: {
+        tenantName: true, utilitiesMonthly: true, isActive: true, startDate: true, endDate: true,
+        advanceChanges: { select: { validFrom: true, amount: true } },
+      },
     }),
     prisma.service.findMany({
       where: { propertyId },
-      select: { type: true, provider: true, monthlyCost: true, annualCost: true, chargedToTenant: true },
+      select: {
+        type: true, provider: true, monthlyCost: true, annualCost: true, chargedToTenant: true,
+        costChanges: { select: { validFrom: true, monthlyCost: true, annualCost: true } },
+      },
     }),
   ]);
-  const p = porovnejProNemovitost(najmy, sluzby);
+  const p = porovnejProNemovitost(
+    najmy.map(({ advanceChanges, ...n }) => ({ ...n, historie: advanceChanges })),
+    sluzby.map(({ costChanges, ...s }) => ({ ...s, historie: costChanges })),
+  );
   if (!p || p.stav === "sedi") return undefined;
   return popisPorovnani(p).text;
+}
+
+const DEN_MS = 24 * 3600 * 1000;
+/** Dnesni datum jako RRRR-MM-DD, ke srovnani s hodnotou z pole typu date. */
+const dnesISO = () => new Date().toISOString().slice(0, 10);
+
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/** Aktualni naklad sluzby je ten, ktery plati dnes; ne posledni zapsany (zpetna oprava nesmi prepsat dnesek). */
+async function prepocitejAktualniNaklad(tx: Tx, serviceId: string) {
+  const zaznamy = await tx.serviceCostChange.findMany({ where: { serviceId } });
+  const dnes = platnyKDatu(zaznamy, new Date());
+  if (dnes) {
+    await tx.service.update({ where: { id: serviceId }, data: { monthlyCost: dnes.monthlyCost, annualCost: dnes.annualCost } });
+  }
+}
+
+async function prepocitejAktualniZalohy(tx: Tx, leaseId: string) {
+  const zaznamy = await tx.leaseAdvanceChange.findMany({ where: { leaseId } });
+  const dnes = platnyKDatu(zaznamy, new Date());
+  if (dnes) await tx.lease.update({ where: { id: leaseId }, data: { utilitiesMonthly: dnes.amount } });
 }
 
 // --- Úvěry ---
@@ -148,6 +178,11 @@ const najemSchema = z.object({
   tenantName: z.string().min(1, "Zadej jméno nájemce."),
   tenantEmail: textNeboNic,
   tenantPhone: textNeboNic,
+  tenantStreet: textNeboNic,
+  tenantCity: textNeboNic,
+  tenantZip: textNeboNic,
+  /** Od kdy plati nova vyse zaloh; potreba jen pri zmene zaloh u existujici smlouvy. */
+  advanceValidFrom: datumNeboNic,
   startDate: z.string().min(1, "Zadej začátek nájmu."),
   endDate: datumNeboNic,
   rentMonthly: cislo().refine((v) => v > 0, "Nájemné musí být větší než nula."),
@@ -171,6 +206,9 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
     tenantName: d.tenantName,
     tenantEmail: d.tenantEmail,
     tenantPhone: d.tenantPhone,
+    tenantStreet: d.tenantStreet,
+    tenantCity: d.tenantCity,
+    tenantZip: d.tenantZip,
     startDate: new Date(d.startDate),
     endDate: d.endDate ? new Date(d.endDate) : null,
     rentMonthly: d.rentMonthly,
@@ -190,8 +228,47 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
     });
   }
 
-  if (id) await prisma.lease.update({ where: { id }, data });
-  else await prisma.lease.create({ data: { ...data, propertyId: d.propertyId } });
+  if (id) {
+    const stara = await prisma.lease.findUnique({ where: { id }, include: { advanceChanges: true } });
+    if (!stara) return { error: "Smlouva neexistuje." };
+
+    // Zmena zaloh se zapisuje s datem, od ktereho plati; jinak by se prepsala
+    // minulost a nedalo by se zjistit, co najemce platil drive.
+    const zmenaZaloh = stara.utilitiesMonthly !== d.utilitiesMonthly;
+    if (zmenaZaloh) {
+      if (!d.advanceValidFrom) return { error: "Zadej, od kdy nové zálohy platí." };
+      if (d.advanceValidFrom > dnesISO()) {
+        return { error: "Nové zálohy nemůžou platit od budoucího data. Zadej změnu, až začne platit." };
+      }
+    }
+
+    const { utilitiesMonthly: _z, ...bezZaloh } = data;
+    await prisma.$transaction(async (tx) => {
+      await tx.lease.update({ where: { id }, data: bezZaloh });
+      if (!zmenaZaloh) return;
+
+      const platiOd = new Date(d.advanceValidFrom!);
+      // Puvodni hodnota je pocatecni zaznam: plati od zacatku smlouvy, nebo o den
+      // pred zmenou, kdyz by zmena pripadla pred zacatek smlouvy
+      if (stara.advanceChanges.length === 0) {
+        const predZmenou = new Date(platiOd.getTime() - DEN_MS);
+        await tx.leaseAdvanceChange.create({
+          data: {
+            leaseId: id, amount: stara.utilitiesMonthly,
+            validFrom: stara.startDate < predZmenou ? stara.startDate : predZmenou,
+          },
+        });
+      }
+      await tx.leaseAdvanceChange.upsert({
+        where: { leaseId_validFrom: { leaseId: id, validFrom: platiOd } },
+        update: { amount: d.utilitiesMonthly },
+        create: { leaseId: id, validFrom: platiOd, amount: d.utilitiesMonthly },
+      });
+      await prepocitejAktualniZalohy(tx, id);
+    });
+  } else {
+    await prisma.lease.create({ data: { ...data, propertyId: d.propertyId } });
+  }
 
   obnov(d.propertyId);
   return {
@@ -225,6 +302,8 @@ const sluzbaSchema = z.object({
   noticePeriodMonths: cislo(),
   isBundleable: z.preprocess((v) => v === "on" || v === true, z.boolean()),
   chargedToTenant: z.preprocess((v) => v === "on" || v === true, z.boolean()),
+  /** Od kdy plati novy naklad; potreba jen pri zmene nakladu u existujici sluzby. */
+  costValidFrom: datumNeboNic,
   notes: textNeboNic,
 });
 
@@ -254,7 +333,42 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
   };
 
   if (id) {
-    await prisma.service.update({ where: { id }, data });
+    const stara = await prisma.service.findUnique({ where: { id }, include: { costChanges: true } });
+    if (!stara) return { error: "Služba neexistuje." };
+
+    const zmenaNakladu = stara.monthlyCost !== d.monthlyCost || (stara.annualCost ?? null) !== (d.annualCost ?? null);
+    if (zmenaNakladu) {
+      if (!d.costValidFrom) return { error: "Zadej, od kdy nový náklad platí." };
+      if (d.costValidFrom > dnesISO()) {
+        return { error: "Nový náklad nemůže platit od budoucího data. Zadej změnu, až začne platit." };
+      }
+    }
+
+    // Naklad se meni jen pres historii; primo se neprepisuje, aby zpetna oprava
+    // (zmena s datem v minulosti) neprebila to, co plati dnes.
+    const { monthlyCost: _m, annualCost: _a, ...bezNakladu } = data;
+    await prisma.$transaction(async (tx) => {
+      await tx.service.update({ where: { id }, data: bezNakladu });
+      if (!zmenaNakladu) return;
+
+      const platiOd = new Date(d.costValidFrom!);
+      if (stara.costChanges.length === 0) {
+        const predZmenou = new Date(platiOd.getTime() - DEN_MS);
+        const zacatek = stara.contractStart ?? stara.createdAt;
+        await tx.serviceCostChange.create({
+          data: {
+            serviceId: id, monthlyCost: stara.monthlyCost, annualCost: stara.annualCost,
+            validFrom: zacatek < predZmenou ? zacatek : predZmenou,
+          },
+        });
+      }
+      await tx.serviceCostChange.upsert({
+        where: { serviceId_validFrom: { serviceId: id, validFrom: platiOd } },
+        update: { monthlyCost: d.monthlyCost, annualCost: d.annualCost },
+        create: { serviceId: id, validFrom: platiOd, monthlyCost: d.monthlyCost, annualCost: d.annualCost },
+      });
+      await prepocitejAktualniNaklad(tx, id);
+    });
   } else {
     await prisma.service.create({ data: { ...data, propertyId: d.propertyId } });
   }
@@ -276,6 +390,44 @@ export async function deleteService(_prev: EntityFormState, formData: FormData):
   await prisma.service.delete({ where: { id: service.id } });
   obnov(service.propertyId);
   return { success: "Služba smazána.", warning: await varovaniZaloh(service.propertyId) };
+}
+
+/** Smaze jeden radek historie nakladu, napr. preklep v datu. Aktualni naklad se dopocita znovu. */
+export async function smazZmenuNakladu(_prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+
+  const zmena = await prisma.serviceCostChange.findUnique({
+    where: { id: String(formData.get("id")) },
+    include: { service: { select: { propertyId: true } } },
+  });
+  if (!zmena) return { error: "Záznam neexistuje." };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.serviceCostChange.delete({ where: { id: zmena.id } });
+    await prepocitejAktualniNaklad(tx, zmena.serviceId);
+  });
+  obnov(zmena.service.propertyId);
+  return { success: "Změna nákladu smazána.", warning: await varovaniZaloh(zmena.service.propertyId) };
+}
+
+/** Totez pro zalohy ve smlouve. */
+export async function smazZmenuZaloh(_prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+
+  const zmena = await prisma.leaseAdvanceChange.findUnique({
+    where: { id: String(formData.get("id")) },
+    include: { lease: { select: { propertyId: true } } },
+  });
+  if (!zmena) return { error: "Záznam neexistuje." };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.leaseAdvanceChange.delete({ where: { id: zmena.id } });
+    await prepocitejAktualniZalohy(tx, zmena.leaseId);
+  });
+  obnov(zmena.lease.propertyId);
+  return { success: "Změna záloh smazána.", warning: await varovaniZaloh(zmena.lease.propertyId) };
 }
 
 // --- Pohyby ---

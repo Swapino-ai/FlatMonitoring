@@ -19,8 +19,10 @@ export async function exportujVse(): Promise<Zaloha> {
       propertyOwner: await prisma.propertyOwner.findMany(),
       loan: await prisma.loan.findMany(),
       lease: await prisma.lease.findMany(),
+      leaseAdvanceChange: await prisma.leaseAdvanceChange.findMany(),
       transaction: await prisma.transaction.findMany(),
       service: await prisma.service.findMany(),
+      serviceCostChange: await prisma.serviceCostChange.findMany(),
       valuation: await prisma.valuation.findMany(),
       rentEstimate: await prisma.rentEstimate.findMany(),
       excludedListing: await prisma.excludedListing.findMany(),
@@ -63,6 +65,8 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.excludedListing.deleteMany();
     await tx.valuation.deleteMany();
     await tx.propertyOwner.deleteMany();
+    await tx.serviceCostChange.deleteMany();
+    await tx.leaseAdvanceChange.deleteMany();
     await tx.service.deleteMany();
     await tx.transaction.deleteMany();
     await tx.lease.deleteMany();
@@ -125,12 +129,18 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     const leases = (t.lease as any[] ?? []).map((x) => ({
       id: String(x.id), propertyId: String(x.propertyId), tenantName: String(x.tenantName),
       tenantEmail: s(x.tenantEmail), tenantPhone: s(x.tenantPhone),
+      tenantStreet: s(x.tenantStreet), tenantCity: s(x.tenantCity), tenantZip: s(x.tenantZip),
       startDate: dPovinne(x.startDate), endDate: d(x.endDate),
       rentMonthly: c(x.rentMonthly), utilitiesMonthly: c(x.utilitiesMonthly), deposit: c(x.deposit),
       indexationClause: !!x.indexationClause, paymentDay: Math.round(c(x.paymentDay, 15)),
       isActive: x.isActive !== false, notes: s(x.notes),
     }));
     if (leases.length) obnoveno.lease = (await tx.lease.createMany({ data: leases })).count;
+
+    const zmenyZaloh = (t.leaseAdvanceChange as any[] ?? []).map((x) => ({
+      id: String(x.id), leaseId: String(x.leaseId), validFrom: dPovinne(x.validFrom), amount: c(x.amount),
+    }));
+    if (zmenyZaloh.length) obnoveno.leaseAdvanceChange = (await tx.leaseAdvanceChange.createMany({ data: zmenyZaloh })).count;
 
     const transactions = (t.transaction as any[] ?? []).map((x) => ({
       id: String(x.id), propertyId: String(x.propertyId), date: dPovinne(x.date),
@@ -151,6 +161,12 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       chargedToTenant: x.chargedToTenant === true,
     }));
     if (services.length) obnoveno.service = (await tx.service.createMany({ data: services })).count;
+
+    const zmenyNakladu = (t.serviceCostChange as any[] ?? []).map((x) => ({
+      id: String(x.id), serviceId: String(x.serviceId), validFrom: dPovinne(x.validFrom),
+      monthlyCost: c(x.monthlyCost), annualCost: x.annualCost == null ? null : c(x.annualCost),
+    }));
+    if (zmenyNakladu.length) obnoveno.serviceCostChange = (await tx.serviceCostChange.createMany({ data: zmenyNakladu })).count;
 
     const valuations = (t.valuation as any[] ?? []).map((x) => ({
       id: String(x.id), propertyId: String(x.propertyId), date: dPovinne(x.date),

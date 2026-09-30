@@ -97,7 +97,7 @@ export function Hlaska({ state }: { state: { error?: string; success?: string; w
       )}
       {/* Ulozeno, ale neco nesedi: jina barva nez chyba, protoze nic se nestalo spatne */}
       {state.warning && (
-        <p className="flex items-start gap-2 rounded-lg bg-warn/12 px-3 py-2 text-sm text-ink-primary" role="status">
+        <p className="flex items-start gap-2 rounded-lg bg-warn/15 px-3 py-2 text-sm text-ink-primary" role="status">
           <Ikona nazev="pozor" trida="mt-0.5 h-4 w-4 text-warn" />
           <span>{state.warning}</span>
         </p>
@@ -177,5 +177,21 @@ export function TextPole({ label, name, hint, sirka = "", ...rest }: {
       <textarea id={name} name={name} rows={2} className="input resize-y" {...rest} />
       {hint && <p className="mt-1 text-xs text-ink-muted">{hint}</p>}
     </div>
+  );
+}
+
+/**
+ * Oddil dlouheho formulare s nadpisem. Bez nej je dvacet poli pod sebou jeden
+ * proud a clovek hleda, kam ktere patri.
+ */
+export function Sekce({ nadpis, popis, children }: { nadpis: string; popis?: string; children: ReactNode }) {
+  return (
+    <section className="space-y-3 sm:col-span-2">
+      <div className="border-b border-line pb-1.5">
+        <h4 className="text-sm font-semibold">{nadpis}</h4>
+        {popis && <p className="text-xs text-ink-muted">{popis}</p>}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">{children}</div>
+    </section>
   );
 }

@@ -57,7 +57,7 @@ export function TransactionManager({ propertyId, transactions, canEdit }: {
                     {/* Smer penez je videt driv, nez se precte kategorie. Neni to jedina
                         informace: znamenko u castky a barva jen doplnuji. */}
                     <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                      t.amount >= 0 ? "bg-good/12 text-good" : "bg-surface-sunken text-ink-muted"
+                      t.amount >= 0 ? "bg-good/15 text-good" : "bg-surface-sunken text-ink-muted"
                     }`} title={t.amount >= 0 ? "Příjem" : "Výdaj"}>
                       <Ikona nazev={t.amount >= 0 ? "sipkaDolu" : "sipkaNahoru"} trida="h-4 w-4" />
                     </span>
