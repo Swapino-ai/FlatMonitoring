@@ -2,10 +2,20 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { Ikona } from "./Ikony";
+import { DatumPole } from "./DatumPole";
 
 export function Pole({ label, name, hint, sirka = "", ...rest }: {
   label: string; name: string; hint?: string; sirka?: string;
 } & React.InputHTMLAttributes<HTMLInputElement>) {
+  // Data maji vlastni pole: format dd/mm/rrrr a cesky kalendar
+  if (rest.type === "date") {
+    return (
+      <DatumPole label={label} name={name} hint={hint} sirka={sirka} required={rest.required}
+        defaultValue={typeof rest.defaultValue === "string" ? rest.defaultValue : ""}
+        min={typeof rest.min === "string" ? rest.min : undefined}
+        max={typeof rest.max === "string" ? rest.max : undefined} />
+    );
+  }
   return (
     <div className={sirka}>
       <label className="label mb-1.5 block" htmlFor={name}>{label}</label>

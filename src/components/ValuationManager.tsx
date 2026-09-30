@@ -3,6 +3,7 @@
 import { Fragment, useActionState, useState } from "react";
 import { addValuation, deleteValuation, type ValuationFormState } from "@/lib/valuationActions";
 import { czk, dateCz } from "@/lib/format";
+import { DatumPole } from "./DatumPole";
 import { Comparables, type Nabidka } from "./Comparables";
 
 interface Row {
@@ -127,10 +128,7 @@ export function ValuationManager({ propertyId, valuations, areaM2, canEdit, vyra
             <label className="label mb-1.5 block" htmlFor="v-value">Hodnota (Kč)</label>
             <input id="v-value" name="value" type="number" step="1000" required className="input" />
           </div>
-          <div>
-            <label className="label mb-1.5 block" htmlFor="v-date">Ke dni</label>
-            <input id="v-date" name="date" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} className="input" />
-          </div>
+          <DatumPole label="Ke dni" name="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
           <div>
             <label className="label mb-1.5 block" htmlFor="v-source">Zdroj</label>
             <select id="v-source" name="source" defaultValue="MANUAL" className="input">

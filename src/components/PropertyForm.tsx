@@ -7,6 +7,7 @@ import { saveProperty, type FormState } from "@/lib/actions";
 import { Card } from "./Stat";
 import { Pole } from "./form";
 import { KRAJE, NEMOVITOST_MAP, TYPY_NEMOVITOSTI } from "@/lib/catalogs";
+import { DatumPole } from "./DatumPole";
 import { UliceNaseptavac, type Navrh } from "./AdresaNaseptavac";
 import { Mapa } from "./Mapa";
 
@@ -184,7 +185,7 @@ export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik 
 
       <Card title="Pořízení">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Datum pořízení" name="purchaseDate" type="date" defaultValue={dateValue} required errors={state.fieldErrors} />
+          <DatumPole label="Datum pořízení" name="purchaseDate" defaultValue={dateValue} required />
           <Field label="Kupní cena (Kč)" name="purchasePrice" type="number" step="1" defaultValue={v.purchasePrice} required errors={state.fieldErrors} />
           <Field label="Vedlejší náklady pořízení (Kč)" name="acquisitionCosts" type="number" defaultValue={v.acquisitionCosts ?? 0}
             hint="Provize, právník, znalec, poplatky" errors={state.fieldErrors} />
