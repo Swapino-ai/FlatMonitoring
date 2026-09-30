@@ -134,7 +134,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     const leases = (t.lease as any[] ?? []).map((x) => ({
       id: String(x.id), propertyId: String(x.propertyId), tenantName: String(x.tenantName),
       tenantEmail: s(x.tenantEmail), tenantPhone: s(x.tenantPhone),
-      tenantStreet: s(x.tenantStreet), tenantCity: s(x.tenantCity), tenantZip: s(x.tenantZip),
+      tenantStreet: s(x.tenantStreet), tenantCity: s(x.tenantCity), tenantZip: s(x.tenantZip), tenantAccount: s(x.tenantAccount),
       startDate: dPovinne(x.startDate), endDate: d(x.endDate),
       rentMonthly: c(x.rentMonthly), utilitiesMonthly: c(x.utilitiesMonthly), deposit: c(x.deposit),
       indexationClause: !!x.indexationClause, paymentDay: Math.round(c(x.paymentDay, 15)),

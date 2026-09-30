@@ -170,6 +170,8 @@ model Lease {
   tenantStreet String?
   tenantCity   String?
   tenantZip    String?
+  // Ucet, kam se posila vratka preplatku z vyuctovani sluzeb
+  tenantAccount String?
 
   startDate DateTime
   endDate   DateTime? // null = na dobu neurcitou

@@ -181,6 +181,7 @@ const najemSchema = z.object({
   tenantStreet: textNeboNic,
   tenantCity: textNeboNic,
   tenantZip: textNeboNic,
+  tenantAccount: textNeboNic,
   /** Od kdy plati nova vyse zaloh; potreba jen pri zmene zaloh u existujici smlouvy. */
   advanceValidFrom: datumNeboNic,
   startDate: z.string().min(1, "Zadej začátek nájmu."),
@@ -212,6 +213,7 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
     tenantStreet: d.tenantStreet,
     tenantCity: d.tenantCity,
     tenantZip: d.tenantZip,
+    tenantAccount: d.tenantAccount,
     startDate: new Date(d.startDate),
     endDate: d.endDate ? new Date(d.endDate) : null,
     rentMonthly: d.rentMonthly,

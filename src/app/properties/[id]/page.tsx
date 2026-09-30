@@ -105,7 +105,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     id: n.id, nazev: n.tenantName, od: iso(new Date(n.startDate)), do: n.endDate ? iso(new Date(n.endDate)) : null,
     utilitiesMonthly: n.utilitiesMonthly,
     historieZaloh: (historieZaloh[n.id] ?? []).map((z) => ({ validFrom: z.validFrom, amount: z.amount })),
-    tenantStreet: n.tenantStreet, tenantCity: n.tenantCity, tenantZip: n.tenantZip,
+    tenantStreet: n.tenantStreet, tenantCity: n.tenantCity, tenantZip: n.tenantZip, tenantAccount: n.tenantAccount,
   }));
   const sluzbyVyuctovani: SluzbaVyuctovani[] = property.services.map((sl) => ({
     id: sl.id, nazev: `${SERVICE_TYPES[sl.type] ?? sl.type}`, dodavatel: sl.provider, prectena: sl.chargedToTenant,

@@ -20,6 +20,7 @@ import { czk, dateCz } from "@/lib/format";
 interface Row {
   id: string; tenantName: string; tenantEmail: string | null; tenantPhone: string | null;
   tenantStreet: string | null; tenantCity: string | null; tenantZip: string | null;
+  tenantAccount: string | null;
   startDate: Date; endDate: Date | null; rentMonthly: number; utilitiesMonthly: number;
   deposit: number; indexationClause: boolean; paymentDay: number; isActive: boolean;
 }
@@ -81,6 +82,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
                       <div className="text-xs text-ink-muted">{[l.tenantEmail, l.tenantPhone].filter(Boolean).join(" · ")}</div>
                     )}
                     {adresa && <div className="text-xs text-ink-muted">{adresa}</div>}
+                    {l.tenantAccount && <div className="text-xs text-ink-muted">účet {l.tenantAccount}</div>}
                   </div>
                   {canEdit && (
                     <div className="flex shrink-0 items-center gap-0.5">
@@ -246,6 +248,9 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
           onChange={(e) => setAdresa((a) => ({ ...a, obec: e.target.value }))} />
         <Pole label="PSČ" name="tenantZip" placeholder="nepovinné" value={adresa.psc}
           onChange={(e) => setAdresa((a) => ({ ...a, psc: e.target.value }))} />
+        <Pole label="Číslo účtu pro vratku" name="tenantAccount" placeholder="nepovinné, např. 123456789/0800"
+          defaultValue={r?.tenantAccount ?? ""} sirka="sm:col-span-2"
+          hint="Sem se pošle přeplatek z vyúčtování služeb. Objeví se ve vyúčtování pro nájemce." />
       </Sekce>
 
       <Sekce nadpis="Nájem a poplatky" popis="Doba nájmu, nájemné a zálohy na služby.">

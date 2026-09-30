@@ -19,6 +19,7 @@ export interface SluzbaRadek { id: string; type: string; provider: string; charg
 
 export interface NajemRadek extends NajemVstup {
   tenantStreet: string | null; tenantCity: string | null; tenantZip: string | null;
+  tenantAccount: string | null;
 }
 
 export interface VyuctovaniRadek extends VyuctovaniVstup {
@@ -414,6 +415,12 @@ export function VyuctovaniNajemce({ nemovitost, adresaNemovitosti, leases, servi
                 </tr>
               </tfoot>
             </table>
+            {najem.tenantAccount && vysledek.rozdil > 0 && (
+              <p className="mt-3 text-sm">Přeplatek bude zaslán na účet <strong>{najem.tenantAccount}</strong>.</p>
+            )}
+            {vysledek.rozdil > 0 && !najem.tenantAccount && (
+              <p className="mt-3 text-xs text-warn print:hidden">Nájemce nemá vyplněné číslo účtu pro vratku (doplníš ve smlouvě).</p>
+            )}
             <p className="mt-3 text-[11px] text-ink-muted">
               Zálohy jsou počítané podle smlouvy a jejích změn za dny, kdy nájem trval.
             </p>
