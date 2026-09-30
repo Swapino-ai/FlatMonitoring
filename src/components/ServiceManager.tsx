@@ -49,7 +49,12 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   const poplatkova = services.find((s) => s.id === poplatekId) ?? null;
 
   const upravovana = services.find((s) => s.id === upravaId) ?? null;
-  const celkem = services.reduce((a, s) => a + s.monthlyCost + (s.annualCost ?? 0) / 12, 0);
+  // Soucet z vyse, ktere jsou v radcich videt (posledni zapsana, i budouci)
+  const celkem = services.reduce((a, s) => {
+    const posledni = [...(historie[s.id] ?? [])]
+      .sort((x, y) => new Date(y.validFrom).getTime() - new Date(x.validFrom).getTime())[0];
+    return a + (posledni ? posledni.monthlyCost + (posledni.annualCost ?? 0) / 12 : s.monthlyCost + (s.annualCost ?? 0) / 12);
+  }, 0);
 
   return (
     <div>
@@ -82,14 +87,12 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
               {services.map((s) => {
                 const zmeny = [...(historie[s.id] ?? [])]
                   .sort((a, b) => new Date(b.validFrom).getTime() - new Date(a.validFrom).getTime());
-                // Zmena s datem v budoucnosti je zapsana, ale zatim neplati
+                // Hlavni je posledni zapsana vyse, i kdyz zacne platit az v budoucnu
                 const dnes = dnesISO();
-                const idxAkt = Math.max(0, zmeny.findIndex((z) => new Date(z.validFrom).toISOString().slice(0, 10) <= dnes));
-                const aktualni = zmeny[idxAkt];
-                const budouci = zmeny.slice(0, idxAkt);
-                const nejblizsi = budouci[budouci.length - 1];
-                const drivejsi = zmeny.slice(idxAkt + 1);
-                const vSeznamu = [...budouci, ...drivejsi];
+                const aktualni = zmeny[0];
+                const planovano = aktualni != null && new Date(aktualni.validFrom).toISOString().slice(0, 10) > dnes;
+                const vyse = aktualni ? aktualni.monthlyCost + (aktualni.annualCost ?? 0) / 12 : s.monthlyCost + (s.annualCost ?? 0) / 12;
+                const vSeznamu = zmeny.slice(1);
                 const otevrena = rozbaleno.has(s.id);
                 return (
                 <Fragment key={s.id}>
@@ -124,13 +127,10 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                     )}
                   </td>
                   <td className="num">
-                    <div className="font-semibold">{czk(s.monthlyCost + (s.annualCost ?? 0) / 12)}</div>
+                    <div className="font-semibold">{czk(vyse)}</div>
                     {aktualni && (
-                      <div className="text-xs font-normal text-ink-muted">od {dateCz(new Date(aktualni.validFrom))}</div>
-                    )}
-                    {nejblizsi && (
-                      <div className="mt-0.5 text-xs font-medium text-accent">
-                        od {dateCz(new Date(nejblizsi.validFrom))}: {czk(nejblizsi.monthlyCost + (nejblizsi.annualCost ?? 0) / 12)}
+                      <div className={`text-xs ${planovano ? "font-medium text-accent" : "font-normal text-ink-muted"}`}>
+                        od {dateCz(new Date(aktualni.validFrom))}{planovano && " (plánováno)"}
                       </div>
                     )}
                     {vSeznamu.length > 0 && (
@@ -167,13 +167,12 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                         {vSeznamu.map((z) => {
                           // Vyse platila do dne pred nastupem nasledujici zmeny
                           const j = zmeny.indexOf(z);
-                          const planovano = j < idxAkt;
                           const odText = j === zmeny.length - 1 ? "od začátku" : `od ${dateCz(new Date(z.validFrom))}`;
                           const doText = j === 0 ? "dále"
                             : `do ${dateCz(new Date(new Date(zmeny[j - 1].validFrom).getTime() - 24 * 3600 * 1000))}`;
                           return (
                             <li key={z.id} className="flex items-center gap-3">
-                              <span className="tabular-nums">{odText} {doText}{planovano && <span className="ml-2 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase text-accent">plánováno</span>}</span>
+                              <span className="tabular-nums">{odText} {doText}</span>
                               <span className="ml-auto font-medium tabular-nums">{czk(z.monthlyCost + (z.annualCost ?? 0) / 12)}/měs.</span>
                               {canEdit && (
                                 <SmazatTlacitko action={smazAction} id={z.id} popisek="Smazat záznam"
