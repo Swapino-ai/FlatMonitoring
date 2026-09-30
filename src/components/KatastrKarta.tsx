@@ -46,6 +46,7 @@ export interface KatastrData {
   zpusobVyuziti: string | null;
   zpusobyOchrany: string | null;
   parcely: string | null;
+  parcelaId: number | null;
   jednotky: JednotkaVolba[];
   cisloJednotky: string | null;
   nahlizeniOdkaz: string | null;
@@ -64,6 +65,15 @@ function odkazNaJednotku(id: number) {
 }
 
 /**
+ * Na stavbu Nahlizeni odkazat neumi — zkouseno jedenact tvaru slova pro typ
+ * a vsechny vratily "Spatna identifikace objektu". Parcela, na ktere stavba
+ * stoji, ale funguje a stavba je z ni jedno kliknuti.
+ */
+function odkazNaParcelu(id: number) {
+  return `https://nahlizenidokn.cuzk.gov.cz/ZobrazObjekt.aspx?typ=parcela&id=${id}`;
+}
+
+/**
  * Udaje z katastru k jedne nemovitosti.
  *
  * Nacita se na tlacitko, ne samo: API ma kvotu 500 dotazu za obdobi a katastr
@@ -79,7 +89,11 @@ export function KatastrKarta({ propertyId, data, canEdit, adresa }: {
   // Vybrana jednotka nese id z katastru, pres ktere jde otevrit primo v Nahlizeni
   const mojeJednotka = data?.jednotky.find((j) => j.popis === data.cisloJednotky) ?? null;
   // U jednotky si odkaz slozime, u stavby ho musel uzivatel jednou vlozit
-  const odkaz = mojeJednotka ? odkazNaJednotku(mojeJednotka.id) : data?.nahlizeniOdkaz ?? null;
+  const odkaz = mojeJednotka
+    ? odkazNaJednotku(mojeJednotka.id)
+    : data?.nahlizeniOdkaz
+      ?? (data?.parcelaId != null ? odkazNaParcelu(data.parcelaId) : null);
+  const jePresny = Boolean(mojeJednotka || data?.nahlizeniOdkaz);
   const [kvota, setKvota] = useState<{ text: string; varovat: boolean } | null>(null);
   const [bezi, start] = useTransition();
 
@@ -125,7 +139,9 @@ export function KatastrKarta({ propertyId, data, canEdit, adresa }: {
               className="btn btn-primary mt-4 w-full justify-center sm:w-auto">
               {mojeJednotka
                 ? `Otevřít jednotku ${mojeJednotka.popis} v Nahlížení do KN →`
-                : "Otevřít v Nahlížení do KN →"}
+                : jePresny
+                  ? "Otevřít v Nahlížení do KN →"
+                  : `Otevřít pozemek ${data.parcely ?? ""} v Nahlížení do KN →`}
             </a>
           )}
 
@@ -173,7 +189,9 @@ export function KatastrKarta({ propertyId, data, canEdit, adresa }: {
         </p>
       )}
 
-      {canEdit && data && !mojeJednotka && <RucniOdkaz propertyId={propertyId} odkaz={data.nahlizeniOdkaz} />}
+      {canEdit && data && !mojeJednotka && (
+        <RucniOdkaz propertyId={propertyId} odkaz={data.nahlizeniOdkaz} maParcelu={data.parcelaId != null} />
+      )}
 
       {canEdit && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -210,7 +228,9 @@ function Radek({ label, value, zvyraznit, kopie }: {
  * pouziva Nahlizeni sifrovany token, ktery zvenku sestavit nejde. Vlozit ho
  * jednou je porad lepsi nez ho pokazde hledat znovu.
  */
-function RucniOdkaz({ propertyId, odkaz }: { propertyId: string; odkaz: string | null }) {
+function RucniOdkaz({ propertyId, odkaz, maParcelu }: {
+  propertyId: string; odkaz: string | null; maParcelu: boolean;
+}) {
   const [hodnota, setHodnota] = useState(odkaz ?? "");
   const [stav, setStav] = useState<KatastrStav>({});
   const [bezi, start] = useTransition();
@@ -232,9 +252,10 @@ function RucniOdkaz({ propertyId, odkaz }: { propertyId: string; odkaz: string |
         </button>
       </div>
       <p className="mt-1 text-xs text-ink-muted">
-        U staveb Nahlížení místo čísla používá zašifrovaný token, který zvenku sestavit nejde.
-        Najdi stavbu jednou v Nahlížení, zkopíruj adresu z prohlížeče a vlož ji sem — pak už
-        stačí klikat.
+        Na samotnou stavbu Nahlížení odkazovat neumí, používá u ní zašifrovaný token.
+        {maParcelu && " Tlačítko výše proto otevře pozemek, na kterém stavba stojí; stavba je z něj jedno kliknutí."}
+        {" "}Chceš-li mířit přesně, najdi stavbu jednou v Nahlížení, zkopíruj adresu
+        z prohlížeče a vlož ji sem.
       </p>
       {(stav.error || stav.success) && (
         <p className={`mt-2 text-xs ${stav.error ? "text-bad" : "text-good"}`}>

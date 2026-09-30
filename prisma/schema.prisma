@@ -411,6 +411,10 @@ model CadastreRecord {
   zpusobVyuziti  String?
   zpusobyOchrany String?
   parcely        String? // "st. 684" nebo vic parcel oddelenych carkou
+  /**
+   * Id prvni parcely — jen pres nej jde odkazat do Nahlizeni, stavba to neumi.
+   */
+  parcelaId      Int?
 
   /**
    * Vsechny jednotky v dome — ze kterych si uzivatel vybere tu svou.

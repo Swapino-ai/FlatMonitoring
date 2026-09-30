@@ -286,6 +286,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                   zpusobVyuziti: katastr.zpusobVyuziti,
                   zpusobyOchrany: katastr.zpusobyOchrany,
                   parcely: katastr.parcely,
+                  parcelaId: katastr.parcelaId,
                   jednotky: (katastr.jednotky as JednotkaVolba[] | null) ?? [],
                   cisloJednotky: katastr.cisloJednotky,
                   nahlizeniOdkaz: katastr.nahlizeniOdkaz,

@@ -56,6 +56,8 @@ export async function dohledejKatastr(propertyId: string): Promise<KatastrStav> 
       zpusobVyuziti: s.zpusobVyuziti?.nazev ?? null,
       zpusobyOchrany: s.zpusobyOchrany?.length ? s.zpusobyOchrany.map((o) => o.nazev).join(", ") : null,
       parcely: s.parcely?.length ? s.parcely.map(popisParcely).join(", ") : null,
+      // Nahlizeni umi odkaz na parcelu a na jednotku, na stavbu ne — proto id parcely
+      parcelaId: s.parcely?.[0]?.id ?? null,
       jednotky: (s.jednotky ?? []).map((j: JednotkaVDome) => ({
         id: j.id,
         cislo: j.cisloJednotky,
