@@ -20,18 +20,18 @@ const ZAKLAD = "https://nahlizenidokn.cuzk.gov.cz";
 
 const adresy: { url: string; popis: string }[] = [];
 
-for (const pripona of ["", ".aspx"]) {
-  adresy.push(
-    { url: `${ZAKLAD}/VyberBudovu/Jednotka/InformaceOJednotce${pripona}?id=${JEDNOTKA}`, popis: "jednotka, InformaceOJednotce" },
-    { url: `${ZAKLAD}/VyberBudovu/Stavba/InformaceOStavbe${pripona}?id=${STAVBA}`, popis: "stavba, InformaceOStavbe" },
-    { url: `${ZAKLAD}/VyberBudovu/InformaceOJednotce${pripona}?id=${JEDNOTKA}`, popis: "jednotka bez mezikroku" },
-    { url: `${ZAKLAD}/InformaceOJednotce${pripona}?id=${JEDNOTKA}`, popis: "jednotka v kořeni" },
-  );
+// Jednotka uz je overena: ZobrazObjekt.aspx?typ=jednotka&id=… vrati detail.
+// Zbyva slovo pro stavbu — "stavba" vraci "Spatna identifikace objektu".
+for (const typ of ["budova", "stavba", "objekt", "bud", "st"]) {
+  adresy.push({
+    url: `${ZAKLAD}/ZobrazObjekt.aspx?typ=${typ}&id=${STAVBA}`,
+    popis: `stavba, typ=${typ}`,
+  });
 }
-adresy.push(
-  { url: `${ZAKLAD}/ZobrazObjekt.aspx?typ=jednotka&id=${JEDNOTKA}`, popis: "stará aplikace, ZobrazObjekt" },
-  { url: `${ZAKLAD}/ZobrazObjekt.aspx?typ=stavba&id=${STAVBA}`, popis: "stará aplikace, stavba" },
-);
+adresy.push({
+  url: `${ZAKLAD}/ZobrazObjekt.aspx?typ=jednotka&id=${JEDNOTKA}`,
+  popis: "jednotka (kontrola)",
+});
 
 function text(html: string) {
   return html
