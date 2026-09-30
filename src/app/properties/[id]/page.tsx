@@ -20,6 +20,7 @@ import { OwnerManager } from "@/components/OwnerManager";
 import { Listy } from "@/components/Listy";
 import { SbalitelnaKarta } from "@/components/SbalitelnaKarta";
 import { KatastrKarta, type JednotkaVolba } from "@/components/KatastrKarta";
+import { UrcitPolohu } from "@/components/UrcitPolohu";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
 import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
@@ -143,7 +144,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
               <a href={`https://mapy.cz/zakladni?x=${property.longitude}&y=${property.latitude}&z=17`}
                 target="_blank" rel="noreferrer noopener" className="text-xs text-accent">Otevřít v Mapy.cz →</a>
             ) : user.role === "OWNER" ? (
-              <Link href={`/properties/${property.id}/edit`} className="text-xs text-accent">Doplnit adresu →</Link>
+              <Link href={`/properties/${property.id}/edit`} className="text-xs text-accent">Upravit adresu →</Link>
             ) : null
           }>
             {property.latitude != null && property.longitude != null ? (
@@ -157,11 +158,13 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                 </p>
               </>
             ) : (
-              <p className="rounded-lg bg-surface-sunken px-3 py-2.5 text-sm text-ink-secondary">
-                Nemovitost nemá uloženou polohu — byla založená dřív, než přibyl našeptávač adres.
-                Otevři úpravy, vyber adresu z našeptávače a srovnání se pak bude hledat
-                podle vzdálenosti místo podle názvu čtvrti.
-              </p>
+              <div className="space-y-3 rounded-xl bg-surface-sunken px-4 py-3.5">
+                <p className="text-sm text-ink-secondary">
+                  Adresa je uložená, ale chybí k ní souřadnice — nemovitost vznikla dřív, než přibyl
+                  našeptávač adres. Bez nich se nedá zobrazit mapa ani hledat srovnání podle vzdálenosti.
+                </p>
+                {user.role === "OWNER" && <UrcitPolohu propertyId={property.id} />}
+              </div>
             )}
           </SbalitelnaKarta>
           {/* Dvě čísla, kvůli kterým se sem chodí: co to má cenu a co to nese.
