@@ -10,27 +10,32 @@ import { zajistiNajemce } from "./najemci";
  */
 export async function srovnejPlatnost(): Promise<void> {
   const dnes = new Date();
-  await zajistiNajemce();
 
-  const sluzby = await prisma.service.findMany({
-    where: { costChanges: { some: {} } },
-    select: { id: true, monthlyCost: true, annualCost: true, costChanges: true },
-  });
+  // Ctyri nezavisle dotazy najednou; zapisy se delaji jen tam, kde se hodnota opravdu lisi
+  const [, sluzby, smlouvy] = await Promise.all([
+    zajistiNajemce(),
+    prisma.service.findMany({
+      where: { costChanges: { some: {} } },
+      select: { id: true, monthlyCost: true, annualCost: true, costChanges: true },
+    }),
+    prisma.lease.findMany({
+      where: { advanceChanges: { some: {} } },
+      select: { id: true, utilitiesMonthly: true, advanceChanges: true },
+    }),
+  ]);
+
+  const zapisy: Promise<unknown>[] = [];
   for (const s of sluzby) {
     const z = platnyKDatu(s.costChanges, dnes);
     if (z && (z.monthlyCost !== s.monthlyCost || (z.annualCost ?? null) !== (s.annualCost ?? null))) {
-      await prisma.service.update({ where: { id: s.id }, data: { monthlyCost: z.monthlyCost, annualCost: z.annualCost } });
+      zapisy.push(prisma.service.update({ where: { id: s.id }, data: { monthlyCost: z.monthlyCost, annualCost: z.annualCost } }));
     }
   }
-
-  const smlouvy = await prisma.lease.findMany({
-    where: { advanceChanges: { some: {} } },
-    select: { id: true, utilitiesMonthly: true, advanceChanges: true },
-  });
   for (const l of smlouvy) {
     const z = platnyKDatu(l.advanceChanges, dnes);
     if (z && z.amount !== l.utilitiesMonthly) {
-      await prisma.lease.update({ where: { id: l.id }, data: { utilitiesMonthly: z.amount } });
+      zapisy.push(prisma.lease.update({ where: { id: l.id }, data: { utilitiesMonthly: z.amount } }));
     }
   }
+  await Promise.all(zapisy);
 }

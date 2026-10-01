@@ -7,20 +7,26 @@ import { VYCHOZI_DRUHY, type TypySluzeb } from "./categories";
  * nic nerozbije.
  */
 export async function nactiTypySluzeb(): Promise<TypySluzeb> {
-  if ((await prisma.serviceType.count()) === 0) {
+  // Dva dotazy najednou; prazdna tabulka se pozna z vysledku, ne z extra dotazu
+  let [radky, pouzite] = await Promise.all([
+    prisma.serviceType.findMany({ orderBy: [{ sort: "asc" }, { name: "asc" }] }),
+    prisma.service.findMany({ distinct: ["type"], select: { type: true } }),
+  ]);
+
+  if (radky.length === 0) {
     await prisma.serviceType.createMany({
       data: Object.entries(VYCHOZI_DRUHY).map(([key, d], i) => ({
         key, name: d.name, icon: d.icon, chargedByDefault: d.chargedByDefault, sort: i,
       })),
       skipDuplicates: true,
     });
+    radky = await prisma.serviceType.findMany({ orderBy: [{ sort: "asc" }, { name: "asc" }] });
   }
-  const radky = await prisma.serviceType.findMany({ orderBy: [{ sort: "asc" }, { name: "asc" }] });
+
   const typy: TypySluzeb = Object.fromEntries(
     radky.map((r) => [r.key, { name: r.name, icon: r.icon, chargedByDefault: r.chargedByDefault }]),
   );
   // Sluzba s druhem, ktery uz v tabulce neni, se porad musi dat vybrat a pojmenovat
-  const pouzite = await prisma.service.findMany({ distinct: ["type"], select: { type: true } });
   for (const { type } of pouzite) {
     if (!typy[type]) typy[type] = VYCHOZI_DRUHY[type] ?? { name: type, icon: "tri", chargedByDefault: false };
   }

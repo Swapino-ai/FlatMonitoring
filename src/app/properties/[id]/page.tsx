@@ -45,19 +45,56 @@ export const dynamic = "force-dynamic";
 export default async function PropertyDetail({ params }: { params: Promise<{ id: string }> }) {
   const user = await page();
   const { id } = await params;
-  await srovnejPlatnost();
-  const typy = await nactiTypySluzeb();
-  const property = await loadProperty(id);
+  const jeMajitel = user.role === "OWNER";
+
+  // Vsechny dotazy jsou na sobe nezavisle (klicem je id z adresy), takze bezi najednou.
+  // Predtim sly jeden za druhym — kazdy pridaval sitovou odezvu k databazi.
+  const [
+    , typy, property, pohled, strany, diskPripojen, katastr, nejnovejsiNajem,
+    zmenyNakladu, zmenyZaloh, vyuctovaniDb, dokumentyDb, vydanaDb, dokumentyVydanych,
+    najemciVsi, dokumentySmluv, uzivatele, stavVyuctovani,
+  ] = await Promise.all([
+    srovnejPlatnost(),
+    nactiTypySluzeb(),
+    loadProperty(id),
+    aktualniPohled(),
+    nactiStrany(),
+    prisma.googleConnection.count().then((n) => n > 0),
+    // Katastr se nacita zvlast — v prehledech portfolia by jen zdrzoval
+    prisma.cadastreRecord.findUnique({ where: { propertyId: id } }),
+    // Nejnovejsi odhad najmu — patri nahoru vedle hodnoty, ne az pod finance
+    prisma.rentEstimate.findFirst({ where: { propertyId: id }, orderBy: { date: "desc" } }),
+    // Zalohy najemce proti nakladum na sluzby, i s historii
+    prisma.serviceCostChange.findMany({ where: { service: { propertyId: id } }, orderBy: { validFrom: "asc" } }),
+    prisma.leaseAdvanceChange.findMany({ where: { lease: { propertyId: id } }, orderBy: { validFrom: "asc" } }),
+    // Vyuctovani od dodavatelu s odecty; obdobi jsou dny bez casu
+    prisma.serviceSettlement.findMany({
+      where: { service: { propertyId: id } }, include: { readings: true }, orderBy: { periodFrom: "asc" },
+    }),
+    // Soubory na Google Disku: k vyuctovanim sluzeb, k vydanym vyuctovanim a ke smlouvam
+    prisma.dokument.findMany({ where: { propertyId: id, settlementId: { not: null } }, orderBy: { createdAt: "desc" } }),
+    // Vyuctovani vydana najemcum — jen pro majitele (obsahuje cisla uctu)
+    jeMajitel ? prisma.tenantStatement.findMany({ where: { propertyId: id }, orderBy: { issuedAt: "desc" } }) : Promise.resolve([]),
+    jeMajitel
+      ? prisma.dokument.findMany({ where: { propertyId: id, statementId: { not: null } }, orderBy: { createdAt: "desc" } })
+      : Promise.resolve([]),
+    jeMajitel ? prisma.tenant.findMany({ orderBy: { cislo: "asc" } }) : Promise.resolve([]),
+    prisma.dokument.findMany({
+      where: { propertyId: id, leaseId: { not: null }, kategorie: { in: ["NAJEMNI_SMLOUVA", "PREDAVACI_PROTOKOL"] } },
+      orderBy: { createdAt: "desc" },
+    }),
+    jeMajitel ? prisma.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }) : Promise.resolve([]),
+    // Posledni vyuctovani platne smlouvy (odkdy se scita zamerny rozdil zaloh)
+    prisma.tenantStatement.findMany({
+      where: { propertyId: id, status: { not: "STORNO" } }, select: { leaseId: true, periodTo: true },
+    }),
+  ]);
   if (!property) notFound();
 
-  const pohled = await aktualniPohled();
   const podil = nasobitel(pohled, property.owners, user.id);
   const a = analyzeProperty(property, new Date(), podil);
   const year = new Date().getFullYear();
 
-  const uzivatele = user.role === "OWNER"
-    ? await prisma.user.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, email: true } })
-    : [];
   const mujPodil = podilUzivatele(property.owners, user.id);
 
   const activeLoans = property.loans.filter((l) => l.isActive);
@@ -73,32 +110,12 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     startYear: property.depreciationStart ?? new Date(property.purchaseDate).getFullYear(),
   });
 
-  // Katastr se nacita zvlast — v prehledech portfolia by jen zdrzoval
-  const katastr = await prisma.cadastreRecord.findUnique({ where: { propertyId: property.id } });
-
-  // Nejnovejsi odhad najmu — patri nahoru vedle hodnoty, ne az pod finance
-  const nejnovejsiNajem = await prisma.rentEstimate.findFirst({
-    where: { propertyId: property.id },
-    orderBy: { date: "desc" },
-  });
-
-  // Zalohy najemce proti nakladum na preuctovane sluzby, i s historii:
-  // ceny a zalohy se v case meni a minulost se pri uprave neprepisuje.
-  const [zmenyNakladu, zmenyZaloh] = await Promise.all([
-    prisma.serviceCostChange.findMany({ where: { service: { propertyId: property.id } }, orderBy: { validFrom: "asc" } }),
-    prisma.leaseAdvanceChange.findMany({ where: { lease: { propertyId: property.id } }, orderBy: { validFrom: "asc" } }),
-  ]);
+  // Ceny a zalohy se v case meni a minulost se pri uprave neprepisuje.
   const historieNakladu: Record<string, typeof zmenyNakladu> = {};
   for (const z of zmenyNakladu) (historieNakladu[z.serviceId] ??= []).push(z);
   const historieZaloh: Record<string, typeof zmenyZaloh> = {};
   for (const z of zmenyZaloh) (historieZaloh[z.leaseId] ??= []).push(z);
 
-  // Vyuctovani od dodavatelu s odecty; obdobi jsou dny bez casu
-  const vyuctovaniDb = await prisma.serviceSettlement.findMany({
-    where: { service: { propertyId: property.id } },
-    include: { readings: true },
-    orderBy: { periodFrom: "asc" },
-  });
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   const vyuctovani: VyuctovaniRadek[] = vyuctovaniDb.map((v) => ({
     id: v.id, serviceId: v.serviceId, od: iso(v.periodFrom), do: iso(v.periodTo),
@@ -108,24 +125,9 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     odecty: Object.fromEntries(v.readings.map((o) => [o.leaseId, o.consumption])),
     cisloFaktury: v.invoiceNo, poznamka: v.notes,
   }));
-  // Soubory k vyuctovanim (na Google Disku) podle id vyuctovani
-  const diskPripojen = (await prisma.googleConnection.count()) > 0;
-  const dokumentyDb = vyuctovani.length
-    ? await prisma.dokument.findMany({
-      where: { settlementId: { in: vyuctovani.map((v) => v.id) } }, orderBy: { createdAt: "desc" },
-    })
-    : [];
   const dokumentyVyuctovani: Record<string, { id: string; name: string; mime: string; size: number; kategorie: string; rok: number | null; note: string | null; createdAt: Date }[]> = {};
   for (const d of dokumentyDb) (dokumentyVyuctovani[d.settlementId!] ??= []).push(d);
 
-  // Vyuctovani vydana najemcum (jen pro majitele — obsahuje cisla uctu)
-  const jeMajitel = user.role === "OWNER";
-  const vydanaDb = jeMajitel
-    ? await prisma.tenantStatement.findMany({ where: { propertyId: property.id }, orderBy: { issuedAt: "desc" } })
-    : [];
-  const dokumentyVydanych = vydanaDb.length
-    ? await prisma.dokument.findMany({ where: { statementId: { in: vydanaDb.map((x) => x.id) } }, orderBy: { createdAt: "desc" } })
-    : [];
   const vydana: VydanoRadek[] = vydanaDb.map((x) => ({
     id: x.id, cislo: x.cislo, leaseId: x.leaseId, tenantId: x.tenantId,
     od: iso(x.periodFrom), do: iso(x.periodTo), result: x.result, status: x.status as VydanoRadek["status"],
@@ -135,13 +137,10 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     snapshot: x.snapshot as unknown as SnapshotVyuctovani,
     dokumenty: dokumentyVydanych.filter((d) => d.statementId === x.id),
   }));
-  const najemciDb = jeMajitel
-    ? await prisma.tenant.findMany({ where: { id: { in: property.leases.map((l) => l.tenantId).filter((t): t is string => !!t) } } })
-    : [];
+  const najemciDb = najemciVsi;
   // Pronajimatel na dokladech: provozovatel nemovitosti (bez nej vlastnik s nejvetsim podilem)
   const pronajimatelVyuct: SnapshotVyuctovani["pronajimatel"] = pronajimatelNemovitosti(property);
   // Na smlouve jde vybrat jineho pronajimatele (uzivatele aplikace nebo provozovatele)
-  const strany = await nactiStrany();
   const pronajimatelPodleSmlouvy: Record<string, SnapshotVyuctovani["pronajimatel"]> = Object.fromEntries(
     property.leases.map((l) => [l.id, pronajimatelZRef(l.landlordRef, strany, pronajimatelVyuct)]),
   );
@@ -152,12 +151,10 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     ]
     : [];
   // Nájemci z databáze k výběru ve formuláři smlouvy (jen majitel; obsahují kontakty a účty)
-  const najemciVyber = jeMajitel
-    ? (await prisma.tenant.findMany({ orderBy: { cislo: "asc" } })).map((t) => ({
-      id: t.id, cislo: cisloNajemce(t.cislo), name: t.name, email: t.email, phone: t.phone,
-      street: t.street, city: t.city, zip: t.zip, account: t.account,
-    }))
-    : [];
+  const najemciVyber = najemciVsi.map((t) => ({
+    id: t.id, cislo: cisloNajemce(t.cislo), name: t.name, email: t.email, phone: t.phone,
+    street: t.street, city: t.city, zip: t.zip, account: t.account,
+  }));
   const najmyProNajemce: NajemceNajem[] = property.leases.map((n) => {
     const t = najemciDb.find((x) => x.id === n.tenantId);
     return {
@@ -173,12 +170,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   });
 
   // Soubory ke smlouvam (sken smlouvy, predavaci protokol) na Google Disku
-  const dokumentySmluv = property.leases.length
-    ? await prisma.dokument.findMany({
-      where: { leaseId: { in: property.leases.map((l) => l.id) }, kategorie: { in: ["NAJEMNI_SMLOUVA", "PREDAVACI_PROTOKOL"] } },
-      orderBy: { createdAt: "desc" },
-    })
-    : [];
   const dokumentyPodleSmlouvy: Record<string, typeof dokumentySmluv> = {};
   for (const d of dokumentySmluv) (dokumentyPodleSmlouvy[d.leaseId!] ??= []).push(d);
 
@@ -205,12 +196,10 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
 
   // Zamerny rozdil zaloh se scita od posledniho vydaneho vyuctovani platne smlouvy
   const platnaSmlouva = property.leases.find((l) => l.isActive);
-  const posledniVyuct = platnaSmlouva
-    ? await prisma.tenantStatement.findFirst({
-      where: { leaseId: platnaSmlouva.id, status: { not: "STORNO" } }, orderBy: { periodTo: "desc" }, select: { periodTo: true },
-    })
+  const posledniKonec = platnaSmlouva
+    ? stavVyuctovani.filter((x) => x.leaseId === platnaSmlouva.id).reduce<Date | null>((a, x) => (!a || x.periodTo > a ? x.periodTo : a), null)
     : null;
-  const odDataRozdilu = posledniVyuct ? new Date(posledniVyuct.periodTo.getTime() + 24 * 3600 * 1000) : null;
+  const odDataRozdilu = posledniKonec ? new Date(posledniKonec.getTime() + 24 * 3600 * 1000) : null;
   const zalohy = porovnejProNemovitost(najmyVstup, sluzbyVstup, new Date(), odDataRozdilu);
   const zalohyNesedi = zalohy != null && zalohy.stav !== "sedi" && zalohy.stav !== "zamerne";
 
