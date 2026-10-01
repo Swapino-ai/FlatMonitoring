@@ -13,12 +13,13 @@ export interface KontextVstup {
   leaseId?: string | null;
   sluzbaId?: string | null;
   settlementId?: string | null;
+  statementId?: string | null;
   rok?: number | null;
 }
 
 export interface KontextRozresen {
   popisky: KontextPopisky;
-  vazby: { propertyId: string | null; tenantId: string | null; leaseId: string | null; serviceId: string | null; settlementId: string | null; rok: number | null };
+  vazby: { propertyId: string | null; tenantId: string | null; leaseId: string | null; serviceId: string | null; settlementId: string | null; statementId: string | null; rok: number | null };
 }
 
 export function zVstupu(o: unknown): KontextVstup | null {
@@ -29,14 +30,14 @@ export function zVstupu(o: unknown): KontextVstup | null {
   const rok = typeof v.rok === "number" ? Math.round(v.rok) : null;
   return {
     kategorie: v.kategorie, propertyId: s(v.propertyId), tenantId: s(v.tenantId), leaseId: s(v.leaseId),
-    sluzbaId: s(v.sluzbaId), settlementId: s(v.settlementId), rok,
+    sluzbaId: s(v.sluzbaId), settlementId: s(v.settlementId), statementId: s(v.statementId), rok,
   };
 }
 
 /** Dohleda nazvy a dopocita, co jde (najemce ze smlouvy, nemovitost ze sluzby). */
 export async function rozresKontext(v: KontextVstup): Promise<KontextRozresen> {
   let { propertyId, tenantId } = v;
-  const { leaseId, sluzbaId, settlementId } = v;
+  const { leaseId, sluzbaId, settlementId, statementId } = v;
 
   const lease = leaseId ? await prisma.lease.findUnique({ where: { id: leaseId }, select: { propertyId: true, tenantId: true } }) : null;
   if (lease) { propertyId ??= lease.propertyId; tenantId ??= lease.tenantId; }
@@ -62,7 +63,7 @@ export async function rozresKontext(v: KontextVstup): Promise<KontextRozresen> {
     vazby: {
       propertyId: nemovitost ? propertyId ?? null : null, tenantId: najemce?.id ?? null,
       leaseId: lease ? leaseId ?? null : null, serviceId: sluzba?.id ?? null,
-      settlementId: settlementId ?? null, rok: v.rok ?? null,
+      settlementId: settlementId ?? null, statementId: statementId ?? null, rok: v.rok ?? null,
     },
   };
 }

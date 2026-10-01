@@ -16,6 +16,7 @@ export interface KontextNahrani {
   leaseId?: string | null;
   sluzbaId?: string | null;
   settlementId?: string | null;
+  statementId?: string | null;
   rok?: number | null;
 }
 

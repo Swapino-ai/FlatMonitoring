@@ -25,6 +25,7 @@ export async function exportujVse(): Promise<Zaloha> {
       serviceCostChange: await prisma.serviceCostChange.findMany(),
       tenant: await prisma.tenant.findMany(),
       dokument: await prisma.dokument.findMany(),
+      tenantStatement: await prisma.tenantStatement.findMany(),
       serviceSettlement: await prisma.serviceSettlement.findMany(),
       settlementReading: await prisma.settlementReading.findMany(),
       valuation: await prisma.valuation.findMany(),
@@ -70,6 +71,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.valuation.deleteMany();
     await tx.propertyOwner.deleteMany();
     await tx.dokument.deleteMany();
+    await tx.tenantStatement.deleteMany();
     await tx.settlementReading.deleteMany();
     await tx.serviceSettlement.deleteMany();
     await tx.serviceCostChange.deleteMany();
@@ -88,7 +90,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       id: String(x.id), email: String(x.email).toLowerCase(), name: String(x.name),
       passwordHash: String(x.passwordHash), role: x.role === "OWNER" ? "OWNER" : "PARTNER",
       createdAt: dPovinne(x.createdAt ?? new Date()),
-      street: x.street ?? null, city: x.city ?? null, zip: x.zip ?? null, phone: x.phone ?? null,
+      street: x.street ?? null, city: x.city ?? null, zip: x.zip ?? null, phone: x.phone ?? null, account: x.account ?? null,
     }));
     obnoveno.user = (await tx.user.createMany({ data: users })).count;
 
@@ -184,10 +186,21 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     }));
     if (zmenyNakladu.length) obnoveno.serviceCostChange = (await tx.serviceCostChange.createMany({ data: zmenyNakladu })).count;
 
+    const vyuctNajemci = (t.tenantStatement as any[] ?? []).map((x) => ({
+      id: String(x.id), cislo: String(x.cislo), vs: String(x.vs), leaseId: s(x.leaseId), tenantId: s(x.tenantId),
+      propertyId: String(x.propertyId), periodFrom: dPovinne(x.periodFrom), periodTo: dPovinne(x.periodTo),
+      result: c(x.result), snapshot: x.snapshot ?? {}, status: String(x.status ?? "VYDANO"),
+      issuedAt: dPovinne(x.issuedAt ?? new Date()), issuedById: s(x.issuedById),
+      sentAt: x.sentAt ? dPovinne(x.sentAt) : null, sentVia: s(x.sentVia), dueDate: x.dueDate ? dPovinne(x.dueDate) : null,
+      settledAt: x.settledAt ? dPovinne(x.settledAt) : null, settledNote: s(x.settledNote),
+      stornoAt: x.stornoAt ? dPovinne(x.stornoAt) : null, stornoReason: s(x.stornoReason), note: s(x.note),
+    }));
+    if (vyuctNajemci.length) obnoveno.tenantStatement = (await tx.tenantStatement.createMany({ data: vyuctNajemci })).count;
+
     const dokumenty = (t.dokument as any[] ?? []).map((x) => ({
       id: String(x.id), driveId: String(x.driveId), name: String(x.name), mime: String(x.mime), size: c(x.size),
       kategorie: String(x.kategorie), propertyId: s(x.propertyId), tenantId: s(x.tenantId), leaseId: s(x.leaseId),
-      serviceId: s(x.serviceId), settlementId: s(x.settlementId), rok: x.rok == null ? null : c(x.rok),
+      serviceId: s(x.serviceId), settlementId: s(x.settlementId), statementId: s(x.statementId), rok: x.rok == null ? null : c(x.rok),
       note: s(x.note), uploadedById: s(x.uploadedById), createdAt: dPovinne(x.createdAt ?? new Date()),
     }));
     if (dokumenty.length) obnoveno.dokument = (await tx.dokument.createMany({ data: dokumenty })).count;

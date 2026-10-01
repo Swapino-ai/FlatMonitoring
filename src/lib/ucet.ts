@@ -42,3 +42,21 @@ export function zkontrolujUcet(vstup: string): VysledekUctu | { ok: true; hodnot
   if (/^0+$/.test(cislo)) return { ok: false, chyba: "Číslo účtu nemůže být samé nuly." };
   return { ok: true, hodnota: `${predcisli ? `${predcisli}-` : ""}${cislo}/${banka}` };
 }
+
+/**
+ * Ceske cislo uctu -> IBAN (CZkk + kod banky + predcisli + cislo, doplneno nulami).
+ * Pro QR platbu. Vrati null, kdyz ucet neni platny; hotove IBAN jen zkontroluje.
+ */
+export function naIban(vstup: string): string | null {
+  const v = zkontrolujUcet(vstup);
+  if (!v.ok || !v.hodnota) return null;
+  if (v.hodnota.startsWith("CZ")) return v.hodnota;
+
+  const m = /^(?:(\d{1,6})-)?(\d{2,10})\/(\d{4})$/.exec(v.hodnota)!;
+  const bban = `${m[3]}${(m[1] ?? "").padStart(6, "0")}${m[2].padStart(10, "0")}`;
+  // Kontrolni cislice: 98 - ((BBAN + "CZ00" jako cisla) mod 97)
+  const cisla = `${bban}123500`; // C=12, Z=35, 00
+  let zbytek = 0;
+  for (const c of cisla) zbytek = (zbytek * 10 + Number(c)) % 97;
+  return `CZ${String(98 - zbytek).padStart(2, "0")}${bban}`;
+}

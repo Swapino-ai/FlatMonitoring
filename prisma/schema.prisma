@@ -30,6 +30,8 @@ model User {
   city         String?
   zip          String?
   phone        String?
+  /// Ucet, kam najemci plati nedoplatek z vyuctovani (kontrolovany tvar)
+  account      String?
 
   podily PropertyOwner[]
 }
@@ -194,6 +196,7 @@ model Lease {
   updatedAt      DateTime             @updatedAt
   advanceChanges LeaseAdvanceChange[]
   readings       SettlementReading[]
+  statements     TenantStatement[]
 }
 
 /// Penezni tok — prijmy i vydaje
@@ -595,6 +598,7 @@ model Dokument {
   leaseId      String?
   serviceId    String?
   settlementId String?
+  statementId  String?
   rok          Int?
   note         String?
   uploadedById String?
@@ -604,4 +608,38 @@ model Dokument {
   @@index([tenantId])
   @@index([leaseId])
   @@index([serviceId])
+}
+
+/// Vyuctovani sluzeb vydane najemci. Cisla jsou zmrazena v `snapshot`: pozdejsi uprava
+/// vyuctovani od dodavatele uz vydany dokument nezmeni. Oprava = storno + nove vyuctovani.
+model TenantStatement {
+  id         String  @id @default(cuid())
+  cislo      String  @unique // VN-2026-0001
+  vs         String // variabilni symbol, jen cislice (20260001)
+  leaseId    String?
+  lease      Lease?  @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  tenantId   String?
+  propertyId String
+
+  periodFrom DateTime
+  periodTo   DateTime
+  /// Zalohy minus naklady: kladne = vratka najemci, zaporne = nedoplatek
+  result     Float
+  snapshot   Json
+
+  status String @default("VYDANO") // VYDANO | ODESLANO | VYPORADANO | STORNO
+
+  issuedAt     DateTime @default(now())
+  issuedById   String?
+  sentAt       DateTime?
+  sentVia      String? // EMAIL | OSOBNE | POSTA | JINAK
+  dueDate      DateTime? // splatnost nedoplatku, resp. termin vraceni preplatku
+  settledAt    DateTime?
+  settledNote  String?
+  stornoAt     DateTime?
+  stornoReason String?
+  note         String?
+
+  @@index([leaseId, periodFrom])
+  @@index([propertyId])
 }

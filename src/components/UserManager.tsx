@@ -9,7 +9,7 @@ import { SmazatTlacitko, UpravaPanel, UpravitTlacitko } from "./form";
 
 interface Row {
   id: string; email: string; name: string; role: string; createdAt: Date;
-  street: string | null; city: string | null; zip: string | null; phone: string | null;
+  street: string | null; city: string | null; zip: string | null; phone: string | null; account: string | null;
 }
 
 /** Jmeno, adresa a telefon — spolecne pro zalozeni i upravu uctu. */
@@ -34,6 +34,12 @@ function KontaktniPole({ u, prefix }: { u?: Row; prefix: string }) {
       <div>
         <label className="label mb-1.5 block" htmlFor={`${prefix}-phone`}>Telefon</label>
         <input id={`${prefix}-phone`} name="phone" className="input" defaultValue={u?.phone ?? ""} />
+      </div>
+      <div>
+        <label className="label mb-1.5 block" htmlFor={`${prefix}-account`}>Číslo účtu</label>
+        <input id={`${prefix}-account`} name="account" className="input" defaultValue={u?.account ?? ""}
+          placeholder="123456789/0800" autoComplete="off" />
+        <p className="mt-1 text-xs text-ink-muted">Sem nájemci platí nedoplatky z vyúčtování (QR platba).</p>
       </div>
     </>
   );

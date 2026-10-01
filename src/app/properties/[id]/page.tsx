@@ -24,7 +24,10 @@ import { KatastrKarta, type JednotkaVolba } from "@/components/KatastrKarta";
 import { UrcitPolohu } from "@/components/UrcitPolohu";
 import { ZalohyVCase } from "@/components/ZalohyVCase";
 import { casovaOsa, porovnejProNemovitost, type NajemVstup, type SluzbaVstup } from "@/lib/zalohy";
-import { VyuctovaniNajemce, VyuctovaniSluzeb, type NajemRadek, type VyuctovaniRadek } from "@/components/Vyuctovani";
+import { VyuctovaniSluzeb, type NajemRadek, type VyuctovaniRadek } from "@/components/Vyuctovani";
+import { VyuctovaniNajemceKarta, type NajemceNajem, type VydanoRadek } from "@/components/VyuctovaniNajemceKarta";
+import { cisloNajemce } from "@/lib/najemci";
+import type { SnapshotVyuctovani } from "@/lib/vyuctovaniVydane";
 import type { SluzbaVyuctovani } from "@/lib/vyuctovani";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
@@ -112,6 +115,45 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     : [];
   const dokumentyVyuctovani: Record<string, { id: string; name: string; mime: string; size: number; kategorie: string; rok: number | null; note: string | null; createdAt: Date }[]> = {};
   for (const d of dokumentyDb) (dokumentyVyuctovani[d.settlementId!] ??= []).push(d);
+
+  // Vyuctovani vydana najemcum (jen pro majitele — obsahuje cisla uctu)
+  const jeMajitel = user.role === "OWNER";
+  const vydanaDb = jeMajitel
+    ? await prisma.tenantStatement.findMany({ where: { propertyId: property.id }, orderBy: { issuedAt: "desc" } })
+    : [];
+  const dokumentyVydanych = vydanaDb.length
+    ? await prisma.dokument.findMany({ where: { statementId: { in: vydanaDb.map((x) => x.id) } }, orderBy: { createdAt: "desc" } })
+    : [];
+  const vydana: VydanoRadek[] = vydanaDb.map((x) => ({
+    id: x.id, cislo: x.cislo, leaseId: x.leaseId, tenantId: x.tenantId,
+    od: iso(x.periodFrom), do: iso(x.periodTo), result: x.result, status: x.status as VydanoRadek["status"],
+    issuedAt: iso(x.issuedAt), sentAt: x.sentAt ? iso(x.sentAt) : null, sentVia: x.sentVia,
+    dueDate: x.dueDate ? iso(x.dueDate) : null, settledAt: x.settledAt ? iso(x.settledAt) : null,
+    settledNote: x.settledNote, stornoReason: x.stornoReason,
+    snapshot: x.snapshot as unknown as SnapshotVyuctovani,
+    dokumenty: dokumentyVydanych.filter((d) => d.statementId === x.id),
+  }));
+  const najemciDb = jeMajitel
+    ? await prisma.tenant.findMany({ where: { id: { in: property.leases.map((l) => l.tenantId).filter((t): t is string => !!t) } } })
+    : [];
+  const vlastnikVyuct = property.owners[0]?.user ?? null;
+  const pronajimatelVyuct: SnapshotVyuctovani["pronajimatel"] = vlastnikVyuct ? {
+    name: vlastnikVyuct.name,
+    adresa: [vlastnikVyuct.street, [vlastnikVyuct.zip, vlastnikVyuct.city].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+    ucet: vlastnikVyuct.account,
+  } : null;
+  const najmyProNajemce: NajemceNajem[] = property.leases.map((n) => {
+    const t = najemciDb.find((x) => x.id === n.tenantId);
+    return {
+      id: n.id, nazev: t?.name ?? n.tenantName, od: iso(new Date(n.startDate)), do: n.endDate ? iso(new Date(n.endDate)) : null,
+      utilitiesMonthly: n.utilitiesMonthly,
+      historieZaloh: (historieZaloh[n.id] ?? []).map((z) => ({ validFrom: z.validFrom, amount: z.amount })),
+      tenantId: n.tenantId, cislo: t ? cisloNajemce(t.cislo) : null,
+      email: t?.email ?? n.tenantEmail, phone: t?.phone ?? n.tenantPhone,
+      adresa: [t?.street ?? n.tenantStreet, [t?.zip ?? n.tenantZip, t?.city ?? n.tenantCity].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+      ucet: t?.account ?? n.tenantAccount,
+    };
+  });
 
   const najmyVyuctovani: NajemRadek[] = property.leases.map((n) => ({
     id: n.id, nazev: n.tenantName, od: iso(new Date(n.startDate)), do: n.endDate ? iso(new Date(n.endDate)) : null,
@@ -437,10 +479,15 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
               <VyuctovaniSluzeb typy={typy} dokumenty={dokumentyVyuctovani} diskPripojen={diskPripojen} services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant }))}
                 leases={najmyVyuctovani} vyuctovani={vyuctovani} canEdit={user.role === "OWNER"} />
             </SbalitelnaKarta>
-            <SbalitelnaKarta klic="vyuctovani-najemce" title="Vyúčtování pro nájemce" vychoziSbalena>
-              <VyuctovaniNajemce nemovitost={property.name} adresaNemovitosti={`${property.street}, ${property.zip} ${property.city}`}
-                leases={najmyVyuctovani} services={sluzbyVyuctovani} />
-            </SbalitelnaKarta>
+            {jeMajitel && (
+              <SbalitelnaKarta klic="vyuctovani-najemce" title="Vyúčtování pro nájemce"
+                shrnuti={vydana.length ? `${vydana.length} vydaných` : undefined}>
+                <VyuctovaniNajemceKarta
+                  nemovitost={{ nazev: property.name, adresa: `${property.street}, ${property.zip} ${property.city}` }}
+                  pronajimatel={pronajimatelVyuct} najmy={najmyProNajemce} sluzby={sluzbyVyuctovani}
+                  vydana={vydana} canEdit diskPripojen={diskPripojen} />
+              </SbalitelnaKarta>
+            )}
             </>),
           },
           {

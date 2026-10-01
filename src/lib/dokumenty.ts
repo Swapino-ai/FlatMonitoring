@@ -10,6 +10,7 @@
  *   │     ├─ 01 Nabyti a katastr/           kupni smlouva, list vlastnictvi
  *   │     ├─ 02 Najemni smlouvy/
  *   │     │  └─ <N-0001 Jmeno najemce>/     smlouvy, predavaci protokoly
+ *   │     │     └─ Vyuctovani/              vyuctovani vydana najemci (PDF)
  *   │     ├─ 03 Sluzby/
  *   │     │  └─ <Druh sluzby>/              smlouvy s dodavateli
  *   │     ├─ 04 Vyuctovani/
@@ -27,7 +28,7 @@
 
 export type KategorieKlic =
   | "KUPNI_SMLOUVA" | "KATASTR" | "NAJEMNI_SMLOUVA" | "PREDAVACI_PROTOKOL"
-  | "SLUZBA_SMLOUVA" | "SLUZBA_VYUCTOVANI" | "UVER" | "DANE" | "FOTKY"
+  | "SLUZBA_SMLOUVA" | "SLUZBA_VYUCTOVANI" | "VYUCTOVANI_NAJEMCE" | "UVER" | "DANE" | "FOTKY"
   | "NAJEMCE_DOKLAD" | "OSTATNI";
 
 type Vyzaduje = "nemovitost" | "najemce" | "sluzba" | "rok";
@@ -39,7 +40,7 @@ interface Kategorie {
   klic: string;
   vyzaduje: Vyzaduje[];
   /** Podslozky navic (pod slozkou kategorie) v tomto poradi. */
-  podslozky: ("najemce" | "rok" | "sluzba")[];
+  podslozky: ("najemce" | "rok" | "sluzba" | "vyuct")[];
 }
 
 export const KATEGORIE: Record<KategorieKlic, Kategorie> = {
@@ -48,6 +49,7 @@ export const KATEGORIE: Record<KategorieKlic, Kategorie> = {
   NAJEMNI_SMLOUVA:    { nazev: "Nájemní smlouva",         slozka: "02 Nájemní smlouvy",   klic: "C:NAJEM",   vyzaduje: ["nemovitost", "najemce"], podslozky: ["najemce"] },
   PREDAVACI_PROTOKOL: { nazev: "Předávací protokol",      slozka: "02 Nájemní smlouvy",   klic: "C:NAJEM",   vyzaduje: ["nemovitost", "najemce"], podslozky: ["najemce"] },
   SLUZBA_SMLOUVA:     { nazev: "Smlouva o službě",        slozka: "03 Služby",            klic: "C:SLUZBY",  vyzaduje: ["nemovitost", "sluzba"], podslozky: ["sluzba"] },
+  VYUCTOVANI_NAJEMCE: { nazev: "Vyúčtování nájemci",    slozka: "02 Nájemní smlouvy",   klic: "C:NAJEM",   vyzaduje: ["nemovitost", "najemce"], podslozky: ["najemce", "vyuct"] },
   SLUZBA_VYUCTOVANI:  { nazev: "Vyúčtování služby",       slozka: "04 Vyúčtování",        klic: "C:VYUCT",   vyzaduje: ["nemovitost", "sluzba", "rok"], podslozky: ["rok", "sluzba"] },
   UVER:               { nazev: "Úvěr a hypotéka",         slozka: "05 Úvěry",             klic: "C:UVER",    vyzaduje: ["nemovitost"], podslozky: [] },
   DANE:               { nazev: "Daně",                    slozka: "06 Daně",              klic: "C:DANE",    vyzaduje: ["nemovitost", "rok"], podslozky: ["rok"] },
@@ -124,6 +126,7 @@ export function cestaSlozek(k: KontextPopisky): SegmentSlozky[] {
   ];
   for (const p of kat.podslozky) {
     if (p === "najemce") cesta.push({ klic: `T:${k.tenantId}`, nazev: bezpecneJmeno(k.tenantPopisek ?? String(k.tenantId)) });
+    if (p === "vyuct") cesta.push({ klic: "V:VYUCT", nazev: "Vyúčtování" });
     if (p === "rok") cesta.push({ klic: `R:${k.rok}`, nazev: String(k.rok) });
     if (p === "sluzba") cesta.push({ klic: `S:${k.sluzbaKlic}`, nazev: bezpecneJmeno(k.sluzbaNazev ?? String(k.sluzbaKlic)) });
   }

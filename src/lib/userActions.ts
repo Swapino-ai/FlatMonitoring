@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "./db";
 import { getSession, hashPassword } from "./auth";
+import { zkontrolujUcet } from "./ucet";
 
 export interface UserFormState {
   error?: string;
@@ -37,6 +38,8 @@ export async function addUser(_prev: UserFormState, formData: FormData): Promise
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   const d = parsed.data;
+  const ucetNovy = zkontrolujUcet(String(formData.get("account") ?? ""));
+  if (!ucetNovy.ok) return { error: `Číslo účtu: ${ucetNovy.chyba}` };
   if (await prisma.user.findUnique({ where: { email: d.email } })) {
     return { error: `Uživatel ${d.email} už existuje.` };
   }
@@ -45,7 +48,7 @@ export async function addUser(_prev: UserFormState, formData: FormData): Promise
     data: {
       email: d.email, name: d.name, role: d.role, passwordHash: await hashPassword(d.password),
       street: dobre(formData.get("street")), city: dobre(formData.get("city")),
-      zip: dobre(formData.get("zip")), phone: dobre(formData.get("phone")),
+      zip: dobre(formData.get("zip")), phone: dobre(formData.get("phone")), account: ucetNovy.hodnota,
     },
   });
 
@@ -100,9 +103,13 @@ export async function updateUser(_prev: UserFormState, formData: FormData): Prom
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Zadej jméno." };
 
+  const ucet = zkontrolujUcet(String(formData.get("account") ?? ""));
+  if (!ucet.ok) return { error: `Číslo účtu: ${ucet.chyba}` };
+
   const user = await prisma.user.update({
     where: { id },
     data: {
+      account: ucet.hodnota,
       name,
       street: dobre(formData.get("street")), city: dobre(formData.get("city")),
       zip: dobre(formData.get("zip")), phone: dobre(formData.get("phone")),

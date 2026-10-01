@@ -15,7 +15,7 @@ export default async function UsersPage() {
     orderBy: [{ role: "asc" }, { createdAt: "asc" }],
     select: {
       id: true, email: true, name: true, role: true, createdAt: true,
-      street: true, city: true, zip: true, phone: true,
+      street: true, city: true, zip: true, phone: true, account: true,
     },
   });
 

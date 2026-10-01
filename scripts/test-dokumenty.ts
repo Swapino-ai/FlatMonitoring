@@ -14,6 +14,8 @@ over("doklad najemce mimo nemovitost", nazvy({ ...zaklad, kategorie: "NAJEMCE_DO
 over("ostatni", nazvy({ kategorie: "OSTATNI" }) === "Ostatní");
 over("kupni smlouva bez najemce", nazvy({ kategorie: "KUPNI_SMLOUVA", propertyId: "p1", propertyNazev: "X" }) === "Nemovitosti/X/01 Nabytí a katastr".replace("Nabytí", "Nabytí"));
 
+over("vyuctovani najemci", nazvy({ ...zaklad, kategorie: "VYUCTOVANI_NAJEMCE" }) === "Nemovitosti/Vinohrady 2+kk/02 Nájemní smlouvy/N-0001 Milena Svobodová/Vyúčtování");
+
 // Chybejici povinne udaje
 over("bez nemovitosti", chybaKontextu({ kategorie: "UVER" }) === "Chybí nemovitost.");
 over("bez roku", chybaKontextu({ kategorie: "DANE", propertyId: "p1" }) === "Chybí rok.");
