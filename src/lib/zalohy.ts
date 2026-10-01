@@ -53,9 +53,12 @@ export interface NajemVstup {
   endDate?: Date | string | null;
   /** Bez historie plati aktualni hodnota po cele obdobi smlouvy. */
   historie?: ZmenaZaloh[];
+  /** Zalohy jsou zamerne jine nez naklady: rozdil se neridi jako chyba, jen se zapocitava. */
+  advanceIntentional?: boolean;
+  advanceNote?: string | null;
 }
 
-export type StavZaloh = "sedi" | "nedoplaci" | "preplaci" | "neoznaceno";
+export type StavZaloh = "sedi" | "nedoplaci" | "preplaci" | "neoznaceno" | "zamerne";
 
 export interface PorovnaniZaloh {
   stav: StavZaloh;
@@ -69,6 +72,8 @@ export interface PorovnaniZaloh {
   /** Ktere sluzby se do nakladu pocitaji, at je videt, z ceho vznikl soucet. */
   polozky: { type: string; provider: string; castka: number }[];
   najemce: string;
+  /** Poznamka k zamerne odlisnym zalohám (proc jsou jine). */
+  poznamka?: string | null;
   /**
    * Odkdy nesedi a kolik uz to stalo. Znamy jen kdyz je k dispozici historie;
    * bez ni se ví jen "ted nesedi", ne odkdy.
@@ -91,6 +96,8 @@ export function porovnejZalohy(
   zalohy: number,
   sluzby: SluzbaVstup[],
   najemce = "",
+  zamerne = false,
+  poznamka: string | null = null,
 ): PorovnaniZaloh | null {
   const polozky = sluzby
     .filter((s) => s.chargedToTenant)
@@ -107,6 +114,8 @@ export function porovnejZalohy(
 
   const tolerance = Math.max(TOLERANCE_KC, (naklady * TOLERANCE_PCT) / 100);
   if (Math.abs(rozdil) <= tolerance) return { ...zaklad, stav: "sedi" };
+  // Zamerny rozdil: stejna cisla, ale neni to chyba — drzi se vedle sebe, co platis ty a co najemce
+  if (zamerne) return { ...zaklad, stav: "zamerne", poznamka };
   return { ...zaklad, stav: rozdil < 0 ? "nedoplaci" : "preplaci" };
 }
 
@@ -119,13 +128,28 @@ export function porovnejProNemovitost(
   najmy: NajemVstup[],
   sluzby: SluzbaVstup[],
   dnes: Date = new Date(),
+  /** Od kdy se scita zamerny rozdil (den po poslednim vyuctovani); bez nej od zacatku smlouvy. */
+  odData: Date | null = null,
 ): PorovnaniZaloh | null {
   const platny = najmy.find((n) => n.isActive);
   if (!platny) return null;
 
   const sluzbyDnes = sluzby.map((s) => sluzbaKDatu(s, dnes));
-  const p = porovnejZalohy(zalohyKDatu(platny, dnes), sluzbyDnes, platny.tenantName);
+  const p = porovnejZalohy(zalohyKDatu(platny, dnes), sluzbyDnes, platny.tenantName, platny.advanceIntentional, platny.advanceNote);
   if (!p || p.stav === "sedi" || !platny.startDate) return p;
+
+  // Zamerny rozdil se neohlasuje, ale kumuluje: kolik se nahromadilo od posledniho vyuctovani
+  if (p.stav === "zamerne") {
+    const osa = casovaOsa(platny, sluzby, dnes);
+    const mesice = (osa?.roky.flatMap((r) => r.mesice) ?? []).filter(
+      (m) => !odData || m.rok * 12 + m.mesic >= odData.getFullYear() * 12 + odData.getMonth() + 1,
+    );
+    if (mesice.length === 0) return p;
+    return {
+      ...p, odKdy: { rok: mesice[0].rok, mesic: mesice[0].mesic }, mesicu: mesice.length,
+      dosudRozdil: mesice.reduce((a, m) => a + m.rozdil, 0),
+    };
+  }
 
   // Kdyz vime, odkdy smlouva bezi, zjisti se i odkdy zalohy nesedi
   const osa = casovaOsa(platny, sluzby, dnes);
@@ -149,7 +173,7 @@ function odKdyText(p: PorovnaniZaloh): string {
 }
 
 export interface Popis {
-  tone: "good" | "warn";
+  tone: "good" | "warn" | "info";
   nadpis: string;
   text: string;
 }
@@ -179,6 +203,23 @@ export function popisPorovnani(p: PorovnaniZaloh): Popis {
           `Nájemce platí ${kc(p.zalohy)} měsíčně, přeúčtované služby stojí ${kc(p.naklady)}. ` +
           `Přeplatek ${kc(p.rozdil)} měsíčně (při zachování ročně ${kc(p.rozdilRocne)}) patří nájemci a vrací se při vyúčtování.` + odKdyText(p),
       };
+    case "zamerne": {
+      const nad = p.rozdil > 0;
+      const kumul = p.mesicu && p.dosudRozdil != null && p.odKdy
+        ? ` Od ${MESICE_2P[p.odKdy.mesic - 1]} ${p.odKdy.rok} (${p.mesicu} ${p.mesicu === 1 ? "měsíc" : p.mesicu < 5 ? "měsíce" : "měsíců"}) ` +
+          `se nahromadilo ${kc(Math.abs(p.dosudRozdil))} ${p.dosudRozdil >= 0 ? "k vrácení při vyúčtování" : "tvého nákladu"}.`
+        : "";
+      return {
+        tone: "info",
+        nadpis: "Zálohy jsou záměrně jiné než náklady",
+        text:
+          `Nájemce platí ${kc(p.zalohy)} měsíčně, ty platíš dodavatelům ${kc(p.naklady)}. ` +
+          (nad
+            ? `Nájemce platí o ${kc(p.rozdil)} víc, rozdíl (ročně ${kc(p.rozdilRocne)}) se vrací při vyúčtování.`
+            : `Doplácíš ${kc(-p.rozdil)} měsíčně (ročně ${kc(-p.rozdilRocne)}), počítá se s tím.`) +
+          kumul + (p.poznamka ? ` Důvod: ${p.poznamka}` : ""),
+      };
+    }
     case "neoznaceno":
       return {
         tone: "warn",
@@ -276,7 +317,7 @@ export function casovaOsa(najem: NajemVstup, sluzby: SluzbaVstup[], dnes: Date =
     if (referencni.getTime() > hranice.getTime()) break;
     if (referencni.getTime() >= zacatek.getTime()) {
       const zalohy = zalohyKDatu(najem, referencni);
-      const p = porovnejZalohy(zalohy, sluzby.map((s) => sluzbaKDatu(s, referencni)));
+      const p = porovnejZalohy(zalohy, sluzby.map((s) => sluzbaKDatu(s, referencni)), "", najem.advanceIntentional);
       if (p) {
         mesice.push({ rok, mesic: mesic + 1, zalohy, naklady: p.naklady, rozdil: p.rozdil, stav: p.stav });
       }
@@ -318,7 +359,7 @@ export function casovaOsa(najem: NajemVstup, sluzby: SluzbaVstup[], dnes: Date =
 export function koncovaSerieNesouladu(osa: OsaNajmu): { odKdy: { rok: number; mesic: number }; mesicu: number; dosudRozdil: number } | null {
   const vse = osa.roky.flatMap((r) => r.mesice);
   const posledni = vse[vse.length - 1];
-  if (!posledni || posledni.stav === "sedi") return null;
+  if (!posledni || posledni.stav === "sedi" || posledni.stav === "zamerne") return null;
 
   let i = vse.length - 1;
   while (i > 0 && vse[i - 1].stav === posledni.stav) i -= 1;

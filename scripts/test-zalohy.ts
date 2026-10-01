@@ -126,6 +126,31 @@ over("ukoncena smlouva nema nedoplatek (v dobe smlouvy vse sedelo)", osaK.celkem
 // Smlouva, ktera jeste nezacala
 over("smlouva v budoucnu → zadna osa", casovaOsa({ ...najem, startDate: "2027-01-01" }, sluzbyZdrazeni, dnes) === null);
 
+// --- Zamerne jine zalohy ---
+{
+  const sl2 = [sl("WATER", 800, true), sl("HEATING", 2300, true)]; // naklady 3100
+  const bezFlagu = porovnejZalohy(4000, sl2);
+  const sFlagem = porovnejZalohy(4000, sl2, "", true, "rezerva");
+  over("bez priznaku je preplatek", bezFlagu?.stav === "preplaci");
+  over("s priznakem je zamerne", sFlagem?.stav === "zamerne" && sFlagem.rozdil === 900 && sFlagem.poznamka === "rezerva", JSON.stringify(sFlagem));
+  over("shoda zustava sedi i se priznakem", porovnejZalohy(3100, sl2, "", true)?.stav === "sedi");
+  over("popis zamerne", popisPorovnani(sFlagem!).tone === "info" && popisPorovnani(sFlagem!).text.includes("Důvod: rezerva"));
+  const nizsi = porovnejZalohy(2500, sl2, "", true);
+  over("zamerne nizsi zaloha", nizsi?.stav === "zamerne" && popisPorovnani(nizsi!).text.includes("Doplácíš"));
+
+  // Pres nemovitost: nehlasi serii, ale scita rozdil
+  const najem = { tenantName: "A", utilitiesMonthly: 4000, isActive: true, startDate: "2026-01-01", advanceIntentional: true };
+  const dnes = new Date("2026-06-20");
+  const p = porovnejProNemovitost([najem], sl2, dnes);
+  over("nemovitost: zamerne", p?.stav === "zamerne", p?.stav);
+  over("nemovitost: scita 6 x 900", p?.mesicu === 6 && Math.round(p?.dosudRozdil ?? 0) === 5400, `${p?.mesicu} ${p?.dosudRozdil}`);
+  const odBrezna = porovnejProNemovitost([najem], sl2, dnes, new Date("2026-04-01"));
+  over("od posledniho vyuctovani", odBrezna?.mesicu === 3 && Math.round(odBrezna?.dosudRozdil ?? 0) === 2700, `${odBrezna?.mesicu} ${odBrezna?.dosudRozdil}`);
+  const osa = casovaOsa(najem, sl2, dnes)!;
+  over("osa nema serii nesouladu", koncovaSerieNesouladu(osa) === null);
+  over("mesice jsou zamerne", osa.roky[0].mesice.every((m) => m.stav === "zamerne"));
+}
+
 console.log(chyb === 0 ? "\nvše v pořádku" : `\n${chyb} chyb`);
 process.exit(chyb === 0 ? 0 : 1);
 export {};

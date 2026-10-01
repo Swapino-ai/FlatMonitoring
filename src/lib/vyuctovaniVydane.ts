@@ -145,12 +145,14 @@ export function sestavSnapshot(a: {
   pronajimatel: SnapshotVyuctovani["pronajimatel"];
   v: VyuctovaniNajemce;
   aktualniZaloha: number;
+  /** Zalohy jsou zamerne jine nez naklady: navrh nove zalohy se nedava. */
+  zamerne?: boolean;
 }): SnapshotVyuctovani {
   const { v } = a;
   return {
     verze: 1, nemovitost: a.nemovitost, najemce: a.najemce, pronajimatel: a.pronajimatel,
     od: v.od, do: v.do, radky: v.radky, naklady: v.naklady, zalohy: v.zalohy, rozdil: v.rozdil,
     nepokryto: nepokrytoZRadku(v.radky), aktualniZaloha: a.aktualniZaloha,
-    doporucenaZaloha: doporucenaZaloha(v.naklady, v.od, v.do, a.aktualniZaloha),
+    doporucenaZaloha: a.zamerne ? null : doporucenaZaloha(v.naklady, v.od, v.do, a.aktualniZaloha),
   };
 }

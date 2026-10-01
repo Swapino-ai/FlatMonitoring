@@ -26,6 +26,7 @@ interface Row {
   tenantId: string | null;
   startDate: Date; endDate: Date | null; rentMonthly: number; utilitiesMonthly: number;
   deposit: number; indexationClause: boolean; paymentDay: number; isActive: boolean;
+  advanceIntentional: boolean; advanceNote: string | null;
 }
 
 export interface ZmenaZalohRadek { id: string; validFrom: Date | string; amount: number }
@@ -135,6 +136,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
                   <Radek t="Od" v={dateCz(l.startDate)} />
                   <Radek t="Do" v={l.endDate ? dateCz(l.endDate) : "na dobu neurčitou"} />
                   <Radek t="Inflační doložka" v={l.indexationClause ? "ano" : "ne"} />
+                  {l.advanceIntentional && <Radek t="Zálohy" v={`záměrně jiné než náklady${l.advanceNote ? ` (${l.advanceNote})` : ""}`} />}
                 </dl>
               </div>
             );
@@ -263,7 +265,9 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
   const doporuceno = Math.round(porovnejZalohy(0, sluzbyDnes)?.naklady ?? 0);
   const [zalohy, setZalohy] = useState(String(r ? r.utilitiesMonthly : doporuceno));
   const cislo = Number(zalohy.replace(/\s/g, "").replace(",", ".")) || 0;
-  const zive = porovnejZalohy(cislo, sluzbyDnes);
+  const [zamerne, setZamerne] = useState(r?.advanceIntentional ?? false);
+  const [poznamkaZaloh, setPoznamkaZaloh] = useState(r?.advanceNote ?? "");
+  const zive = porovnejZalohy(cislo, sluzbyDnes, "", zamerne, poznamkaZaloh.trim() || null);
   const popis = zive ? popisPorovnani(zive) : null;
 
   const [ucet, setUcet] = useState(r?.tenantAccount ?? "");
@@ -332,10 +336,10 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
         {/* Zive srovnani se sluzbami: nesoulad je videt drive, nez se smlouva ulozi */}
         <div className="sm:col-span-2">
           {popis ? (
-            <div className={`rounded-xl px-4 py-3 text-sm ${popis.tone === "good" ? "bg-good/10" : "bg-warn/15"}`} role="status">
+            <div className={`rounded-xl px-4 py-3 text-sm ${popis.tone === "good" ? "bg-good/10" : popis.tone === "info" ? "bg-accent-soft/70" : "bg-warn/15"}`} role="status">
               <div className="flex items-start gap-2.5">
-                <Ikona nazev={popis.tone === "good" ? "ok" : "pozor"}
-                  trida={`mt-0.5 h-4 w-4 ${popis.tone === "good" ? "text-good" : "text-warn"}`} />
+                <Ikona nazev={popis.tone === "good" ? "ok" : popis.tone === "info" ? "najemce" : "pozor"}
+                  trida={`mt-0.5 h-4 w-4 ${popis.tone === "good" ? "text-good" : popis.tone === "info" ? "text-accent" : "text-warn"}`} />
                 <div className="min-w-0">
                   <div className="font-semibold">{popis.nadpis}</div>
                   <p className="mt-0.5 text-ink-secondary">{popis.text}</p>
@@ -349,7 +353,7 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
                       ))}
                     </ul>
                   )}
-                  {zive && zive.polozky.length > 0 && zive.stav !== "sedi" && (
+                  {zive && zive.polozky.length > 0 && zive.stav !== "sedi" && zive.stav !== "zamerne" && (
                     <button type="button" className="btn mt-3"
                       onClick={() => setZalohy(String(Math.round(zive.naklady)))}>
                       Použít {Math.round(zive.naklady).toLocaleString("cs-CZ")}&nbsp;Kč podle služeb
@@ -363,6 +367,20 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
               Žádná služba se zatím nepřeúčtovává nájemci, takže zálohy nemají s čím porovnat. Přeúčtované
               služby označíš v jejich formuláři.
             </p>
+          )}
+        </div>
+
+        {/* Zamerne jina zaloha: rozdil proti nakladum je plan, ne chyba */}
+        <div className="space-y-2 sm:col-span-2">
+          <Zaskrtavatko name="advanceIntentional" label="Zálohy jsou záměrně jiné než náklady na služby"
+            checked={zamerne} onChange={setZamerne}
+            hint="Aplikace pak rozdíl nehlásí jako chybu. Ukazuje, co platíš dodavatelům a co platí nájemce, a kolik se rozdílu nahromadilo." />
+          {zamerne && (
+            <div>
+              <label className="label mb-1.5 block" htmlFor="advanceNote">Důvod rozdílu</label>
+              <input id="advanceNote" name="advanceNote" className="input" value={poznamkaZaloh}
+                onChange={(e) => setPoznamkaZaloh(e.target.value)} placeholder="nepovinné, např. rezerva proti nedoplatku" />
+            </div>
           )}
         </div>
 

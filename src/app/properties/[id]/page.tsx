@@ -175,8 +175,16 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     historie: (historieZaloh[n.id] ?? []).map((z) => ({ validFrom: z.validFrom, amount: z.amount })),
   }));
 
-  const zalohy = porovnejProNemovitost(najmyVstup, sluzbyVstup);
-  const zalohyNesedi = zalohy != null && zalohy.stav !== "sedi";
+  // Zamerny rozdil zaloh se scita od posledniho vydaneho vyuctovani platne smlouvy
+  const platnaSmlouva = property.leases.find((l) => l.isActive);
+  const posledniVyuct = platnaSmlouva
+    ? await prisma.tenantStatement.findFirst({
+      where: { leaseId: platnaSmlouva.id, status: { not: "STORNO" } }, orderBy: { periodTo: "desc" }, select: { periodTo: true },
+    })
+    : null;
+  const odDataRozdilu = posledniVyuct ? new Date(posledniVyuct.periodTo.getTime() + 24 * 3600 * 1000) : null;
+  const zalohy = porovnejProNemovitost(najmyVstup, sluzbyVstup, new Date(), odDataRozdilu);
+  const zalohyNesedi = zalohy != null && zalohy.stav !== "sedi" && zalohy.stav !== "zamerne";
 
   // Casova osa za kazdou smlouvu, i ukoncenou; platna prvni, pak od nejnovejsi
   const osy = najmyVstup
@@ -211,6 +219,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     kontroly.push(
       zalohy.stav === "sedi"
         ? { nazev: "Zálohy nájemce", stav: "dobra", detail: `sedí se službami, ${kc(zalohy.zalohy)} měsíčně` }
+        : zalohy.stav === "zamerne"
+          ? { nazev: "Zálohy nájemce", stav: "dobra", detail: `záměrně ${zalohy.rozdil > 0 ? "nad" : "pod"} náklady o ${kc(Math.abs(zalohy.rozdil))} měsíčně` }
         : zalohy.stav === "nedoplaci"
           ? { nazev: "Zálohy nájemce", stav: "pozor", detail: `nekryjí služby, doplácíš ${kc(-zalohy.rozdil)} měsíčně` }
           : zalohy.stav === "preplaci"

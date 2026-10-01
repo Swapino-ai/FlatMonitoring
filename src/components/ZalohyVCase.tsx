@@ -17,6 +17,7 @@ const BARVA: Record<MesicPorovnani["stav"], string> = {
   nedoplaci: "bg-warn",
   preplaci: "bg-accent/70",
   neoznaceno: "bg-ink-muted/40",
+  zamerne: "bg-accent/35",
 };
 
 const POPIS: Record<MesicPorovnani["stav"], string> = {
@@ -24,10 +25,15 @@ const POPIS: Record<MesicPorovnani["stav"], string> = {
   nedoplaci: "nedoplatek",
   preplaci: "přeplatek",
   neoznaceno: "nelze ověřit",
+  zamerne: "záměrně jiné",
 };
 
 function vysledekRoku(r: RokPorovnani): { text: string; tone: "good" | "warn" | "neutral" } {
   const tolerance = Math.max(TOLERANCE_KC, (r.naklady * TOLERANCE_PCT) / 100);
+  // Zamerne odlisne zalohy: rozdil je plan, ne chyba — ukaze se jen jako cislo
+  if (r.mesice.some((m) => m.stav === "zamerne") && r.mesice.every((m) => m.stav === "zamerne" || m.stav === "sedi")) {
+    return { text: `záměrně ${r.rozdil >= 0 ? "+" : "−"}${czk(Math.abs(r.rozdil))}`, tone: "neutral" };
+  }
   if (Math.abs(r.rozdil) <= tolerance) return { text: "sedí", tone: "good" };
   return r.rozdil < 0
     ? { text: `nedoplatek ${czk(-r.rozdil)}`, tone: "warn" }

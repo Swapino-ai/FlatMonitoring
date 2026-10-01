@@ -63,6 +63,7 @@ async function varovaniZaloh(propertyId: string): Promise<string | undefined> {
       where: { propertyId },
       select: {
         tenantName: true, utilitiesMonthly: true, isActive: true, startDate: true, endDate: true,
+        advanceIntentional: true, advanceNote: true,
         advanceChanges: { select: { validFrom: true, amount: true } },
       },
     }),
@@ -78,7 +79,7 @@ async function varovaniZaloh(propertyId: string): Promise<string | undefined> {
     najmy.map(({ advanceChanges, ...n }) => ({ ...n, historie: advanceChanges })),
     sluzby.map(({ costChanges, ...s }) => ({ ...s, historie: costChanges })),
   );
-  if (!p || p.stav === "sedi") return undefined;
+  if (!p || p.stav === "sedi" || p.stav === "zamerne") return undefined;
   return popisPorovnani(p).text;
 }
 
@@ -185,6 +186,8 @@ const najemSchema = z.object({
   tenantZip: textNeboNic,
   tenantAccount: textNeboNic,
   tenantId: textNeboNic,
+  advanceIntentional: z.preprocess((v) => v === "on" || v === true, z.boolean()),
+  advanceNote: textNeboNic,
   /** Od kdy plati nova vyse zaloh; potreba jen pri zmene zaloh u existujici smlouvy. */
   advanceValidFrom: datumNeboNic,
   startDate: z.string().min(1, "Zadej začátek nájmu."),
@@ -235,6 +238,8 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
     deposit: d.deposit,
     paymentDay: Math.round(d.paymentDay),
     indexationClause: d.indexationClause,
+    advanceIntentional: d.advanceIntentional,
+    advanceNote: d.advanceIntentional ? d.advanceNote : null,
     isActive: d.isActive,
     notes: d.notes,
   };

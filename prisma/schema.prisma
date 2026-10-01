@@ -187,6 +187,11 @@ model Lease {
   deposit          Float @default(0) // kauce
 
   indexationClause Boolean @default(false) // inflacni dolozka
+
+  // Zalohy najemce jsou zamerne jine nez naklady sluzeb (rezerva, zamerne nizsi zaloha...).
+  // Aplikace pak rozdil nehlasi jako chybu, ale zapocitava ho a ukazuje.
+  advanceIntentional Boolean @default(false)
+  advanceNote        String?
   paymentDay       Int     @default(15)
 
   isActive Boolean @default(true)
