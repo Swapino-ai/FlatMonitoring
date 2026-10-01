@@ -24,3 +24,21 @@ export function pronajimatelNemovitosti(p: {
   const v = p.owners[0]?.user;
   return v ? { name: v.name, adresa: adresa(v), ucet: v.account } : null;
 }
+
+/** Strany, ktere mohou byt na smlouve jako pronajimatel: uzivatele aplikace a provozovatele. */
+export interface StranySmlouvy {
+  users: Record<string, Pronajimatel>;
+  operators: Record<string, Pronajimatel>;
+}
+
+/**
+ * Pronajimatel konkretni smlouvy: vybrany uzivatel ci provozovatel ("u:id" / "o:id");
+ * bez vyberu (nebo kdyz uz neexistuje) vychozi — provozovatel nemovitosti.
+ */
+export function pronajimatelZRef(
+  ref: string | null | undefined, strany: StranySmlouvy, vychozi: Pronajimatel | null,
+): Pronajimatel | null {
+  if (ref?.startsWith("u:")) return strany.users[ref.slice(2)] ?? vychozi;
+  if (ref?.startsWith("o:")) return strany.operators[ref.slice(2)] ?? vychozi;
+  return vychozi;
+}

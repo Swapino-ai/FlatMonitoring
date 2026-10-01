@@ -158,6 +158,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       id: String(x.id), propertyId: String(x.propertyId), tenantName: String(x.tenantName),
       tenantEmail: s(x.tenantEmail), tenantPhone: s(x.tenantPhone),
       tenantStreet: s(x.tenantStreet), tenantCity: s(x.tenantCity), tenantZip: s(x.tenantZip), tenantAccount: s(x.tenantAccount), tenantId: s(x.tenantId),
+      landlordRef: s(x.landlordRef),
       advanceIntentional: x.advanceIntentional === true, advanceNote: s(x.advanceNote),
       advanceItems: x.advanceItems ?? undefined,
       startDate: dPovinne(x.startDate), endDate: d(x.endDate),

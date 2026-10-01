@@ -25,6 +25,8 @@ export interface NajemceNajem extends NajemVstup {
   phone: string | null;
   adresa: string;
   ucet: string | null;
+  /** Pronajimatel teto smlouvy (vybrany na smlouve, jinak provozovatel nemovitosti). */
+  pronajimatel: SnapshotVyuctovani["pronajimatel"];
 }
 
 export interface VydanoRadek {
@@ -57,9 +59,8 @@ const TON: Record<StavVyuctovani, "neutral" | "good" | "warn" | "bad"> = {
  * Vyuctovani pro najemce: priprava za zvolene obdobi (s nahledem), vydani dokladu
  * a sprava vydanych — odeslani, vyporadani a storno.
  */
-export function VyuctovaniNajemceKarta({ nemovitost, pronajimatel, najmy, sluzby, vydana, canEdit, diskPripojen }: {
+export function VyuctovaniNajemceKarta({ nemovitost, najmy, sluzby, vydana, canEdit, diskPripojen }: {
   nemovitost: { nazev: string; adresa: string };
-  pronajimatel: SnapshotVyuctovani["pronajimatel"];
   najmy: NajemceNajem[];
   sluzby: SluzbaVyuctovani[];
   vydana: VydanoRadek[];
@@ -94,7 +95,7 @@ export function VyuctovaniNajemceKarta({ nemovitost, pronajimatel, najmy, sluzby
     ? sestavSnapshot({
       nemovitost,
       najemce: { cislo: najem.cislo, name: najem.nazev, adresa: najem.adresa, email: najem.email, phone: najem.phone, ucet: najem.ucet },
-      pronajimatel, v: platne, aktualniZaloha: najem.utilitiesMonthly,
+      pronajimatel: najem.pronajimatel, v: platne, aktualniZaloha: najem.utilitiesMonthly,
     })
     : null;
 

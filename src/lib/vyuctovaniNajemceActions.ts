@@ -69,7 +69,7 @@ export async function vydejVyuctovani(_prev: VydaniState, formData: FormData): P
 
   const info = vstupy.najemceInfo(vstupy.smlouvy.find((s) => s.id === leaseId)!);
   const snapshot = sestavSnapshot({
-    nemovitost: vstupy.nemovitost, najemce: info, pronajimatel: vstupy.pronajimatel, v, aktualniZaloha: najem.utilitiesMonthly,
+    nemovitost: vstupy.nemovitost, najemce: info, pronajimatel: vstupy.pronajimatelPro(lease.landlordRef), v, aktualniZaloha: najem.utilitiesMonthly,
     zamerne: vstupy.smlouvy.find((s) => s.id === leaseId)?.advanceIntentional,
   });
 

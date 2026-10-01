@@ -194,6 +194,9 @@ model Lease {
 
   // Zalohy najemce jsou zamerne jine nez naklady sluzeb (rezerva, zamerne nizsi zaloha...).
   // Aplikace pak rozdil nehlasi jako chybu, ale zapocitava ho a ukazuje.
+  /// Kdo je na smlouve pronajimatel: "u:<id uzivatele>" nebo "o:<id provozovatele>"; null = provozovatel nemovitosti
+  landlordRef String?
+
   advanceIntentional Boolean @default(false)
   advanceNote        String?
   /// Rozpis zaloh po sluzbach [{serviceId, amount}]; null = jen celkova castka. Soucet je utilitiesMonthly.

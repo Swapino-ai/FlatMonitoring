@@ -192,6 +192,7 @@ const najemSchema = z.object({
   tenantZip: textNeboNic,
   tenantAccount: textNeboNic,
   tenantId: textNeboNic,
+  landlordRef: z.preprocess((v) => (typeof v === "string" && /^[uo]:[\w-]+$/.test(v) ? v : null), z.string().nullable()),
   advanceIntentional: z.preprocess((v) => v === "on" || v === true, z.boolean()),
   advanceNote: textNeboNic,
   /** Od kdy plati nova vyse zaloh; potreba jen pri zmene zaloh u existujici smlouvy. */
@@ -263,6 +264,7 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
     deposit: d.deposit,
     paymentDay: Math.round(d.paymentDay),
     indexationClause: d.indexationClause,
+    landlordRef: d.landlordRef,
     advanceIntentional: d.advanceIntentional,
     advanceNote: d.advanceIntentional ? d.advanceNote : null,
     isActive: d.isActive,

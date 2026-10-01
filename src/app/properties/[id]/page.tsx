@@ -27,7 +27,8 @@ import { casovaOsa, porovnejProNemovitost, type NajemVstup, type PolozkaZalohy, 
 import { VyuctovaniSluzeb, type NajemRadek, type VyuctovaniRadek } from "@/components/Vyuctovani";
 import { VyuctovaniNajemceKarta, type NajemceNajem, type VydanoRadek } from "@/components/VyuctovaniNajemceKarta";
 import { cisloNajemce } from "@/lib/najemci";
-import { pronajimatelNemovitosti } from "@/lib/provozovatel";
+import { pronajimatelNemovitosti, pronajimatelZRef } from "@/lib/provozovatel";
+import { nactiStrany } from "@/lib/strany";
 import type { SnapshotVyuctovani } from "@/lib/vyuctovaniVydane";
 import type { SluzbaVyuctovani } from "@/lib/vyuctovani";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
@@ -139,6 +140,17 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     : [];
   // Pronajimatel na dokladech: provozovatel nemovitosti (bez nej vlastnik s nejvetsim podilem)
   const pronajimatelVyuct: SnapshotVyuctovani["pronajimatel"] = pronajimatelNemovitosti(property);
+  // Na smlouve jde vybrat jineho pronajimatele (uzivatele aplikace nebo provozovatele)
+  const strany = await nactiStrany();
+  const pronajimatelPodleSmlouvy: Record<string, SnapshotVyuctovani["pronajimatel"]> = Object.fromEntries(
+    property.leases.map((l) => [l.id, pronajimatelZRef(l.landlordRef, strany, pronajimatelVyuct)]),
+  );
+  const stranyVyber = jeMajitel
+    ? [
+      ...Object.entries(strany.operators).map(([id, p]) => ({ value: `o:${id}`, nazev: p.name, skupina: "Provozovatelé" })),
+      ...Object.entries(strany.users).map(([id, p]) => ({ value: `u:${id}`, nazev: p.name, skupina: "Uživatelé aplikace" })),
+    ]
+    : [];
   // Nájemci z databáze k výběru ve formuláři smlouvy (jen majitel; obsahují kontakty a účty)
   const najemciVyber = jeMajitel
     ? (await prisma.tenant.findMany({ orderBy: { cislo: "asc" } })).map((t) => ({
@@ -156,6 +168,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
       email: t?.email ?? n.tenantEmail, phone: t?.phone ?? n.tenantPhone,
       adresa: [t?.street ?? n.tenantStreet, [t?.zip ?? n.tenantZip, t?.city ?? n.tenantCity].filter(Boolean).join(" ")].filter(Boolean).join(", "),
       ucet: t?.account ?? n.tenantAccount,
+      pronajimatel: pronajimatelPodleSmlouvy[n.id],
     };
   });
 
@@ -462,7 +475,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             <SbalitelnaKarta klic="najem" title="Nájem a nájemci">
               <LeaseManager typy={typy} najemci={najemciVyber} dokumenty={dokumentyPodleSmlouvy} diskPripojen={diskPripojen} propertyId={property.id} leases={property.leases}
                 nemovitost={{ nazev: property.name, adresa: `${property.street}, ${property.zip} ${property.city}` }}
-                pronajimatele={pronajimatelVyuct ? [pronajimatelVyuct] : []} canEdit={user.role === "OWNER"}
+                pronajimatele={Object.fromEntries(Object.entries(pronajimatelPodleSmlouvy).map(([k, p]) => [k, p ? { ...p, ucet: null } : null]))}
+                stranyVyber={stranyVyber} vychoziPronajimatel={pronajimatelVyuct?.name ?? null} canEdit={user.role === "OWNER"}
                 services={sluzbyVstup} porovnani={zalohy} historie={historieZaloh} />
               <div className="mt-4 border-t border-line pt-3">
                 <table className="table-base">
@@ -507,7 +521,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                 shrnuti={vydana.length ? `${vydana.length} vydaných` : undefined}>
                 <VyuctovaniNajemceKarta
                   nemovitost={{ nazev: property.name, adresa: `${property.street}, ${property.zip} ${property.city}` }}
-                  pronajimatel={pronajimatelVyuct} najmy={najmyProNajemce} sluzby={sluzbyVyuctovani}
+                  najmy={najmyProNajemce} sluzby={sluzbyVyuctovani}
                   vydana={vydana} canEdit diskPripojen={diskPripojen} />
               </SbalitelnaKarta>
             )}

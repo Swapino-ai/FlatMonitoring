@@ -2,7 +2,8 @@ import { prisma } from "./db";
 import { nazevDruhu } from "./categories";
 import { nactiTypySluzeb } from "./typySluzeb";
 import { cisloNajemce } from "./najemci";
-import { pronajimatelNemovitosti } from "./provozovatel";
+import { pronajimatelNemovitosti, pronajimatelZRef } from "./provozovatel";
+import { nactiStrany } from "./strany";
 import type { NajemVstup, SluzbaVyuctovani } from "./vyuctovani";
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -12,6 +13,7 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
  * Pouziva server pri vydani — cisla se nikdy neberou z toho, co poslal prohlizec.
  */
 export async function nactiVstupyVyuctovani(propertyId: string) {
+  const strany = await nactiStrany();
   const [nemovitost, smlouvy, sluzby, typy] = await Promise.all([
     prisma.property.findUnique({
       where: { id: propertyId },
@@ -52,6 +54,8 @@ export async function nactiVstupyVyuctovani(propertyId: string) {
     nemovitost: { nazev: nemovitost.name, adresa: `${nemovitost.street}, ${nemovitost.zip} ${nemovitost.city}` },
     // Pronajimatel je provozovatel nemovitosti; bez nej vlastnik s nejvetsim podilem
     pronajimatel: pronajimatelNemovitosti(nemovitost),
+    /** Pronajimatel konkretni smlouvy: vybrany na smlouve, jinak provozovatel nemovitosti. */
+    pronajimatelPro: (ref: string | null) => pronajimatelZRef(ref, strany, pronajimatelNemovitosti(nemovitost)),
     smlouvy, najmy, sluzby: sluzbyVyuct,
     najemceInfo: (n: (typeof smlouvy)[number]) => ({
       cislo: n.tenant ? cisloNajemce(n.tenant.cislo) : null,
