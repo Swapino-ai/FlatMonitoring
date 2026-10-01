@@ -66,6 +66,18 @@ jobs:
           echo "Stará databáze: $(reg "$STARA_D")"
           echo "Nová databáze:  $(reg "$NOVA_D")"
 
+      - name: Verze serverů (klient musí být stejně nový jako nejnovější z nich)
+        run: |
+          # Verzi zjistí jednoduchý dotaz; jakýkoli novější psql ho zvládne
+          verze() { docker run --rm postgres:17 psql "$1" -tA -c "show server_version_num" | tr -d '[:space:]'; }
+          VS=$(verze "$STARA_D"); VN=$(verze "$NOVA_D")
+          [ -n "$VS" ] && [ -n "$VN" ] || { echo "::error::Nepodařilo se zjistit verzi Postgresu (špatná adresa nebo heslo?)."; exit 1; }
+          MS=$((VS / 10000)); MN=$((VN / 10000))
+          echo "Postgres: stará databáze $MS, nová $MN"
+          [ "$MN" -ge "$MS" ] || { echo "::error::Nová databáze ($MN) má starší Postgres než stará ($MS). Založ nový projekt ve verzi $MS nebo novější."; exit 1; }
+          # pg_dump musí mít verzi aspoň jako server, ze kterého čte
+          echo "PGIMG=postgres:$MN" >> "$GITHUB_ENV"
+
       - name: Záloha staré databáze (pro jistotu)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -81,7 +93,7 @@ jobs:
 
       - name: Nová databáze musí být prázdná
         run: |
-          pocet=$(docker run --rm postgres:17 psql "$NOVA_D" -tA -c "select count(*) from information_schema.tables where table_schema='public'")
+          pocet=$(docker run --rm "$PGIMG" psql "$NOVA_D" -tA -c "select count(*) from information_schema.tables where table_schema='public'")
           echo "Tabulek v nové databázi: $pocet"
           [ "$pocet" = "0" ] || { echo "::error::Nová databáze není prázdná. Založ nový prázdný projekt, nebo ji vyčisti."; exit 1; }
 
@@ -89,8 +101,8 @@ jobs:
         run: |
           set -o pipefail
           # pg_dump jen čte; psql běží v jedné transakci, takže při chybě nová databáze zůstane prázdná
-          docker run --rm postgres:17 pg_dump "$STARA_D" --no-owner --no-privileges --no-comments --format=plain \
-            | docker run --rm -i postgres:17 psql "$NOVA_D" -v ON_ERROR_STOP=1 --single-transaction -q -o /dev/null
+          docker run --rm "$PGIMG" pg_dump "$STARA_D" --no-owner --no-privileges --no-comments --format=plain \
+            | docker run --rm -i "$PGIMG" psql "$NOVA_D" -v ON_ERROR_STOP=1 --single-transaction -q -o /dev/null
 
       - name: Porovnání počtu řádků ve všech tabulkách
         env:
