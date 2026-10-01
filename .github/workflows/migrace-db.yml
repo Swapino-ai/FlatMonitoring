@@ -8,8 +8,8 @@
 # puvodni adresy. Do nove se nic neprepise: kdyz v ni neco je, workflow se zastavi.
 #
 # Priprava: docs/migrace-neon-eu.md. Secrets:
-#   DIRECT_URL        stavajici (USA) — "Direct connection", bez "-pooler"
-#   NOVA_DIRECT_URL   nova (EU)       — "Direct connection", bez "-pooler"
+#   DIRECT_URL        stavajici (USA) — staci jakakoli adresa (pooled i direct), workflow si priame spojeni odvodi
+#   NOVA_DIRECT_URL   nova (EU)       — totez
 
 name: Migrace databáze do nového regionu
 
@@ -36,20 +36,35 @@ jobs:
 
       - run: npm ci
 
-      - name: Kontrola vstupů (adresy se nevypisují)
+      - name: Příprava adres (adresy se nevypisují)
         env:
-          STARA: ${{ secrets.DIRECT_URL }}
-          NOVA: ${{ secrets.NOVA_DIRECT_URL }}
+          STARA_SECRET: ${{ secrets.DIRECT_URL }}
+          NOVA_SECRET: ${{ secrets.NOVA_DIRECT_URL }}
         run: |
-          [ -n "$STARA" ] || { echo "::error::Chybí secret DIRECT_URL (stará databáze)."; exit 1; }
-          [ -n "$NOVA" ]  || { echo "::error::Chybí secret NOVA_DIRECT_URL (nová databáze)."; exit 1; }
-          [ "$STARA" != "$NOVA" ] || { echo "::error::Stará a nová adresa jsou stejné."; exit 1; }
-          case "$NOVA" in *-pooler*) echo "::error::NOVA_DIRECT_URL je pooled (obsahuje -pooler). Potřebuji Direct connection."; exit 1;; esac
-          case "$STARA" in *-pooler*) echo "::error::DIRECT_URL je pooled (obsahuje -pooler). Potřebuji Direct connection."; exit 1;; esac
+          [ -n "$STARA_SECRET" ] || { echo "::error::Chybí secret DIRECT_URL (stará databáze)."; exit 1; }
+          [ -n "$NOVA_SECRET" ]  || { echo "::error::Chybí secret NOVA_DIRECT_URL (nová databáze)."; exit 1; }
+
+          # pg_dump a psql potřebují přímé spojení: z "pooled" adresy se odstraní "-pooler" v hostiteli
+          # a parametr pgbouncer (ten zná jen Prisma, libpq ho odmítne). Zbytek zůstává.
+          normalizuj() {
+            local u="${1//-pooler/}"
+            u="$(echo "$u" | sed -E 's/([?&])pgbouncer=[a-z]+&?/\1/; s/[?&]$//')"
+            echo "$u"
+          }
+          STARA_D="$(normalizuj "$STARA_SECRET")"
+          NOVA_D="$(normalizuj "$NOVA_SECRET")"
+
+          [ "$STARA_D" != "$NOVA_D" ] || { echo "::error::Stará a nová adresa jsou stejné."; exit 1; }
+
+          # Odvozené adresy se jinak nemaskují, proto je maskuji sám
+          echo "::add-mask::$STARA_D"
+          echo "::add-mask::$NOVA_D"
+          { echo "STARA_D=$STARA_D"; echo "NOVA_D=$NOVA_D"; } >> "$GITHUB_ENV"
+
           # Z adresy vypíšu jen region, ať je vidět, odkud kam se jde
           reg() { echo "$1" | grep -oE '(us|eu|ap|sa|ca|me|af)-[a-z]+-[0-9]+' | head -1; }
-          echo "Stará databáze: $(reg "$STARA")"
-          echo "Nová databáze:  $(reg "$NOVA")"
+          echo "Stará databáze: $(reg "$STARA_D")"
+          echo "Nová databáze:  $(reg "$NOVA_D")"
 
       - name: Záloha staré databáze (pro jistotu)
         env:
@@ -65,33 +80,28 @@ jobs:
           retention-days: 90
 
       - name: Nová databáze musí být prázdná
-        env:
-          NOVA: ${{ secrets.NOVA_DIRECT_URL }}
         run: |
-          pocet=$(docker run --rm postgres:17 psql "$NOVA" -tA -c "select count(*) from information_schema.tables where table_schema='public'")
+          pocet=$(docker run --rm postgres:17 psql "$NOVA_D" -tA -c "select count(*) from information_schema.tables where table_schema='public'")
           echo "Tabulek v nové databázi: $pocet"
           [ "$pocet" = "0" ] || { echo "::error::Nová databáze není prázdná. Založ nový prázdný projekt, nebo ji vyčisti."; exit 1; }
 
       - name: Přenos (schéma, data, sekvence)
-        env:
-          STARA: ${{ secrets.DIRECT_URL }}
-          NOVA: ${{ secrets.NOVA_DIRECT_URL }}
         run: |
           set -o pipefail
           # pg_dump jen čte; psql běží v jedné transakci, takže při chybě nová databáze zůstane prázdná
-          docker run --rm postgres:17 pg_dump "$STARA" --no-owner --no-privileges --no-comments --format=plain \
-            | docker run --rm -i postgres:17 psql "$NOVA" -v ON_ERROR_STOP=1 --single-transaction -q -o /dev/null
+          docker run --rm postgres:17 pg_dump "$STARA_D" --no-owner --no-privileges --no-comments --format=plain \
+            | docker run --rm -i postgres:17 psql "$NOVA_D" -v ON_ERROR_STOP=1 --single-transaction -q -o /dev/null
 
       - name: Porovnání počtu řádků ve všech tabulkách
         env:
-          STARA_URL: ${{ secrets.DIRECT_URL }}
-          NOVA_URL: ${{ secrets.NOVA_DIRECT_URL }}
+          STARA_URL: ${{ env.STARA_D }}
+          NOVA_URL: ${{ env.NOVA_D }}
         run: npx tsx scripts/porovnej-databaze.ts
 
       - name: Schéma v nové databázi je v souladu s aplikací
         env:
-          DATABASE_URL: ${{ secrets.NOVA_DIRECT_URL }}
-          DIRECT_URL: ${{ secrets.NOVA_DIRECT_URL }}
+          DATABASE_URL: ${{ env.NOVA_D }}
+          DIRECT_URL: ${{ env.NOVA_D }}
         run: npx prisma db push --skip-generate
 
       - name: Co dál

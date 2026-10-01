@@ -13,24 +13,24 @@ Atlantik (zhruba 100 ms) a stránka jich dělá desítky.
 2. **Region: AWS Europe (Frankfurt) `eu-central-1`**.
 3. **Postgres version: stejná jako u staré databáze** (Settings → ukazuje verzi). Přenos je jinak riskantní.
 4. Jméno klidně `flatmonitoring-eu`. Databáze nech prázdnou, nic v ní nezakládej.
-5. **Connect** → zkopíruj dvě adresy:
-   - **Direct connection** (v hostiteli *není* `-pooler`) → bude `NOVA_DIRECT_URL`
-   - **Pooled connection** (v hostiteli *je* `-pooler`, přidej `&pgbouncer=true`) → později nová `DATABASE_URL`
+5. **Connect** → zkopíruj adresu (stačí jedna, klidně pooled): bude `NOVA_DIRECT_URL`.
+   Workflow si z ní sám odvodí přímé spojení (odstraní `-pooler` a parametr `pgbouncer`).
+   Později potřebuješ obě varianty (pooled pro `DATABASE_URL`, direct pro `DIRECT_URL`).
 
 ## 2. Secret pro přenos
 
 GitHub → repozitář → **Settings → Secrets and variables → Actions → New repository secret**:
 
-- Name `NOVA_DIRECT_URL`, hodnota = Direct connection nové databáze.
+- Name `NOVA_DIRECT_URL`, hodnota = adresa nové databáze.
 
-(`DIRECT_URL` se starou databází už tam je.)
+(`DIRECT_URL` se starou databází už tam je. Pokud je v ní adresa s `-pooler`, nevadí.)
 
 ## 3. Spuštění přenosu
 
 GitHub → **Actions → Migrace databáze do nového regionu → Run workflow** → do pole napiš `MIGROVAT`.
 
 Workflow udělá:
-1. kontrolu, že adresy jsou „direct“ a různé (vypíše jen regiony),
+1. přípravu přímých adres a kontrolu, že se liší (vypíše jen regiony),
 2. zálohu staré databáze do JSON (artefakt ke stažení, 90 dní),
 3. kontrolu, že nová databáze je prázdná,
 4. přenos všeho včetně sekvencí (čísla nájemníků N-0001…), propojení s Google Diskem a paměti složek,
