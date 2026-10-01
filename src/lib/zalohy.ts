@@ -66,6 +66,8 @@ export interface SluzbaVstup {
   chargedToTenant: boolean;
   /** Poznamka ke sluzbe (odberne misto, dohodnute podminky) — jde do evidencniho listu. */
   notes?: string | null;
+  /** Od kdy sluzba plati; pred tim se do porovnani nepocita. */
+  contractStart?: Date | string | null;
   /** Bez historie plati aktualni hodnota po cele obdobi. */
   historie?: ZmenaNakladu[];
 }
@@ -282,6 +284,10 @@ export function platnyKDatu<T extends { validFrom: Date | string }>(zmeny: T[] |
 
 /** Sluzba s cenou, ktera platila k danemu datu. */
 export function sluzbaKDatu(s: SluzbaVstup, datum: Date): SluzbaVstup {
+  // Sluzba, ktera jeste neplati, se k tomuto dni nepreuctovava a nic nestoji
+  if (s.contractStart && den(s.contractStart).getTime() > datum.getTime()) {
+    return { ...s, monthlyCost: 0, annualCost: null, chargedToTenant: false };
+  }
   const z = platnyKDatu(s.historie, datum);
   return z ? { ...s, monthlyCost: z.monthlyCost, annualCost: z.annualCost } : s;
 }

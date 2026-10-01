@@ -2,6 +2,7 @@
  * Test porovnani zaloh najemce se sluzbami. Ciste funkce, zadna sit ani databaze.
  */
 import {
+  sluzbaKDatu,
   polozkyKDatu, soucetPolozek,
   casovaOsa, koncovaSerieNesouladu, popisPorovnani, porovnejProNemovitost, porovnejZalohy, type NajemVstup, type SluzbaVstup,
 } from "../src/lib/zalohy";
@@ -167,6 +168,19 @@ over("smlouva v budoucnu → zadna osa", casovaOsa({ ...najem, startDate: "2027-
   over("zmena na jen celkovou castku ruší rozpis", polozkyKDatu({ historie: hist }, new Date("2025-10-01")) === null);
   over("bez historie plati aktualni rozpis", polozkyKDatu({ advanceItems: A }, new Date())?.length === 2);
   over("bez historie a bez rozpisu null", polozkyKDatu({}, new Date()) === null);
+}
+
+// --- Od kdy sluzba plati ---
+{
+  const nova = { ...sl("WATER", 800, true), contractStart: "2026-03-01" };
+  over("pred zacatkem sluzba nic nestoji", sluzbaKDatu(nova, new Date("2026-02-15")).monthlyCost === 0 && !sluzbaKDatu(nova, new Date("2026-02-15")).chargedToTenant);
+  over("po zacatku plati", sluzbaKDatu(nova, new Date("2026-03-15")).monthlyCost === 800 && sluzbaKDatu(nova, new Date("2026-03-15")).chargedToTenant);
+  over("bez data plati vzdy", sluzbaKDatu(sl("WATER", 800, true), new Date("2000-01-01")).monthlyCost === 800);
+  const najem = { tenantName: "A", utilitiesMonthly: 800, isActive: true, startDate: "2026-01-01" };
+  const osa = casovaOsa(najem, [nova], new Date("2026-05-20"))!;
+  const mes = osa.roky[0].mesice;
+  over("osa: leden a unor bez nakladu", mes.find((m) => m.mesic === 1) === undefined || mes.find((m) => m.mesic === 1)!.naklady === 0, JSON.stringify(mes.map((m) => [m.mesic, m.naklady])));
+  over("osa: od brezna naklady 800", mes.filter((m) => m.mesic >= 3).every((m) => m.naklady === 800));
 }
 
 console.log(chyb === 0 ? "\nvše v pořádku" : `\n${chyb} chyb`);

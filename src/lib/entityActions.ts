@@ -71,7 +71,7 @@ async function varovaniZaloh(propertyId: string): Promise<string | undefined> {
     prisma.service.findMany({
       where: { propertyId },
       select: {
-        type: true, provider: true, monthlyCost: true, annualCost: true, chargedToTenant: true,
+        type: true, provider: true, monthlyCost: true, annualCost: true, chargedToTenant: true, contractStart: true,
         costChanges: { select: { validFrom: true, monthlyCost: true, annualCost: true } },
       },
     }),
@@ -365,6 +365,8 @@ const sluzbaSchema = z.object({
   monthlyCost: cislo(),
   annualCost: cisloNeboNic,
   contractEnd: datumNeboNic,
+  /** Od kdy sluzba plati — povinne. */
+  contractStart: z.string().min(1, "Zadej, od kdy služba platí."),
   noticePeriodMonths: cislo(),
   isBundleable: z.preprocess((v) => v === "on" || v === true, z.boolean()),
   chargedToTenant: z.preprocess((v) => v === "on" || v === true, z.boolean()),
@@ -384,6 +386,9 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
   if (d.monthlyCost <= 0 && !d.annualCost) {
     return { error: "Vyplň měsíční nebo roční náklad." };
   }
+  if (d.contractEnd && d.contractEnd < d.contractStart) {
+    return { error: "Služba nemůže být vázaná do data před tím, než začala platit." };
+  }
 
   const data = {
     type: d.type,
@@ -391,6 +396,7 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
     contractNo: d.contractNo,
     monthlyCost: d.monthlyCost,
     annualCost: d.annualCost,
+    contractStart: new Date(d.contractStart),
     contractEnd: d.contractEnd ? new Date(d.contractEnd) : null,
     noticePeriodMonths: Math.round(d.noticePeriodMonths),
     isBundleable: d.isBundleable,
@@ -405,6 +411,7 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
     const zmenaNakladu = stara.monthlyCost !== d.monthlyCost || (stara.annualCost ?? null) !== (d.annualCost ?? null);
     if (zmenaNakladu) {
       if (!d.costValidFrom) return { error: "Zadej, od kdy nový náklad platí." };
+      if (d.costValidFrom < d.contractStart) return { error: "Nový náklad nemůže platit před začátkem služby." };
     }
 
     // Naklad se meni jen pres historii; primo se neprepisuje, aby zpetna oprava
@@ -417,7 +424,7 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
       const platiOd = new Date(d.costValidFrom!);
       if (stara.costChanges.length === 0) {
         const predZmenou = new Date(platiOd.getTime() - DEN_MS);
-        const zacatek = stara.contractStart ?? stara.createdAt;
+        const zacatek = new Date(d.contractStart);
         await tx.serviceCostChange.create({
           data: {
             serviceId: id, monthlyCost: stara.monthlyCost, annualCost: stara.annualCost,
@@ -462,6 +469,9 @@ export async function novyPoplatek(_prev: EntityFormState, formData: FormData): 
 
   const stara = await prisma.service.findUnique({ where: { id }, include: { costChanges: true } });
   if (!stara) return { error: "Služba neexistuje." };
+  if (stara.contractStart && platiOdText < stara.contractStart.toISOString().slice(0, 10)) {
+    return { error: "Nový poplatek nemůže platit před začátkem služby." };
+  }
   if (stara.monthlyCost === mesicne && (stara.annualCost ?? null) === (rocne ?? null)
       && !stara.costChanges.some((z) => z.validFrom.toISOString().slice(0, 10) === platiOdText)) {
     return { error: "Zadaná výše je stejná jako dnešní, není co zaznamenat." };

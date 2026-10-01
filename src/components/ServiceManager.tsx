@@ -15,7 +15,7 @@ import { Badge } from "./Stat";
 
 interface Row {
   id: string; type: string; provider: string; contractNo: string | null; monthlyCost: number;
-  annualCost: number | null; contractEnd: Date | null; noticePeriodMonths: number; isBundleable: boolean;
+  annualCost: number | null; contractStart: Date | null; contractEnd: Date | null; noticePeriodMonths: number; isBundleable: boolean;
   notes: string | null; chargedToTenant: boolean;
 }
 
@@ -106,6 +106,9 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                       </span>
                       <div className="min-w-0">
                         <div className="font-medium leading-tight">{nazevDruhu(typy, s.type)}</div>
+                        {s.contractStart && (
+                          <div className="text-xs text-ink-muted">platí od {dateCz(s.contractStart)}</div>
+                        )}
                         {s.chargedToTenant && (
                           <div className="mt-0.5 flex items-center gap-1 text-xs font-medium text-accent">
                             <Ikona nazev="najemce" trida="h-3.5 w-3.5" />hradí nájemce zálohou
@@ -280,6 +283,9 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka, typy }: {
           defaultValue={dnesISO()} sirka="sm:col-span-2"
           hint="Může být i v budoucnu. Předchozí výše zůstane v historii, takže půjde zjistit, co služba stála dřív." />
       )}
+      <Pole label="Služba platí od" name="contractStart" type="date" required
+        defaultValue={isoDatum(r?.contractStart) || (r ? "" : dnesISO())}
+        hint="Od tohoto dne se služba počítá do nákladů a záloh; dřívější období se s ní neporovnává." />
       <Pole label="Číslo smlouvy" name="contractNo" placeholder="nepovinné" defaultValue={r?.contractNo ?? ""} />
       <Pole label="Smlouva vázána do" name="contractEnd" type="date" defaultValue={isoDatum(r?.contractEnd)}
         hint="Do kdy nelze přejít jinam" />
