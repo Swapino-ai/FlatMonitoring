@@ -1,8 +1,8 @@
 "use client";
 
-import { useActionState } from "react";
-import { deleteServiceType, saveServiceType, type TypyFormState } from "@/lib/typySluzebActions";
-import type { TypySluzeb } from "@/lib/categories";
+import { useActionState, useState, useTransition } from "react";
+import { deleteServiceType, priradIkony, saveServiceType, type TypyFormState } from "@/lib/typySluzebActions";
+import { navrhniIkonu, type TypySluzeb } from "@/lib/categories";
 import { Hlaska, SmazatTlacitko } from "./form";
 import { Ikona, type NazevIkony } from "./Ikony";
 
@@ -10,16 +10,31 @@ const IKONY: [NazevIkony, string][] = [
   ["blesk", "Blesk"], ["plamen", "Plamen"], ["kapka", "Kapka"], ["teplomer", "Teploměr"], ["wifi", "Wi‑Fi"],
   ["stit", "Štít"], ["budova", "Budova"], ["kufr", "Kufřík"], ["odpad", "Odpad"], ["kalendar", "Kalendář"],
   ["penize", "Peníze"], ["dokument", "Dokument"], ["najemce", "Lidé"], ["tri", "Tři tečky"],
+  ["uklid", "Koště (úklid)"], ["zelen", "Strom (zeleň)"], ["vytah", "Výtah"], ["schody", "Schody"],
+  ["zarovka", "Žárovka (osvětlení)"], ["klic", "Klíč (domovník)"], ["naradi", "Nářadí (opravy)"],
+  ["televize", "Televize"], ["kamera", "Kamera (ostraha)"], ["parkovani", "Parkování"],
 ];
 
 /** Druhy sluzeb: prejmenovani, ikona, vychozi prepinac "preuctuje se najemci", pridani vlastniho. */
 export function DruhySluzebManager({ typy, pouziti }: { typy: TypySluzeb; pouziti: Record<string, number> }) {
   const [state, action, pending] = useActionState<TypyFormState, FormData>(saveServiceType, {});
   const [delState, delAction] = useActionState<TypyFormState, FormData>(deleteServiceType, {});
+  const [ikonyStav, setIkonyStav] = useState<TypyFormState>({});
+  const [bezi, spust] = useTransition();
+
+  // Novy druh: ikona se navrhne podle nazvu, dokud ji clovek sam nezmeni
+  const [novyNazev, setNovyNazev] = useState("");
+  const [novaIkona, setNovaIkona] = useState("tri");
+  const [ikonaRucne, setIkonaRucne] = useState(false);
 
   return (
     <div>
-      <Hlaska state={state.error || state.success ? state : delState} />
+      <Hlaska state={ikonyStav.error || ikonyStav.success ? ikonyStav : state.error || state.success ? state : delState} />
+      <div className="mb-3 flex justify-end">
+        <button type="button" className="btn text-xs" disabled={bezi} onClick={() => spust(async () => setIkonyStav(await priradIkony()))}>
+          {bezi ? "Přiřazuji…" : "Přiřadit ikony podle názvu"}
+        </button>
+      </div>
       <ul className="divide-y divide-line/70 rounded-xl border border-line">
         {Object.entries(typy).map(([key, t]) => (
           <li key={key} className="px-3 py-2.5">
@@ -49,9 +64,15 @@ export function DruhySluzebManager({ typy, pouziti }: { typy: TypySluzeb; pouzit
       <form action={action} className="mt-4 flex flex-wrap items-end gap-2 rounded-xl bg-surface-sunken p-3">
         <div className="min-w-[12rem] flex-1">
           <label className="label mb-1.5 block" htmlFor="novy-druh">Nový druh služby</label>
-          <input id="novy-druh" name="name" required placeholder="např. Úklid společných prostor" className="input" />
+          <input id="novy-druh" name="name" required placeholder="např. Úklid společných prostor" className="input"
+            value={novyNazev}
+            onChange={(e) => {
+              setNovyNazev(e.target.value);
+              if (!ikonaRucne) setNovaIkona(navrhniIkonu(e.target.value) ?? "tri");
+            }} />
         </div>
-        <select name="icon" defaultValue="tri" aria-label="Ikona nového druhu" className="input w-[9rem]">
+        <select name="icon" value={novaIkona} onChange={(e) => { setNovaIkona(e.target.value); setIkonaRucne(true); }}
+          aria-label="Ikona nového druhu" className="input w-[9rem]">
           {IKONY.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
         </select>
         <label className="flex items-center gap-1.5 pb-2 text-xs text-ink-secondary">

@@ -1,3 +1,4 @@
+import { navrhniIkonu } from "../src/lib/categories";
 import { bezpecneJmeno, cestaSlozek, chybaKontextu, chybaSouboru, plnyKlic, type KontextPopisky } from "../src/lib/dokumenty";
 
 let chyb = 0;
@@ -41,6 +42,18 @@ over("exe", chybaSouboru("virus.exe", 1000) != null);
 over("prazdny", chybaSouboru("a.pdf", 0) != null);
 over("obri", chybaSouboru("a.pdf", 200 * 1024 * 1024) != null);
 over("bez nazvu", chybaSouboru(" ", 10) != null);
+
+// Ikony podle nazvu
+over("uklid", navrhniIkonu("Úklid společných prostor") === "uklid");
+over("zelen", navrhniIkonu("Údržba zeleně") === "zelen");
+over("fond oprav je budova", navrhniIkonu("Fond Oprav") === "budova");
+over("poplatky SBD", navrhniIkonu("poplatky SBD") === "budova");
+over("oprava je naradi", navrhniIkonu("Drobné opravy") === "naradi");
+over("vytah", navrhniIkonu("Provoz výtahu") === "vytah");
+over("nic nesedi", navrhniIkonu("Ostatní") === null);
+over("elektrina", navrhniIkonu("Elektřina") === "blesk");
+over("vodne", navrhniIkonu("Vodné a stočné") === "kapka");
+over("internet tv", navrhniIkonu("Internet / TV") === "wifi");
 
 console.log(chyb ? `${chyb} chyb` : "vše v pořádku");
 process.exit(chyb ? 1 : 0);

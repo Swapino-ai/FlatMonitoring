@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./auth";
 import { nactiTypySluzeb } from "./typySluzeb";
+import { navrhniIkonu } from "./categories";
 
 export interface TypyFormState {
   error?: string;
@@ -12,7 +13,8 @@ export interface TypyFormState {
 
 const IKONY = new Set([
   "blesk", "plamen", "kapka", "teplomer", "wifi", "stit", "budova", "kufr", "odpad", "tri",
-  "kalendar", "penize", "dokument", "najemce",
+  "kalendar", "penize", "dokument", "najemce", "uklid", "zelen", "vytah", "schody", "zarovka", "klic", "naradi",
+  "televize", "kamera", "parkovani",
 ]);
 
 async function majitel() {
@@ -73,4 +75,25 @@ export async function deleteServiceType(_prev: TypyFormState, formData: FormData
   await prisma.serviceType.deleteMany({ where: { key } });
   obnov();
   return { success: "Druh služby smazán." };
+}
+
+/** Prida ikonu podle nazvu u druhu, jehoz ikona nesedi (uklid, zelen, oprava…). Zname druhy bez shody nechava. */
+export async function priradIkony(): Promise<TypyFormState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+
+  const typy = await nactiTypySluzeb();
+  const zmeny: string[] = [];
+  for (const [key, t] of Object.entries(typy)) {
+    const navrh = navrhniIkonu(t.name);
+    if (!navrh || navrh === t.icon || !IKONY.has(navrh)) continue;
+    await prisma.serviceType.upsert({
+      where: { key }, update: { icon: navrh }, create: { key, name: t.name, icon: navrh, chargedByDefault: t.chargedByDefault, sort: 999 },
+    });
+    zmeny.push(t.name);
+  }
+  obnov();
+  return zmeny.length
+    ? { success: `Ikony změněny u ${zmeny.length}: ${zmeny.join(", ")}.` }
+    : { success: "Všechny ikony už odpovídají názvům." };
 }

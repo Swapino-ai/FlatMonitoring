@@ -90,3 +90,34 @@ export const VYCHOZI_DRUHY: TypySluzeb = Object.fromEntries(
 
 /** Nazev druhu; neznamy klic se ukaze tak, jak je, at sluzba nezmizi. */
 export const nazevDruhu = (typy: TypySluzeb, key: string) => typy[key]?.name ?? SERVICE_TYPES[key] ?? key;
+
+const BEZ_DIAKRITIKY = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/** Pravidla poradi: konkretnejsi drive (uklid spolecnych prostor je uklid, ne "spolecne"). */
+const PRAVIDLA_IKON: [RegExp, string][] = [
+  [/uklid|cisten|uklizec/, "uklid"],
+  [/zelen|zahrad|travn|sekani|strom|keri/, "zelen"],
+  [/vytah/, "vytah"],
+  [/schod/, "schody"],
+  [/osvetl|zarovk|svetl/, "zarovka"],
+  [/ostrah|kamer|alarm|zabezpec|vratn/, "kamera"],
+  [/fond|svj|sbd|druzstev/, "budova"],
+  [/udrzb|oprav|servis|reviz|zavad/, "naradi"],
+  [/domovn|klic|zamk/, "klic"],
+  [/parkov|garaz|stani/, "parkovani"],
+  [/internet|wifi|wi-fi|pripojeni|\bnet\b/, "wifi"],
+  [/\btv\b|televiz|anten|kabelov|radio|poplatky za/, "televize"],
+  [/odpad|smetn|popelnic/, "odpad"],
+  [/elektr|proud/, "blesk"],
+  [/plyn/, "plamen"],
+  [/vod[ay]|vodne|stocn/, "kapka"],
+  [/teplo|topen|vytap|ohrev/, "teplomer"],
+  [/pojist/, "stit"],
+  [/sprav/, "kufr"],
+];
+
+/** Navrhne ikonu podle nazvu druhu sluzby; null, kdyz nic nesedi. */
+export function navrhniIkonu(nazev: string): string | null {
+  const t = BEZ_DIAKRITIKY(nazev);
+  return PRAVIDLA_IKON.find(([re]) => re.test(t))?.[1] ?? null;
+}
