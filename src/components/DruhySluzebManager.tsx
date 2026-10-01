@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { deleteServiceType, priradIkony, saveServiceType, type TypyFormState } from "@/lib/typySluzebActions";
 import { navrhniIkonu, type TypySluzeb } from "@/lib/categories";
 import { Hlaska, SmazatTlacitko } from "./form";
@@ -14,6 +14,73 @@ const IKONY: [NazevIkony, string][] = [
   ["zarovka", "Žárovka (osvětlení)"], ["klic", "Klíč (domovník)"], ["naradi", "Nářadí (opravy)"],
   ["televize", "Televize"], ["kamera", "Kamera (ostraha)"], ["parkovani", "Parkování"],
 ];
+
+/** Mrizka ikon v bublině: zobrazí se aktuální ikona, klik otevře výběr a vybraná se hned použije. */
+function VyberIkony({ hodnota, onZmena, nazev }: { hodnota: string; onZmena: (ikona: string) => void; nazev: string }) {
+  const [otevreno, setOtevreno] = useState(false);
+  const obal = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!otevreno) return;
+    const zavri = (e: MouseEvent) => { if (obal.current && !obal.current.contains(e.target as Node)) setOtevreno(false); };
+    const klavesa = (e: KeyboardEvent) => { if (e.key === "Escape") setOtevreno(false); };
+    document.addEventListener("mousedown", zavri);
+    document.addEventListener("keydown", klavesa);
+    return () => { document.removeEventListener("mousedown", zavri); document.removeEventListener("keydown", klavesa); };
+  }, [otevreno]);
+
+  return (
+    <div ref={obal} className="relative">
+      <button type="button" onClick={() => setOtevreno((o) => !o)} aria-haspopup="listbox" aria-expanded={otevreno}
+        title="Změnit ikonu" aria-label={`Změnit ikonu: ${nazev}`}
+        className="flex h-8 items-center gap-1 rounded-xl bg-accent-soft pl-2 pr-1.5 text-accent transition-colors hover:bg-accent/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+        <Ikona nazev={hodnota as NazevIkony} trida="h-4 w-4" />
+        <svg viewBox="0 0 20 20" className="h-3 w-3 opacity-70" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 8l5 5 5-5" /></svg>
+      </button>
+      {otevreno && (
+        <div role="listbox" aria-label="Ikony" className="absolute left-0 z-30 mt-1 grid w-[17rem] grid-cols-6 gap-1 rounded-xl border border-line bg-surface-card p-2 shadow-lg">
+          {IKONY.map(([k, n]) => (
+            <button key={k} type="button" role="option" aria-selected={k === hodnota} title={n} aria-label={n}
+              onClick={() => { onZmena(k); setOtevreno(false); }}
+              className={`flex h-9 items-center justify-center rounded-lg transition-colors ${
+                k === hodnota ? "bg-accent text-white" : "text-ink-secondary hover:bg-accent-soft hover:text-accent"}`}>
+              <Ikona nazev={k} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Jeden existujici druh: zmena ikony se uloží hned, název a přeúčtování tlačítkem Uložit. */
+function RadekDruhu({ klic, t, pouzito, action, pending, delAction }: {
+  klic: string; t: TypySluzeb[string]; pouzito: number;
+  action: (p: FormData) => void; pending: boolean; delAction: (p: FormData) => void;
+}) {
+  const [ikona, setIkona] = useState(t.icon);
+  useEffect(() => setIkona(t.icon), [t.icon]);
+  const formular = useRef<HTMLFormElement>(null);
+
+  return (
+    <li className="px-3 py-2.5">
+      <form ref={formular} action={action} className="flex flex-wrap items-center gap-2">
+        <input type="hidden" name="key" value={klic} />
+        <input type="hidden" name="icon" value={ikona} />
+        <VyberIkony hodnota={ikona} nazev={t.name}
+          onZmena={(k) => { setIkona(k); setTimeout(() => formular.current?.requestSubmit(), 0); }} />
+        <input name="name" defaultValue={t.name} required aria-label="Název druhu" className="input min-w-[10rem] flex-1 py-1.5" />
+        <label className="flex items-center gap-1.5 text-xs text-ink-secondary" title="Nová služba tohoto druhu se předvyplní jako přeúčtovaná nájemci">
+          <input type="checkbox" name="chargedByDefault" defaultChecked={t.chargedByDefault} />
+          přeúčtovat
+        </label>
+        <button type="submit" disabled={pending} className="btn px-2.5 py-1 text-xs">Uložit</button>
+        <span className="text-xs text-ink-muted">{pouzito}×</span>
+        {pouzito === 0 && <SmazatTlacitko action={delAction} id={klic} potvrzeni={`Smazat druh „${t.name}“?`} />}
+      </form>
+    </li>
+  );
+}
 
 /** Druhy sluzeb: prejmenovani, ikona, vychozi prepinac "preuctuje se najemci", pridani vlastniho. */
 export function DruhySluzebManager({ typy, pouziti }: { typy: TypySluzeb; pouziti: Record<string, number> }) {
@@ -37,27 +104,7 @@ export function DruhySluzebManager({ typy, pouziti }: { typy: TypySluzeb; pouzit
       </div>
       <ul className="divide-y divide-line/70 rounded-xl border border-line">
         {Object.entries(typy).map(([key, t]) => (
-          <li key={key} className="px-3 py-2.5">
-            <form action={action} className="flex flex-wrap items-center gap-2">
-              <input type="hidden" name="key" value={key} />
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
-                <Ikona nazev={t.icon as NazevIkony} trida="h-4 w-4" />
-              </span>
-              <input name="name" defaultValue={t.name} required aria-label="Název druhu" className="input min-w-[10rem] flex-1 py-1.5" />
-              <select name="icon" defaultValue={t.icon} aria-label="Ikona" className="input w-[9rem] py-1.5">
-                {IKONY.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
-              </select>
-              <label className="flex items-center gap-1.5 text-xs text-ink-secondary" title="Nová služba tohoto druhu se předvyplní jako přeúčtovaná nájemci">
-                <input type="checkbox" name="chargedByDefault" defaultChecked={t.chargedByDefault} />
-                přeúčtovat
-              </label>
-              <button type="submit" disabled={pending} className="btn px-2.5 py-1 text-xs">Uložit</button>
-              <span className="text-xs text-ink-muted">{pouziti[key] ?? 0}×</span>
-              {(pouziti[key] ?? 0) === 0 && (
-                <SmazatTlacitko action={delAction} id={key} potvrzeni={`Smazat druh „${t.name}“?`} />
-              )}
-            </form>
-          </li>
+          <RadekDruhu key={key} klic={key} t={t} pouzito={pouziti[key] ?? 0} action={action} pending={pending} delAction={delAction} />
         ))}
       </ul>
 
@@ -71,10 +118,11 @@ export function DruhySluzebManager({ typy, pouziti }: { typy: TypySluzeb; pouzit
               if (!ikonaRucne) setNovaIkona(navrhniIkonu(e.target.value) ?? "tri");
             }} />
         </div>
-        <select name="icon" value={novaIkona} onChange={(e) => { setNovaIkona(e.target.value); setIkonaRucne(true); }}
-          aria-label="Ikona nového druhu" className="input w-[9rem]">
-          {IKONY.map(([k, n]) => <option key={k} value={k}>{n}</option>)}
-        </select>
+        <input type="hidden" name="icon" value={novaIkona} />
+        <div>
+          <span className="label mb-1.5 block">Ikona</span>
+          <VyberIkony hodnota={novaIkona} nazev="nový druh" onZmena={(k) => { setNovaIkona(k); setIkonaRucne(true); }} />
+        </div>
         <label className="flex items-center gap-1.5 pb-2 text-xs text-ink-secondary">
           <input type="checkbox" name="chargedByDefault" /> přeúčtovat
         </label>
