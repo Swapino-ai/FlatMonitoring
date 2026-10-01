@@ -115,7 +115,7 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
                               title={`Soubory k vyúčtování (${(dokumenty[v.id] ?? []).length})`} aria-label="Soubory k vyúčtování"
                               className={`relative inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
                                 prilohy.has(v.id) ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-accent-soft hover:text-accent"}`}>
-                              <Ikona nazev="dokument" />
+                              <Ikona nazev="sponka" />
                               {(dokumenty[v.id] ?? []).length > 0 && (
                                 <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
                                   {(dokumenty[v.id] ?? []).length}

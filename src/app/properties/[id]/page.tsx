@@ -152,6 +152,16 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     };
   });
 
+  // Soubory ke smlouvam (sken smlouvy, predavaci protokol) na Google Disku
+  const dokumentySmluv = property.leases.length
+    ? await prisma.dokument.findMany({
+      where: { leaseId: { in: property.leases.map((l) => l.id) }, kategorie: { in: ["NAJEMNI_SMLOUVA", "PREDAVACI_PROTOKOL"] } },
+      orderBy: { createdAt: "desc" },
+    })
+    : [];
+  const dokumentyPodleSmlouvy: Record<string, typeof dokumentySmluv> = {};
+  for (const d of dokumentySmluv) (dokumentyPodleSmlouvy[d.leaseId!] ??= []).push(d);
+
   const najmyVyuctovani: NajemRadek[] = property.leases.map((n) => ({
     id: n.id, nazev: n.tenantName, od: iso(new Date(n.startDate)), do: n.endDate ? iso(new Date(n.endDate)) : null,
     utilitiesMonthly: n.utilitiesMonthly,
@@ -443,7 +453,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             varovani: zalohyNesedi,
             obsah: (<>
             <SbalitelnaKarta klic="najem" title="Nájem a nájemci">
-              <LeaseManager typy={typy} propertyId={property.id} leases={property.leases}
+              <LeaseManager typy={typy} dokumenty={dokumentyPodleSmlouvy} diskPripojen={diskPripojen} propertyId={property.id} leases={property.leases}
                 nemovitost={{ nazev: property.name, adresa: `${property.street}, ${property.zip} ${property.city}` }}
                 pronajimatele={pronajimatelVyuct ? [pronajimatelVyuct] : []} canEdit={user.role === "OWNER"}
                 services={sluzbyVstup} porovnani={zalohy} historie={historieZaloh} />

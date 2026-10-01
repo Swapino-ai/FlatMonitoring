@@ -11,6 +11,7 @@ import { zkontrolujUcet } from "@/lib/ucet";
 import { UliceNaseptavac } from "./AdresaNaseptavac";
 import { DatumPole } from "./DatumPole";
 import { EvidencniList, type Pronajimatel } from "./EvidencniList";
+import { Dokumenty, type DokumentRadek } from "./Dokumenty";
 import { HistorieZmen } from "./HistorieZmen";
 import { ZalohyUpozorneni } from "./ZalohyUpozorneni";
 import { nazevDruhu, type TypySluzeb } from "@/lib/categories";
@@ -42,11 +43,14 @@ function denPo(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function LeaseManager({ propertyId, leases, canEdit, services, porovnani, historie, nemovitost, pronajimatele, typy }: {
+export function LeaseManager({ propertyId, leases, canEdit, services, porovnani, historie, nemovitost, pronajimatele, typy, dokumenty, diskPripojen }: {
   typy: TypySluzeb;
   /** Udaje do evidencniho listu. */
   nemovitost: { nazev: string; adresa: string };
   pronajimatele: Pronajimatel[];
+  /** Soubory ke smlouvam (Google Disk) podle id smlouvy. */
+  dokumenty: Record<string, DokumentRadek[]>;
+  diskPripojen: boolean;
   propertyId: string; leases: Row[]; canEdit: boolean;
   /** Sluzby nemovitosti — zalohy se ve formulari overuji proti nim. */
   services: SluzbaVstup[];
@@ -71,6 +75,9 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
   // Evidencni list (rozpis najmu) ke smlouve
   const [listId, setListId] = useState<string | null>(null);
   const listSmlouva = leases.find((l) => l.id === listId) ?? null;
+  // Soubory ke smlouve (sken smlouvy, predavaci protokol)
+  const [souboryId, setSouboryId] = useState<string | null>(null);
+  const souboryLease = leases.find((l) => l.id === souboryId) ?? null;
 
   const upravovana = leases.find((l) => l.id === upravaId) ?? null;
   // Platna smlouva je videt hned, historicke jsou sbalene pod ni
@@ -80,7 +87,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
   const historicke = serazene.filter((l) => !l.isActive);
   const [historieOtevrena, setHistorieOtevrena] = useState(false);
   // Upravovana nebo kopirovana smlouva nesmi zustat schovana
-  const skrytaVyber = historicke.some((l) => l.id === upravaId || l.id === kopie?.id || l.id === listId);
+  const skrytaVyber = historicke.some((l) => l.id === upravaId || l.id === kopie?.id || l.id === listId || l.id === souboryId);
 
   const karta = (l: Row) => {
             const adresa = [l.tenantStreet, [l.tenantZip, l.tenantCity].filter(Boolean).join(" ")].filter(Boolean).join(", ");
@@ -99,10 +106,22 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
                     {canEdit && l.tenantAccount && <div className="text-xs text-ink-muted">účet {l.tenantAccount}</div>}
                   </div>
                   <div className="flex shrink-0 items-center gap-0.5">
-                    {/* Prace se systemem: doklady a navazujici smlouva */}
+                    {/* Prace se systemem: soubory, doklady a navazujici smlouva */}
+                    <button type="button" aria-pressed={souboryId === l.id}
+                      title={`Soubory ke smlouvě (${(dokumenty[l.id] ?? []).length})`} aria-label="Soubory ke smlouvě"
+                      onClick={() => { setUpravaId(null); setKopie(null); setListId(null); setSouboryId(souboryId === l.id ? null : l.id); }}
+                      className={`relative inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
+                        souboryId === l.id ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-accent-soft hover:text-accent"}`}>
+                      <Ikona nazev="sponka" />
+                      {(dokumenty[l.id] ?? []).length > 0 && (
+                        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
+                          {(dokumenty[l.id] ?? []).length}
+                        </span>
+                      )}
+                    </button>
                     <button type="button" title="Rozpis záloh (evidenční list)" aria-label="Rozpis záloh (evidenční list)"
                       aria-pressed={listId === l.id}
-                      onClick={() => { setUpravaId(null); setKopie(null); setListId(listId === l.id ? null : l.id); }}
+                      onClick={() => { setUpravaId(null); setKopie(null); setSouboryId(null); setListId(listId === l.id ? null : l.id); }}
                       className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${
                         listId === l.id ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-accent-soft hover:text-accent"}`}>
                       <Ikona nazev="dokument" />
@@ -179,6 +198,24 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
             </div>
           )}
         </div>
+      )}
+
+      {souboryLease && (
+        <UpravaPanel nadpis={`Soubory: ${souboryLease.tenantName}`} onZavrit={() => setSouboryId(null)}>
+          {diskPripojen || (dokumenty[souboryLease.id] ?? []).length > 0 ? (
+            <Dokumenty
+              kontext={{ kategorie: "NAJEMNI_SMLOUVA", leaseId: souboryLease.id }}
+              dokumenty={dokumenty[souboryLease.id] ?? []} canEdit={canEdit && diskPripojen}
+              nadpis="Přidat nájemní smlouvu"
+              popis="Přetáhni sem sken smlouvy nebo předávací protokol (PDF, foto). Uloží se na Google Disk do složky nájemce."
+              prazdne="K této smlouvě zatím není žádný soubor." />
+          ) : (
+            <p className="text-sm text-ink-secondary">
+              Google Disk zatím není připojený, soubory nejde nahrát. Připoj ho ve{" "}
+              <a href="/sprava" className="text-accent hover:underline">Správě</a>.
+            </p>
+          )}
+        </UpravaPanel>
       )}
 
       {listSmlouva && (
