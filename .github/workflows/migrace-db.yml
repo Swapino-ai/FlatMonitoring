@@ -1,0 +1,100 @@
+# Presun databaze Neon do jineho regionu (napr. z USA do Frankfurtu).
+#
+# Neon region existujiciho projektu zmenit neumi, proto se zalozi novy projekt v EU
+# a tenhle workflow do nej prekopiruje VSE: schema, data, sekvence (cisla najemniku),
+# propojeni s Google Diskem i pamet slozek.
+#
+# Stara databaze se jen CTE — nic se v ni nemeni ani nemaze, takze kdykoli lze vratit
+# puvodni adresy. Do nove se nic neprepise: kdyz v ni neco je, workflow se zastavi.
+#
+# Priprava: docs/migrace-neon-eu.md. Secrets:
+#   DIRECT_URL        stavajici (USA) — "Direct connection", bez "-pooler"
+#   NOVA_DIRECT_URL   nova (EU)       — "Direct connection", bez "-pooler"
+
+name: Migrace databáze do nového regionu
+
+on:
+  workflow_dispatch:
+    inputs:
+      potvrzeni:
+        description: 'Pro potvrzení napiš slovo MIGROVAT'
+        required: true
+
+jobs:
+  migrace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: ${{ inputs.potvrzeni == 'MIGROVAT' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Kontrola vstupů (adresy se nevypisují)
+        env:
+          STARA: ${{ secrets.DIRECT_URL }}
+          NOVA: ${{ secrets.NOVA_DIRECT_URL }}
+        run: |
+          [ -n "$STARA" ] || { echo "::error::Chybí secret DIRECT_URL (stará databáze)."; exit 1; }
+          [ -n "$NOVA" ]  || { echo "::error::Chybí secret NOVA_DIRECT_URL (nová databáze)."; exit 1; }
+          [ "$STARA" != "$NOVA" ] || { echo "::error::Stará a nová adresa jsou stejné."; exit 1; }
+          case "$NOVA" in *-pooler*) echo "::error::NOVA_DIRECT_URL je pooled (obsahuje -pooler). Potřebuji Direct connection."; exit 1;; esac
+          case "$STARA" in *-pooler*) echo "::error::DIRECT_URL je pooled (obsahuje -pooler). Potřebuji Direct connection."; exit 1;; esac
+          # Z adresy vypíšu jen region, ať je vidět, odkud kam se jde
+          reg() { echo "$1" | grep -oE '(us|eu|ap|sa|ca|me|af)-[a-z]+-[0-9]+' | head -1; }
+          echo "Stará databáze: $(reg "$STARA")"
+          echo "Nová databáze:  $(reg "$NOVA")"
+
+      - name: Záloha staré databáze (pro jistotu)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npm run backup
+
+      - name: Ulož zálohu jako artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: zaloha-pred-migraci-${{ github.run_number }}
+          path: zalohy/*.json
+          retention-days: 90
+
+      - name: Nová databáze musí být prázdná
+        env:
+          NOVA: ${{ secrets.NOVA_DIRECT_URL }}
+        run: |
+          pocet=$(docker run --rm postgres:17 psql "$NOVA" -tA -c "select count(*) from information_schema.tables where table_schema='public'")
+          echo "Tabulek v nové databázi: $pocet"
+          [ "$pocet" = "0" ] || { echo "::error::Nová databáze není prázdná. Založ nový prázdný projekt, nebo ji vyčisti."; exit 1; }
+
+      - name: Přenos (schéma, data, sekvence)
+        env:
+          STARA: ${{ secrets.DIRECT_URL }}
+          NOVA: ${{ secrets.NOVA_DIRECT_URL }}
+        run: |
+          set -o pipefail
+          # pg_dump jen čte; psql běží v jedné transakci, takže při chybě nová databáze zůstane prázdná
+          docker run --rm postgres:17 pg_dump "$STARA" --no-owner --no-privileges --no-comments --format=plain \
+            | docker run --rm -i postgres:17 psql "$NOVA" -v ON_ERROR_STOP=1 --single-transaction -q -o /dev/null
+
+      - name: Porovnání počtu řádků ve všech tabulkách
+        env:
+          STARA_URL: ${{ secrets.DIRECT_URL }}
+          NOVA_URL: ${{ secrets.NOVA_DIRECT_URL }}
+        run: npx tsx scripts/porovnej-databaze.ts
+
+      - name: Schéma v nové databázi je v souladu s aplikací
+        env:
+          DATABASE_URL: ${{ secrets.NOVA_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.NOVA_DIRECT_URL }}
+        run: npx prisma db push --skip-generate
+
+      - name: Co dál
+        run: |
+          echo "Migrace proběhla a počty řádků sedí."
+          echo "Teď přepni aplikaci na novou databázi (Vercel + GitHub secrets) — postup v docs/migrace-neon-eu.md."
