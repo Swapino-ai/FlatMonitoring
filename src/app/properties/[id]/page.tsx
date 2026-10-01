@@ -23,7 +23,7 @@ import { SbalitelnaKarta } from "@/components/SbalitelnaKarta";
 import { KatastrKarta, type JednotkaVolba } from "@/components/KatastrKarta";
 import { UrcitPolohu } from "@/components/UrcitPolohu";
 import { ZalohyVCase } from "@/components/ZalohyVCase";
-import { casovaOsa, porovnejProNemovitost, type NajemVstup, type SluzbaVstup } from "@/lib/zalohy";
+import { casovaOsa, porovnejProNemovitost, type NajemVstup, type PolozkaZalohy, type SluzbaVstup } from "@/lib/zalohy";
 import { VyuctovaniSluzeb, type NajemRadek, type VyuctovaniRadek } from "@/components/Vyuctovani";
 import { VyuctovaniNajemceKarta, type NajemceNajem, type VydanoRadek } from "@/components/VyuctovaniNajemceKarta";
 import { cisloNajemce } from "@/lib/najemci";
@@ -172,7 +172,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   }));
   const najmyVstup: NajemVstup[] = property.leases.map((n) => ({
     ...n,
-    historie: (historieZaloh[n.id] ?? []).map((z) => ({ validFrom: z.validFrom, amount: z.amount })),
+    advanceItems: n.advanceItems as PolozkaZalohy[] | null,
+    historie: (historieZaloh[n.id] ?? []).map((z) => ({ validFrom: z.validFrom, amount: z.amount, items: z.items as PolozkaZalohy[] | null })),
   }));
 
   // Zamerny rozdil zaloh se scita od posledniho vydaneho vyuctovani platne smlouvy

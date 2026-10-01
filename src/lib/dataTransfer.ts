@@ -149,6 +149,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       tenantEmail: s(x.tenantEmail), tenantPhone: s(x.tenantPhone),
       tenantStreet: s(x.tenantStreet), tenantCity: s(x.tenantCity), tenantZip: s(x.tenantZip), tenantAccount: s(x.tenantAccount), tenantId: s(x.tenantId),
       advanceIntentional: x.advanceIntentional === true, advanceNote: s(x.advanceNote),
+      advanceItems: x.advanceItems ?? undefined,
       startDate: dPovinne(x.startDate), endDate: d(x.endDate),
       rentMonthly: c(x.rentMonthly), utilitiesMonthly: c(x.utilitiesMonthly), deposit: c(x.deposit),
       indexationClause: !!x.indexationClause, paymentDay: Math.round(c(x.paymentDay, 15)),
@@ -158,6 +159,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
 
     const zmenyZaloh = (t.leaseAdvanceChange as any[] ?? []).map((x) => ({
       id: String(x.id), leaseId: String(x.leaseId), validFrom: dPovinne(x.validFrom), amount: c(x.amount),
+      items: x.items ?? undefined,
     }));
     if (zmenyZaloh.length) obnoveno.leaseAdvanceChange = (await tx.leaseAdvanceChange.createMany({ data: zmenyZaloh })).count;
 

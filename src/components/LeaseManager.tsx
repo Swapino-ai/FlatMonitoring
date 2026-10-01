@@ -15,7 +15,7 @@ import { HistorieZmen } from "./HistorieZmen";
 import { ZalohyUpozorneni } from "./ZalohyUpozorneni";
 import { nazevDruhu, type TypySluzeb } from "@/lib/categories";
 import {
-  popisPorovnani, porovnejZalohy, sluzbaKDatu, type PorovnaniZaloh, type SluzbaVstup,
+  mesicniNaklad, popisPorovnani, porovnejZalohy, sluzbaKDatu, type PorovnaniZaloh, type SluzbaVstup,
 } from "@/lib/zalohy";
 import { czk, dateCz } from "@/lib/format";
 
@@ -27,9 +27,11 @@ interface Row {
   startDate: Date; endDate: Date | null; rentMonthly: number; utilitiesMonthly: number;
   deposit: number; indexationClause: boolean; paymentDay: number; isActive: boolean;
   advanceIntentional: boolean; advanceNote: string | null;
+  /** Rozpis zaloh po sluzbach (JSON z databaze); null = jen celkova castka. */
+  advanceItems?: unknown;
 }
 
-export interface ZmenaZalohRadek { id: string; validFrom: Date | string; amount: number }
+export interface ZmenaZalohRadek { id: string; validFrom: Date | string; amount: number; items?: unknown }
 
 const dnesISO = () => new Date().toISOString().slice(0, 10);
 
@@ -191,9 +193,10 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
             pronajimatele,
             najemne: listSmlouva.rentMonthly,
             zalohyAktualni: listSmlouva.utilitiesMonthly,
-            zalohyHistorie: historie[listSmlouva.id] ?? [],
+            zalohyHistorie: (historie[listSmlouva.id] ?? []) as { validFrom: Date | string; amount: number; items?: { serviceId: string; amount: number }[] | null }[],
+            zalohyPolozky: listSmlouva.advanceItems as { serviceId: string; amount: number }[] | null,
             odKdy: listSmlouva.startDate.toISOString().slice(0, 10),
-            prectene: services.filter((s) => s.chargedToTenant),
+            prectene: services,
           }} />
         </UpravaPanel>
       )}
@@ -264,7 +267,24 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
   // upravovana si nechava ty, ktere ma — prepsat je potichu by zmenilo smlouvu.
   const doporuceno = Math.round(porovnejZalohy(0, sluzbyDnes)?.naklady ?? 0);
   const [zalohy, setZalohy] = useState(String(r ? r.utilitiesMonthly : doporuceno));
-  const cislo = Number(zalohy.replace(/\s/g, "").replace(",", ".")) || 0;
+
+  // Rozpis zaloh po sluzbach: kazda prectena sluzba ma svou zalohu, soucet je zaloha ve smlouve
+  const puvodniPolozky = (r?.advanceItems as { serviceId: string; amount: number }[] | null | undefined) ?? null;
+  const prectene = sluzbyDnes
+    .map((s) => ({ id: s.id, nazev: `${nazevDruhu(typy, s.type)} · ${s.provider}`, naklad: mesicniNaklad(s), prectena: s.chargedToTenant }))
+    .filter((s): s is { id: string; nazev: string; naklad: number; prectena: boolean } & { id: string } => !!s.id && s.prectena);
+  const [rozepsat, setRozepsat] = useState(puvodniPolozky != null);
+  const [polozky, setPolozky] = useState<Record<string, string>>(() =>
+    Object.fromEntries(prectene.map((s) => {
+      const puvodni = puvodniPolozky?.find((p) => p.serviceId === s.id);
+      return [s.id, String(puvodni ? puvodni.amount : Math.round(s.naklad))];
+    })));
+  const cena = (t: string) => Number(t.replace(/\s/g, "").replace(",", ".")) || 0;
+  const soucet = prectene.reduce((a, s) => a + cena(polozky[s.id] ?? "0"), 0);
+  const cislo = rozepsat ? soucet : cena(zalohy);
+  const ser = (p: { serviceId: string; amount: number }[] | null) =>
+    JSON.stringify((p ?? []).map((x) => [x.serviceId, x.amount]).sort());
+  const aktualniPolozky = rozepsat ? prectene.map((s) => ({ serviceId: s.id, amount: cena(polozky[s.id] ?? "0") })) : null;
   const [zamerne, setZamerne] = useState(r?.advanceIntentional ?? false);
   const [poznamkaZaloh, setPoznamkaZaloh] = useState(r?.advanceNote ?? "");
   const zive = porovnejZalohy(cislo, sluzbyDnes, "", zamerne, poznamkaZaloh.trim() || null);
@@ -279,7 +299,7 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
   });
 
   // Zmena zaloh u existujici smlouvy potrebuje datum, od ktereho plati
-  const zmenaZaloh = r != null && !kopie && cislo !== r.utilitiesMonthly;
+  const zmenaZaloh = r != null && !kopie && (cislo !== r.utilitiesMonthly || ser(aktualniPolozky) !== ser(puvodniPolozky));
 
   return (
     <form action={action} className="grid gap-x-3 gap-y-5 sm:grid-cols-2">
@@ -322,9 +342,74 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
           hint="Bez záloh na služby — jen tohle se daní" />
         <Pole label="Den splatnosti" name="paymentDay" type="number" min={1} max={28} defaultValue={r?.paymentDay ?? 15} />
         <Pole label="Kauce (Kč)" name="deposit" type="number" defaultValue={r?.deposit ?? 0} />
-        <Pole label="Zálohy na služby (Kč/měs.)" name="utilitiesMonthly" type="number"
-          value={zalohy} onChange={(e) => setZalohy(e.target.value)}
-          hint={!r && doporuceno > 0 ? "Předvyplněno podle služeb, které se přeúčtovávají" : "Průchozí položka, nedaní se"} />
+        {rozepsat ? (
+          <>
+            <input type="hidden" name="utilitiesMonthly" value={soucet} />
+            <input type="hidden" name="advanceBreakdown" value="on" />
+            {prectene.map((s) => <input key={s.id} type="hidden" name={`advanceItem:${s.id}`} value={cena(polozky[s.id] ?? "0")} />)}
+          </>
+        ) : (
+          <Pole label="Zálohy na služby (Kč/měs.)" name="utilitiesMonthly" type="number"
+            value={zalohy} onChange={(e) => setZalohy(e.target.value)}
+            hint={!r && doporuceno > 0 ? "Předvyplněno podle služeb, které se přeúčtovávají" : "Průchozí položka, nedaní se"} />
+        )}
+
+        {/* Zalohy po sluzbach: kolik najemce plati za kazdou polozku (muze se lisit od nakladu) */}
+        {prectene.length > 0 && (
+          <div className="space-y-3 sm:col-span-2">
+            <Zaskrtavatko name="rozepsatZalohy" label="Rozepsat zálohy po službách"
+              checked={rozepsat} onChange={(v) => { setRozepsat(v); if (v && !puvodniPolozky) setZalohy(String(soucet || zalohy)); }}
+              hint="Nastavíš, kolik nájemce platí za každou službu. Celková záloha je součet a rozpis jde do evidenčního listu." />
+            {rozepsat && (
+              <div className="overflow-hidden rounded-xl border border-line">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-surface-sunken/60 text-left text-xs text-ink-muted">
+                      <th className="px-3 py-1.5 font-medium">Služba</th>
+                      <th className="px-3 py-1.5 text-right font-medium">Ty platíš</th>
+                      <th className="px-3 py-1.5 text-right font-medium">Nájemce platí</th>
+                      <th className="px-3 py-1.5 text-right font-medium">Rozdíl</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line/60">
+                    {prectene.map((s) => {
+                      const castka = cena(polozky[s.id] ?? "0");
+                      const rozdil = castka - s.naklad;
+                      return (
+                        <tr key={s.id}>
+                          <td className="px-3 py-1.5">{s.nazev}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums text-ink-secondary">{Math.round(s.naklad).toLocaleString("cs-CZ")}&nbsp;Kč</td>
+                          <td className="px-3 py-1.5 text-right">
+                            <input type="number" min={0} step="1" aria-label={`Záloha nájemce: ${s.nazev}`}
+                              className="input w-28 py-1 text-right" value={polozky[s.id] ?? ""}
+                              onChange={(e) => setPolozky((p) => ({ ...p, [s.id]: e.target.value }))} />
+                          </td>
+                          <td className={`px-3 py-1.5 text-right tabular-nums ${Math.abs(rozdil) < 1 ? "text-ink-muted" : rozdil > 0 ? "text-accent" : "text-warn"}`}>
+                            {Math.abs(rozdil) < 1 ? "—" : `${rozdil > 0 ? "+" : "−"}${Math.round(Math.abs(rozdil)).toLocaleString("cs-CZ")}`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-surface-sunken/60 font-semibold">
+                      <td className="px-3 py-2">Zálohy celkem</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{Math.round(prectene.reduce((a, s) => a + s.naklad, 0)).toLocaleString("cs-CZ")}&nbsp;Kč</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{Math.round(soucet).toLocaleString("cs-CZ")}&nbsp;Kč</td>
+                      <td className="px-3 py-2" />
+                    </tr>
+                  </tfoot>
+                </table>
+                <div className="flex justify-end border-t border-line px-3 py-2">
+                  <button type="button" className="btn text-xs"
+                    onClick={() => setPolozky(Object.fromEntries(prectene.map((s) => [s.id, String(Math.round(s.naklad))])))}>
+                    Nastavit podle nákladů
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Zmena zaloh se zapisuje s datem: jinak by se prepsala minulost */}
         {zmenaZaloh && (
@@ -353,7 +438,7 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
                       ))}
                     </ul>
                   )}
-                  {zive && zive.polozky.length > 0 && zive.stav !== "sedi" && zive.stav !== "zamerne" && (
+                  {zive && zive.polozky.length > 0 && zive.stav !== "sedi" && zive.stav !== "zamerne" && !rozepsat && (
                     <button type="button" className="btn mt-3"
                       onClick={() => setZalohy(String(Math.round(zive.naklady)))}>
                       Použít {Math.round(zive.naklady).toLocaleString("cs-CZ")}&nbsp;Kč podle služeb

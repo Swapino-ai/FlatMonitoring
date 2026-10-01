@@ -28,12 +28,37 @@ export interface ZmenaNakladu {
 }
 
 /** Zmena zaloh ve smlouve platna od data. */
-export interface ZmenaZaloh {
-  validFrom: Date | string;
+/** Zaloha najemce na jednu sluzbu. */
+export interface PolozkaZalohy {
+  serviceId: string;
   amount: number;
 }
 
+export interface ZmenaZaloh {
+  validFrom: Date | string;
+  amount: number;
+  /** Rozpis po sluzbach platny od tohoto dne; bez nej jen celkova castka. */
+  items?: PolozkaZalohy[] | null;
+}
+
+/** Soucet rozpisu po sluzbach. */
+export const soucetPolozek = (p: PolozkaZalohy[] | null | undefined) => (p ?? []).reduce((a, x) => a + x.amount, 0);
+
+/** Rozpis zaloh po sluzbach platny k datu, nebo null (jen celkova castka). */
+export function polozkyKDatu(
+  n: { advanceItems?: PolozkaZalohy[] | null; historie?: ZmenaZaloh[] },
+  datum: Date,
+): PolozkaZalohy[] | null {
+  if (n.historie && n.historie.length > 0) {
+    const z = platnyKDatu(n.historie, datum);
+    return z?.items ?? null;
+  }
+  return n.advanceItems ?? null;
+}
+
 export interface SluzbaVstup {
+  /** Id sluzby; potreba pro rozpis zaloh po sluzbach. */
+  id?: string;
   type: string;
   provider: string;
   monthlyCost: number;
@@ -56,6 +81,8 @@ export interface NajemVstup {
   /** Zalohy jsou zamerne jine nez naklady: rozdil se neridi jako chyba, jen se zapocitava. */
   advanceIntentional?: boolean;
   advanceNote?: string | null;
+  /** Aktualni rozpis zaloh po sluzbach (bez historie). */
+  advanceItems?: PolozkaZalohy[] | null;
 }
 
 export type StavZaloh = "sedi" | "nedoplaci" | "preplaci" | "neoznaceno" | "zamerne";

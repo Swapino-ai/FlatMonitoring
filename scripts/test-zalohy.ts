@@ -2,6 +2,7 @@
  * Test porovnani zaloh najemce se sluzbami. Ciste funkce, zadna sit ani databaze.
  */
 import {
+  polozkyKDatu, soucetPolozek,
   casovaOsa, koncovaSerieNesouladu, popisPorovnani, porovnejProNemovitost, porovnejZalohy, type NajemVstup, type SluzbaVstup,
 } from "../src/lib/zalohy";
 
@@ -149,6 +150,23 @@ over("smlouva v budoucnu → zadna osa", casovaOsa({ ...najem, startDate: "2027-
   const osa = casovaOsa(najem, sl2, dnes)!;
   over("osa nema serii nesouladu", koncovaSerieNesouladu(osa) === null);
   over("mesice jsou zamerne", osa.roky[0].mesice.every((m) => m.stav === "zamerne"));
+}
+
+// --- Rozpis zaloh po sluzbach ---
+{
+  const A = [{ serviceId: "a", amount: 1590 }, { serviceId: "b", amount: 5891 }];
+  const B = [{ serviceId: "a", amount: 1800 }, { serviceId: "b", amount: 5891 }];
+  over("soucet polozek", soucetPolozek(A) === 7481 && soucetPolozek(null) === 0);
+  const hist = [
+    { validFrom: "2024-09-01", amount: 7481, items: A },
+    { validFrom: "2025-03-01", amount: 7691, items: B },
+    { validFrom: "2025-09-01", amount: 7000, items: null },
+  ];
+  over("rozpis k datu pred zmenou", polozkyKDatu({ historie: hist }, new Date("2025-01-15"))?.[0].amount === 1590);
+  over("rozpis k datu po zmene", polozkyKDatu({ historie: hist }, new Date("2025-04-15"))?.[0].amount === 1800);
+  over("zmena na jen celkovou castku ruší rozpis", polozkyKDatu({ historie: hist }, new Date("2025-10-01")) === null);
+  over("bez historie plati aktualni rozpis", polozkyKDatu({ advanceItems: A }, new Date())?.length === 2);
+  over("bez historie a bez rozpisu null", polozkyKDatu({}, new Date()) === null);
 }
 
 console.log(chyb === 0 ? "\nvše v pořádku" : `\n${chyb} chyb`);

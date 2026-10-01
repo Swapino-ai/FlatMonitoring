@@ -192,6 +192,8 @@ model Lease {
   // Aplikace pak rozdil nehlasi jako chybu, ale zapocitava ho a ukazuje.
   advanceIntentional Boolean @default(false)
   advanceNote        String?
+  /// Rozpis zaloh po sluzbach [{serviceId, amount}]; null = jen celkova castka. Soucet je utilitiesMonthly.
+  advanceItems       Json?
   paymentDay       Int     @default(15)
 
   isActive Boolean @default(true)
@@ -497,6 +499,8 @@ model LeaseAdvanceChange {
   lease     Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
   validFrom DateTime
   amount    Float
+  /// Rozpis po sluzbach platny od tohoto dne (null = jen celkova castka)
+  items     Json?
   createdAt DateTime @default(now())
 
   @@unique([leaseId, validFrom])

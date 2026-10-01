@@ -6,6 +6,7 @@ import { prisma } from "./db";
 import { getSession } from "./auth";
 import { annuityPayment, balanceAt } from "./finance";
 import { zkontrolujUcet } from "./ucet";
+import { Prisma } from "@prisma/client";
 import { synchronizujSmlouvy, urciNajemce } from "./najemci";
 import { platnyKDatu, popisPorovnani, porovnejProNemovitost } from "./zalohy";
 
@@ -101,7 +102,12 @@ async function prepocitejAktualniNaklad(tx: Tx, serviceId: string) {
 async function prepocitejAktualniZalohy(tx: Tx, leaseId: string) {
   const zaznamy = await tx.leaseAdvanceChange.findMany({ where: { leaseId } });
   const dnes = platnyKDatu(zaznamy, new Date());
-  if (dnes) await tx.lease.update({ where: { id: leaseId }, data: { utilitiesMonthly: dnes.amount } });
+  if (dnes) {
+    await tx.lease.update({
+      where: { id: leaseId },
+      data: { utilitiesMonthly: dnes.amount, advanceItems: (dnes.items as Prisma.InputJsonValue | null) ?? Prisma.DbNull },
+    });
+  }
 }
 
 // --- Úvěry ---
@@ -216,6 +222,24 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
   const ucet = zkontrolujUcet(d.tenantAccount ?? "");
   if (!ucet.ok) return { error: `Číslo účtu: ${ucet.chyba}` };
 
+  // Rozpis zaloh po sluzbach: kdyz je zapnuty, celkova zaloha je jeho soucet
+  let polozky: { serviceId: string; amount: number }[] | null = null;
+  if (formData.get("advanceBreakdown") === "on") {
+    polozky = [];
+    for (const [klic, hodnota] of formData.entries()) {
+      if (!klic.startsWith("advanceItem:")) continue;
+      const castka = Number(String(hodnota).replace(/[\s ]/g, "").replace(",", "."));
+      if (!Number.isFinite(castka) || castka < 0) return { error: "Záloha na službu musí být číslo, nula nebo víc." };
+      polozky.push({ serviceId: klic.slice("advanceItem:".length), amount: Math.round(castka * 100) / 100 });
+    }
+    const sluzbyNem = await prisma.service.findMany({ where: { propertyId: d.propertyId }, select: { id: true } });
+    const ids = new Set(sluzbyNem.map((s) => s.id));
+    if (polozky.some((p) => !ids.has(p.serviceId))) return { error: "Rozpis zaloh obsahuje službu z jiné nemovitosti." };
+    if (polozky.length === 0) return { error: "Rozpis záloh je prázdný. Vypni rozpis, nebo označ služby k přeúčtování." };
+    d.utilitiesMonthly = Math.round(polozky.reduce((a, p) => a + p.amount, 0) * 100) / 100;
+  }
+  const polozkyJson = polozky ? (polozky as unknown as Prisma.InputJsonValue) : Prisma.DbNull;
+
   // Najemce ma vlastni identitu (tabulka Tenant); smlouva na nej jen odkazuje
   const najemceId = await urciNajemce({
     name: d.tenantName, email: d.tenantEmail, phone: d.tenantPhone,
@@ -235,6 +259,7 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
     endDate: d.endDate ? new Date(d.endDate) : null,
     rentMonthly: d.rentMonthly,
     utilitiesMonthly: d.utilitiesMonthly,
+    advanceItems: polozkyJson,
     deposit: d.deposit,
     paymentDay: Math.round(d.paymentDay),
     indexationClause: d.indexationClause,
@@ -258,12 +283,15 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
 
     // Zmena zaloh se zapisuje s datem, od ktereho plati; jinak by se prepsala
     // minulost a nedalo by se zjistit, co najemce platil drive.
-    const zmenaZaloh = stara.utilitiesMonthly !== d.utilitiesMonthly;
+    const ser = (p: unknown) => JSON.stringify(
+      ((p as { serviceId: string; amount: number }[] | null) ?? []).map((x) => [x.serviceId, x.amount]).sort(),
+    );
+    const zmenaZaloh = stara.utilitiesMonthly !== d.utilitiesMonthly || ser(stara.advanceItems) !== ser(polozky);
     if (zmenaZaloh) {
       if (!d.advanceValidFrom) return { error: "Zadej, od kdy nové zálohy platí." };
     }
 
-    const { utilitiesMonthly: _z, ...bezZaloh } = data;
+    const { utilitiesMonthly: _z, advanceItems: _i, ...bezZaloh } = data;
     await prisma.$transaction(async (tx) => {
       await tx.lease.update({ where: { id }, data: bezZaloh });
       if (!zmenaZaloh) return;
@@ -276,14 +304,15 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
         await tx.leaseAdvanceChange.create({
           data: {
             leaseId: id, amount: stara.utilitiesMonthly,
+            items: (stara.advanceItems as Prisma.InputJsonValue | null) ?? Prisma.DbNull,
             validFrom: stara.startDate < predZmenou ? stara.startDate : predZmenou,
           },
         });
       }
       await tx.leaseAdvanceChange.upsert({
         where: { leaseId_validFrom: { leaseId: id, validFrom: platiOd } },
-        update: { amount: d.utilitiesMonthly },
-        create: { leaseId: id, validFrom: platiOd, amount: d.utilitiesMonthly },
+        update: { amount: d.utilitiesMonthly, items: polozkyJson },
+        create: { leaseId: id, validFrom: platiOd, amount: d.utilitiesMonthly, items: polozkyJson },
       });
       await prepocitejAktualniZalohy(tx, id);
     });

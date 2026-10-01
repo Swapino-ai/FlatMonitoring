@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { czk, dateCz } from "@/lib/format";
 import { nazevDruhu, type TypySluzeb } from "@/lib/categories";
-import { mesicniNaklad, platnyKDatu, sluzbaKDatu, type SluzbaVstup } from "@/lib/zalohy";
+import { mesicniNaklad, platnyKDatu, polozkyKDatu, soucetPolozek, sluzbaKDatu, type PolozkaZalohy, type SluzbaVstup } from "@/lib/zalohy";
 import { DatumPole } from "./DatumPole";
 
 export interface Pronajimatel { name: string; adresa: string }
@@ -14,9 +14,11 @@ export interface EvidencniVstup {
   pronajimatele: Pronajimatel[];
   najemne: number;
   zalohyAktualni: number;
-  zalohyHistorie: { validFrom: Date | string; amount: number }[];
+  zalohyHistorie: { validFrom: Date | string; amount: number; items?: PolozkaZalohy[] | null }[];
+  /** Aktualni rozpis zaloh po sluzbach; null = jen celkova castka. */
+  zalohyPolozky?: PolozkaZalohy[] | null;
   odKdy: string;
-  /** Sluzby preuctovane najemci; cena a poznamka se berou ke zvolenemu dni. */
+  /** Vsechny sluzby nemovitosti (s id); bez rozpisu zaloh se vezmou ty preuctovane a jejich cena. */
   prectene: SluzbaVstup[];
 }
 
@@ -52,13 +54,24 @@ export function EvidencniList({ v, typy }: { v: EvidencniVstup; typy: TypySluzeb
   const den = platnyOd ?? vychozi;
 
   // Zalohy platne k zvolenemu dni; pred zacatkem najmu plati pocatecni hodnota
-  const platne = platnyKDatu(v.zalohyHistorie, new Date(`${den}T00:00:00Z`));
-  const zalohy = platne ? platne.amount : v.zalohyAktualni;
+  const datumDne = new Date(`${den}T00:00:00Z`);
+  const platne = platnyKDatu(v.zalohyHistorie, datumDne);
+  const polozkyDen = polozkyKDatu({ advanceItems: v.zalohyPolozky, historie: v.zalohyHistorie }, datumDne);
+
+  // Rozepsane zalohy: kazda sluzba ma castku, kterou nájemce skutecne plati.
+  // Bez rozpisu se ukazou naklady preuctovanych sluzeb a celkova zaloha zvlast.
+  const rozepsano = polozkyDen != null && polozkyDen.length > 0;
+  const zalohy = rozepsano ? soucetPolozek(polozkyDen) : platne ? platne.amount : v.zalohyAktualni;
   const celkem = v.najemne + zalohy;
-  const sluzby = v.prectene.map((s) => {
-    const k = sluzbaKDatu(s, new Date(`${den}T00:00:00Z`));
-    return { type: s.type, provider: s.provider, poznamka: s.notes?.trim() || null, castka: mesicniNaklad(k) };
-  });
+  const sluzby = rozepsano
+    ? polozkyDen!.map((p) => {
+      const s = v.prectene.find((x) => x.id === p.serviceId);
+      return { type: s?.type ?? "OTHER", provider: s?.provider ?? "smazaná služba", poznamka: s?.notes?.trim() || null, castka: p.amount };
+    })
+    : v.prectene.filter((s) => s.chargedToTenant).map((s) => {
+      const k = sluzbaKDatu(s, datumDne);
+      return { type: s.type, provider: s.provider, poznamka: s.notes?.trim() || null, castka: mesicniNaklad(k) };
+    });
   const souctuSluzeb = sluzby.reduce((a, s) => a + s.castka, 0);
   const rozdil = zalohy - souctuSluzeb;
 
@@ -155,7 +168,7 @@ export function EvidencniList({ v, typy }: { v: EvidencniVstup; typy: TypySluzeb
                     <div className="font-medium">Zálohy na služby celkem</div>
                     <div className="text-[11px] text-ink-muted">
                       Zálohy se vyúčtují podle skutečných nákladů.
-                      {sluzby.length > 0 && Math.abs(rozdil) >= 1 && (
+                      {!rozepsano && sluzby.length > 0 && Math.abs(rozdil) >= 1 && (
                         <> Náklady služeb jsou nyní {czk(souctuSluzeb)}, záloha je {rozdil > 0 ? "vyšší" : "nižší"} o {czk(Math.abs(rozdil))}.</>
                       )}
                     </div>
