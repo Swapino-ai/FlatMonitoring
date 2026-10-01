@@ -24,6 +24,7 @@ export async function exportujVse(): Promise<Zaloha> {
       service: await prisma.service.findMany(),
       serviceCostChange: await prisma.serviceCostChange.findMany(),
       tenant: await prisma.tenant.findMany(),
+      operator: await prisma.operator.findMany(),
       dokument: await prisma.dokument.findMany(),
       tenantStatement: await prisma.tenantStatement.findMany(),
       serviceSettlement: await prisma.serviceSettlement.findMany(),
@@ -82,6 +83,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.tenant.deleteMany();
     await tx.loan.deleteMany();
     await tx.property.deleteMany();
+    await tx.operator.deleteMany();
     await tx.user.deleteMany();
 
     const obnoveno: Record<string, number> = {};
@@ -94,7 +96,15 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     }));
     obnoveno.user = (await tx.user.createMany({ data: users })).count;
 
+    const provozovatele = (t.operator as any[] ?? []).map((x) => ({
+      id: String(x.id), name: String(x.name), street: s(x.street), city: s(x.city), zip: s(x.zip),
+      ico: s(x.ico), dic: s(x.dic), email: s(x.email), phone: s(x.phone), account: s(x.account), notes: s(x.notes),
+      createdAt: dPovinne(x.createdAt ?? new Date()),
+    }));
+    if (provozovatele.length) obnoveno.operator = (await tx.operator.createMany({ data: provozovatele })).count;
+
     const properties = (t.property as any[] ?? []).map((x) => ({
+      operatorId: s(x.operatorId),
       id: String(x.id), type: String(x.type ?? "BYT"),
       name: String(x.name), street: String(x.street), city: String(x.city),
       zip: String(x.zip), district: s(x.district), country: String(x.country ?? "CZ"),

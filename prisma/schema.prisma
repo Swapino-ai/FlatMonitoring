@@ -57,6 +57,10 @@ model PropertyOwner {
 
 /// Nemovitost — ustredni entita aplikace
 model Property {
+  /// Provozovatel (pronajimatel na smlouvach); null = pouzije se vlastnik s nejvetsim podilem
+  operatorId String?
+  operator   Operator? @relation(fields: [operatorId], references: [id], onDelete: SetNull)
+
   id       String  @id @default(cuid())
   name     String // pracovni nazev, napr. "Vinohrady 2+kk"
   street   String
@@ -651,4 +655,24 @@ model TenantStatement {
 
   @@index([leaseId, periodFrom])
   @@index([propertyId])
+}
+
+/// Provozovatel nemovitosti: strana, ktera je na najemnich smlouvach a vyuctovani jako pronajimatel.
+/// Nemusi byt vlastnik (vlastnici jsou v PropertyOwner a vidi sve portfolio); muze to byt firma ci sprava.
+model Operator {
+  id      String @id @default(cuid())
+  name    String
+  street  String?
+  city    String?
+  zip     String?
+  ico     String?
+  dic     String?
+  email   String?
+  phone   String?
+  /// Ucet, kam najemci placi najem a nedoplatky (kontrolovany tvar)
+  account String?
+  notes   String?
+
+  createdAt  DateTime   @default(now())
+  properties Property[]
 }

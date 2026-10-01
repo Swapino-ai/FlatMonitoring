@@ -80,6 +80,9 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
             <>
               <div className="font-medium">{s.pronajimatel.name}</div>
               {s.pronajimatel.adresa && <div className="text-xs text-ink-muted">{s.pronajimatel.adresa}</div>}
+              {(s.pronajimatel.ico || s.pronajimatel.dic) && (
+                <div className="text-xs text-ink-muted">{[s.pronajimatel.ico && `IČO ${s.pronajimatel.ico}`, s.pronajimatel.dic && `DIČ ${s.pronajimatel.dic}`].filter(Boolean).join(" · ")}</div>
+              )}
             </>
           ) : <div className="text-xs text-ink-muted">neuveden</div>}
         </Strana>

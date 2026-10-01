@@ -5,6 +5,7 @@ import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Card, Stat, StatGrid } from "@/components/Stat";
 import { DataTransfer } from "@/components/DataTransfer";
+import { ProvozovateleManager } from "@/components/ProvozovateleManager";
 import { GoogleDiskKarta } from "@/components/GoogleDiskKarta";
 import { Dokumenty } from "@/components/Dokumenty";
 import { jeNastaveno, odkazNaSlozku } from "@/lib/googleDrive";
@@ -46,6 +47,9 @@ export default async function SpravaPage({ searchParams }: { searchParams: Promi
   const zkusebni = spojeni
     ? await prisma.dokument.findMany({ where: { kategorie: "OSTATNI" }, orderBy: { createdAt: "desc" }, take: 20 })
     : [];
+  const provozovateleDb = await prisma.operator.findMany({
+    orderBy: { name: "asc" }, include: { _count: { select: { properties: true } } },
+  });
   const typy = await nactiTypySluzeb();
   const pouziti = Object.fromEntries(
     (await prisma.service.groupBy({ by: ["type"], _count: { _all: true } })).map((g) => [g.type, g._count._all]),
@@ -71,6 +75,17 @@ export default async function SpravaPage({ searchParams }: { searchParams: Promi
             sub={poslendiBeh?.status === "SELHALO" ? "selhal" : poslendiBeh ? "v pořádku" : "zatím neproběhl"}
             tone={poslendiBeh?.status === "SELHALO" ? "bad" : poslendiBeh ? "good" : "warn"} />
         </StatGrid>
+
+        <Card title="Provozovatelé nemovitostí">
+          <p className="mb-3 text-sm text-ink-secondary">
+            Provozovatel je pronajímatel na nájemních smlouvách, evidenčním listu a vyúčtování. Nemusí být vlastník:
+            vlastníci s podíly se nastavují u nemovitosti a každý vlastník vidí své portfolio. Provozovatele vybereš u nemovitosti.
+          </p>
+          <ProvozovateleManager provozovatele={provozovateleDb.map((o) => ({
+            id: o.id, name: o.name, street: o.street, city: o.city, zip: o.zip, ico: o.ico, dic: o.dic,
+            email: o.email, phone: o.phone, account: o.account, notes: o.notes, pouzito: o._count.properties,
+          }))} />
+        </Card>
 
         <Card title="Google Disk — úložiště dokumentů">
           <GoogleDiskKarta

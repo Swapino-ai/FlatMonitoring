@@ -15,6 +15,7 @@ const withRelations = {
   include: {
     loans: true,
     leases: true,
+    operator: true,
     services: true,
     valuations: { orderBy: { date: "desc" } },
     owners: { include: { user: { select: { id: true, name: true, email: true, street: true, city: true, zip: true, account: true } } } },

@@ -19,7 +19,7 @@ export interface SnapshotVyuctovani {
   verze: 1;
   nemovitost: { nazev: string; adresa: string };
   najemce: { cislo: string | null; name: string; adresa: string; email: string | null; phone: string | null; ucet: string | null };
-  pronajimatel: { name: string; adresa: string; ucet: string | null } | null;
+  pronajimatel: { name: string; adresa: string; ucet: string | null; ico?: string | null; dic?: string | null } | null;
   od: string;
   do: string;
   radky: RadekNajemce[];

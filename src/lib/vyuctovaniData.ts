@@ -2,6 +2,7 @@ import { prisma } from "./db";
 import { nazevDruhu } from "./categories";
 import { nactiTypySluzeb } from "./typySluzeb";
 import { cisloNajemce } from "./najemci";
+import { pronajimatelNemovitosti } from "./provozovatel";
 import type { NajemVstup, SluzbaVyuctovani } from "./vyuctovani";
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -14,7 +15,7 @@ export async function nactiVstupyVyuctovani(propertyId: string) {
   const [nemovitost, smlouvy, sluzby, typy] = await Promise.all([
     prisma.property.findUnique({
       where: { id: propertyId },
-      include: { owners: { include: { user: true }, orderBy: { share: "desc" } } },
+      include: { operator: true, owners: { include: { user: true }, orderBy: { share: "desc" } } },
     }),
     prisma.lease.findMany({
       where: { propertyId }, include: { tenant: true, advanceChanges: { orderBy: { validFrom: "asc" } } },
@@ -47,12 +48,10 @@ export async function nactiVstupyVyuctovani(propertyId: string) {
   const adresa = (u: { street: string | null; city: string | null; zip: string | null }) =>
     [u.street, [u.zip, u.city].filter(Boolean).join(" ")].filter(Boolean).join(", ");
 
-  // Pronajimatel: spoluvlastnik s nejvetsim podilem, ktery ma aspon vyplnene jmeno
-  const vlastnik = nemovitost.owners[0]?.user ?? null;
-
   return {
     nemovitost: { nazev: nemovitost.name, adresa: `${nemovitost.street}, ${nemovitost.zip} ${nemovitost.city}` },
-    pronajimatel: vlastnik ? { name: vlastnik.name, adresa: adresa(vlastnik), ucet: vlastnik.account } : null,
+    // Pronajimatel je provozovatel nemovitosti; bez nej vlastnik s nejvetsim podilem
+    pronajimatel: pronajimatelNemovitosti(nemovitost),
     smlouvy, najmy, sluzby: sluzbyVyuct,
     najemceInfo: (n: (typeof smlouvy)[number]) => ({
       cislo: n.tenant ? cisloNajemce(n.tenant.cislo) : null,

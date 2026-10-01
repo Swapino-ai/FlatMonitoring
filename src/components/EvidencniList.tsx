@@ -6,7 +6,8 @@ import { nazevDruhu, type TypySluzeb } from "@/lib/categories";
 import { mesicniNaklad, platnyKDatu, polozkyKDatu, soucetPolozek, sluzbaKDatu, type PolozkaZalohy, type SluzbaVstup } from "@/lib/zalohy";
 import { DatumPole } from "./DatumPole";
 
-export interface Pronajimatel { name: string; adresa: string }
+export type { Pronajimatel } from "@/lib/provozovatel";
+import type { Pronajimatel } from "@/lib/provozovatel";
 
 export interface EvidencniVstup {
   nemovitost: { nazev: string; adresa: string };
@@ -124,6 +125,7 @@ export function EvidencniList({ v, typy }: { v: EvidencniVstup; typy: TypySluzeb
                 <div key={i}>
                   <Radek t="Jméno a příjmení" v={<strong>{p.name}</strong>} />
                   {p.adresa && <Radek t="Adresa" v={p.adresa} />}
+                  {(p.ico || p.dic) && <Radek t="IČO / DIČ" v={[p.ico, p.dic].filter(Boolean).join(" / ")} />}
                 </div>
               ))}
           </Karta>

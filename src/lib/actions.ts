@@ -57,6 +57,8 @@ const propertySchema = z.object({
   // Jen pri zakladani — u uprav se vlastnici resi vlastni sekci
   ownerId: optionalString,
   ownerShare: numberish(100),
+  // Provozovatel = pronajimatel na smlouvach; nemusi byt vlastnik
+  operatorId: optionalString,
 });
 
 export interface FormState {
@@ -104,6 +106,7 @@ export async function saveProperty(id: string | null, _prev: FormState, formData
     depreciationGroup: d.depreciationGroup, depreciationMethod: d.depreciationMethod,
     depreciationStart: new Date(d.purchaseDate).getFullYear(),
     status: d.status, notes: d.notes,
+    operatorId: d.operatorId,
   };
 
   let saved;

@@ -21,9 +21,12 @@ type Values = Partial<{
   depreciationMethod: string; status: string; notes: string | null;
   latitude: number | null; longitude: number | null; region: string | null;
   scanRadiusKm: number | null; excludedCities: string | null;
+  operatorId: string | null;
 }>;
 
-export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik }: {
+export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik, provozovatele = [] }: {
+  /** Provozovatele k vyberu (Sprava). */
+  provozovatele?: { id: string; name: string }[];
   id?: string;
   values?: Values;
   /** Seznam uctu pro vyber vlastnika — jen pri zakladani. */
@@ -237,6 +240,23 @@ export function PropertyForm({ id, values = {}, uzivatele = [], vychoziVlastnik 
           </div>
         </Card>
       )}
+
+      <Card title="Provozovatel">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="label mb-1.5 block" htmlFor="operatorId">Kdo je na smlouvách jako pronajímatel</label>
+            <select id="operatorId" name="operatorId" defaultValue={v.operatorId ?? ""} className="input">
+              <option value="">— nevybráno (použije se vlastník s největším podílem) —</option>
+              {provozovatele.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-ink-muted">
+              Provozovatel je pronajímatel na evidenčním listu a ve vyúčtování, nemusí být vlastník.
+              Vlastníci a jejich podíly jsou výše; každý vlastník vidí své portfolio.
+              Provozovatele zakládáš ve Správě.
+            </p>
+          </div>
+        </div>
+      </Card>
 
       <Card title="Poznámky">
         <textarea name="notes" defaultValue={v.notes ?? ""} rows={3} className="input" />

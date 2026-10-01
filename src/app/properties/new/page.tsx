@@ -17,6 +17,8 @@ export default async function NewPropertyPage() {
     select: { id: true, name: true, email: true },
   });
 
+  const provozovatele = await prisma.operator.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } });
+
   return (
     <>
       <Nav user={user} verze={<Verze />} />
@@ -29,7 +31,7 @@ export default async function NewPropertyPage() {
             spoluvlastníky doplníš po uložení v detailu nemovitosti.
           </p>
         </div>
-        <PropertyForm uzivatele={uzivatele} vychoziVlastnik={user.id} />
+        <PropertyForm uzivatele={uzivatele} vychoziVlastnik={user.id} provozovatele={provozovatele} />
       </main>
     </>
   );

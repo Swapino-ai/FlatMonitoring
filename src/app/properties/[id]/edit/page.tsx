@@ -26,6 +26,8 @@ export default async function EditPropertyPage({ params }: { params: Promise<{ i
     select: { id: true, name: true, email: true },
   });
 
+  const provozovatele = await prisma.operator.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } });
+
   return (
     <>
       <Nav user={user} verze={<Verze />} />
@@ -47,7 +49,7 @@ export default async function EditPropertyPage({ params }: { params: Promise<{ i
           />
         </Card>
 
-        <PropertyForm id={id} values={{ ...property, purchaseDate: property.purchaseDate }} />
+        <PropertyForm id={id} values={{ ...property, purchaseDate: property.purchaseDate }} provozovatele={provozovatele} />
       </main>
     </>
   );

@@ -27,6 +27,7 @@ import { casovaOsa, porovnejProNemovitost, type NajemVstup, type PolozkaZalohy, 
 import { VyuctovaniSluzeb, type NajemRadek, type VyuctovaniRadek } from "@/components/Vyuctovani";
 import { VyuctovaniNajemceKarta, type NajemceNajem, type VydanoRadek } from "@/components/VyuctovaniNajemceKarta";
 import { cisloNajemce } from "@/lib/najemci";
+import { pronajimatelNemovitosti } from "@/lib/provozovatel";
 import type { SnapshotVyuctovani } from "@/lib/vyuctovaniVydane";
 import type { SluzbaVyuctovani } from "@/lib/vyuctovani";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
@@ -136,12 +137,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const najemciDb = jeMajitel
     ? await prisma.tenant.findMany({ where: { id: { in: property.leases.map((l) => l.tenantId).filter((t): t is string => !!t) } } })
     : [];
-  const vlastnikVyuct = property.owners[0]?.user ?? null;
-  const pronajimatelVyuct: SnapshotVyuctovani["pronajimatel"] = vlastnikVyuct ? {
-    name: vlastnikVyuct.name,
-    adresa: [vlastnikVyuct.street, [vlastnikVyuct.zip, vlastnikVyuct.city].filter(Boolean).join(" ")].filter(Boolean).join(", "),
-    ucet: vlastnikVyuct.account,
-  } : null;
+  // Pronajimatel na dokladech: provozovatel nemovitosti (bez nej vlastnik s nejvetsim podilem)
+  const pronajimatelVyuct: SnapshotVyuctovani["pronajimatel"] = pronajimatelNemovitosti(property);
   const najmyProNajemce: NajemceNajem[] = property.leases.map((n) => {
     const t = najemciDb.find((x) => x.id === n.tenantId);
     return {
@@ -263,6 +260,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             {property.disposition && ` · ${property.disposition}`} · {property.areaM2} m²
             {property.floor != null && ` · ${property.floor}. patro`}
             {property.buildYear && ` · rok ${property.buildYear}`}
+            {property.operator && ` · provozovatel ${property.operator.name}`}
           </p>
           <div className="flex shrink-0 items-center gap-2">
             {property.owners.some((o) => o.share < 100) && <PohledPrepinac pohled={pohled} />}
@@ -447,10 +445,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             <SbalitelnaKarta klic="najem" title="Nájem a nájemci">
               <LeaseManager typy={typy} propertyId={property.id} leases={property.leases}
                 nemovitost={{ nazev: property.name, adresa: `${property.street}, ${property.zip} ${property.city}` }}
-                pronajimatele={property.owners.map((o) => ({
-                  name: o.user.name,
-                  adresa: [o.user.street, [o.user.zip, o.user.city].filter(Boolean).join(" ")].filter(Boolean).join(", "),
-                }))} canEdit={user.role === "OWNER"}
+                pronajimatele={pronajimatelVyuct ? [pronajimatelVyuct] : []} canEdit={user.role === "OWNER"}
                 services={sluzbyVstup} porovnani={zalohy} historie={historieZaloh} />
               <div className="mt-4 border-t border-line pt-3">
                 <table className="table-base">
