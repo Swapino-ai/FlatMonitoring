@@ -139,6 +139,13 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     : [];
   // Pronajimatel na dokladech: provozovatel nemovitosti (bez nej vlastnik s nejvetsim podilem)
   const pronajimatelVyuct: SnapshotVyuctovani["pronajimatel"] = pronajimatelNemovitosti(property);
+  // Nájemci z databáze k výběru ve formuláři smlouvy (jen majitel; obsahují kontakty a účty)
+  const najemciVyber = jeMajitel
+    ? (await prisma.tenant.findMany({ orderBy: { cislo: "asc" } })).map((t) => ({
+      id: t.id, cislo: cisloNajemce(t.cislo), name: t.name, email: t.email, phone: t.phone,
+      street: t.street, city: t.city, zip: t.zip, account: t.account,
+    }))
+    : [];
   const najmyProNajemce: NajemceNajem[] = property.leases.map((n) => {
     const t = najemciDb.find((x) => x.id === n.tenantId);
     return {
@@ -453,7 +460,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             varovani: zalohyNesedi,
             obsah: (<>
             <SbalitelnaKarta klic="najem" title="Nájem a nájemci">
-              <LeaseManager typy={typy} dokumenty={dokumentyPodleSmlouvy} diskPripojen={diskPripojen} propertyId={property.id} leases={property.leases}
+              <LeaseManager typy={typy} najemci={najemciVyber} dokumenty={dokumentyPodleSmlouvy} diskPripojen={diskPripojen} propertyId={property.id} leases={property.leases}
                 nemovitost={{ nazev: property.name, adresa: `${property.street}, ${property.zip} ${property.city}` }}
                 pronajimatele={pronajimatelVyuct ? [pronajimatelVyuct] : []} canEdit={user.role === "OWNER"}
                 services={sluzbyVstup} porovnani={zalohy} historie={historieZaloh} />

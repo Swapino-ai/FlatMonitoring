@@ -32,6 +32,11 @@ interface Row {
   advanceItems?: unknown;
 }
 
+export interface NajemceVyber {
+  id: string; cislo: string; name: string; email: string | null; phone: string | null;
+  street: string | null; city: string | null; zip: string | null; account: string | null;
+}
+
 export interface ZmenaZalohRadek { id: string; validFrom: Date | string; amount: number; items?: unknown }
 
 const dnesISO = () => new Date().toISOString().slice(0, 10);
@@ -43,7 +48,7 @@ function denPo(iso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function LeaseManager({ propertyId, leases, canEdit, services, porovnani, historie, nemovitost, pronajimatele, typy, dokumenty, diskPripojen }: {
+export function LeaseManager({ propertyId, leases, canEdit, services, porovnani, historie, nemovitost, pronajimatele, typy, dokumenty, diskPripojen, najemci }: {
   typy: TypySluzeb;
   /** Udaje do evidencniho listu. */
   nemovitost: { nazev: string; adresa: string };
@@ -51,6 +56,8 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
   /** Soubory ke smlouvam (Google Disk) podle id smlouvy. */
   dokumenty: Record<string, DokumentRadek[]>;
   diskPripojen: boolean;
+  /** Nájemci z databáze k výběru ve formuláři smlouvy. */
+  najemci: NajemceVyber[];
   propertyId: string; leases: Row[]; canEdit: boolean;
   /** Sluzby nemovitosti — zalohy se ve formulari overuji proti nim. */
   services: SluzbaVstup[];
@@ -240,7 +247,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
 
       {canEdit && upravovana && (
         <UpravaPanel nadpis={`Upravit smlouvu s ${upravovana.tenantName}`} onZavrit={() => setUpravaId(null)}>
-          <Formular typy={typy} key={upravovana.id} propertyId={propertyId} r={upravovana} services={services}
+          <Formular typy={typy} najemci={najemci} key={upravovana.id} propertyId={propertyId} r={upravovana} services={services}
             action={upravaAction} pending={upravuji} popisekTlacitka="Uložit změny" />
           <HistorieZmen
             nadpis="Historie záloh"
@@ -273,7 +280,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
                 <strong>{dateCz(new Date(`${denPo(kopie.konec)}T00:00:00Z`))}</strong>. Všechny údaje jsou předvyplněné, uprav jen,
                 co se mění.
               </p>
-              <Formular typy={typy} key={`${kopie.id}-${kopie.konec}`} propertyId={propertyId} services={services}
+              <Formular typy={typy} najemci={najemci} key={`${kopie.id}-${kopie.konec}`} propertyId={propertyId} services={services}
                 r={{ ...kopirovana, startDate: new Date(`${denPo(kopie.konec)}T00:00:00Z`), endDate: null, isActive: true }}
                 kopie={{ predchoziId: kopie.id, predchoziKonec: kopie.konec }}
                 action={addAction} pending={adding} popisekTlacitka="Ukončit starou a uložit novou" />
@@ -284,7 +291,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
 
       {canEdit && !upravovana && !kopie && (
         <Rozbalovaci popisek="Přidat nájemní smlouvu" zavritPo={addState.success}>
-          <Formular typy={typy} propertyId={propertyId} r={null} services={services} action={addAction} pending={adding}
+          <Formular typy={typy} najemci={najemci} propertyId={propertyId} r={null} services={services} action={addAction} pending={adding}
             popisekTlacitka="Uložit smlouvu" />
         </Rozbalovaci>
       )}
@@ -292,8 +299,9 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
   );
 }
 
-function Formular({ propertyId, r, services, action, pending, popisekTlacitka, kopie, typy }: {
+function Formular({ propertyId, r, services, action, pending, popisekTlacitka, kopie, typy, najemci }: {
   typy: TypySluzeb;
+  najemci: NajemceVyber[];
   propertyId: string; r: Row | null; kopie?: { predchoziId: string; predchoziKonec: string }; services: SluzbaVstup[];
   action: (payload: FormData) => void; pending: boolean; popisekTlacitka: string;
 }) {
@@ -327,6 +335,11 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
   const zive = porovnejZalohy(cislo, sluzbyDnes, "", zamerne, poznamkaZaloh.trim() || null);
   const popis = zive ? popisPorovnani(zive) : null;
 
+  // Najemce: vyber z databaze (predvyplni udaje) nebo novy
+  const [tenantId, setTenantId] = useState(r?.tenantId ?? "");
+  const [jmeno, setJmeno] = useState(r?.tenantName ?? "");
+  const [email, setEmail] = useState(r?.tenantEmail ?? "");
+  const [telefon, setTelefon] = useState(r?.tenantPhone ?? "");
   const [ucet, setUcet] = useState(r?.tenantAccount ?? "");
   const ucetKontrola = zkontrolujUcet(ucet);
   const ucetChyba = ucetKontrola.ok ? null : ucetKontrola.chyba;
@@ -341,14 +354,35 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
   return (
     <form action={action} className="grid gap-x-3 gap-y-5 sm:grid-cols-2">
       <input type="hidden" name="propertyId" value={propertyId} />
-      <input type="hidden" name="tenantId" value={r?.tenantId ?? ""} />
+      <input type="hidden" name="tenantId" value={tenantId} />
       {kopie && <input type="hidden" name="predchoziId" value={kopie.predchoziId} />}
       {kopie && <input type="hidden" name="predchoziKonec" value={kopie.predchoziKonec} />}
 
       <Sekce nadpis="Nájemce" popis="Kontakt a adresa do smlouvy a k vyúčtování služeb.">
-        <Pole label="Jméno nájemce" name="tenantName" required defaultValue={r?.tenantName} sirka="sm:col-span-2" />
-        <Pole label="E-mail" name="tenantEmail" type="email" placeholder="nepovinné" defaultValue={r?.tenantEmail ?? ""} />
-        <Pole label="Telefon" name="tenantPhone" placeholder="nepovinné" defaultValue={r?.tenantPhone ?? ""} />
+        {najemci.length > 0 && (
+          <div className="sm:col-span-2">
+            <label className="label mb-1.5 block" htmlFor="vyberNajemce">Kdo je nájemce</label>
+            <select id="vyberNajemce" className="input" value={tenantId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setTenantId(id);
+                const n = najemci.find((x) => x.id === id);
+                if (n) {
+                  setJmeno(n.name); setEmail(n.email ?? ""); setTelefon(n.phone ?? ""); setUcet(n.account ?? "");
+                  setAdresa({ ulice: n.street ?? "", obec: n.city ?? "", psc: n.zip ?? "" });
+                }
+              }}>
+              <option value="">— nový nájemce (vyplň níže) —</option>
+              {najemci.map((n) => <option key={n.id} value={n.id}>{n.cislo} · {n.name}{n.email ? ` (${n.email})` : ""}</option>)}
+            </select>
+            <p className="mt-1 text-xs text-ink-muted">
+              Vyber nájemce z databáze a údaje se předvyplní. Úprava níže platí pro všechny jeho smlouvy.
+            </p>
+          </div>
+        )}
+        <Pole label="Jméno nájemce" name="tenantName" required value={jmeno} onChange={(e) => setJmeno(e.target.value)} sirka="sm:col-span-2" />
+        <Pole label="E-mail" name="tenantEmail" type="email" placeholder="nepovinné" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <Pole label="Telefon" name="tenantPhone" placeholder="nepovinné" value={telefon} onChange={(e) => setTelefon(e.target.value)} />
         <UliceNaseptavac name="tenantStreet" value={adresa.ulice} className="sm:col-span-2"
           placeholder="nepovinné" hint="Trvalé bydliště nebo adresa pro doručování"
           onChange={(t) => setAdresa((a) => ({ ...a, ulice: t }))}
