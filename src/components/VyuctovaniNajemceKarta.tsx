@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import {
-  nastavSplatnost, oznacOdeslano, oznacVyporadano, stornoVyuctovani, vydejVyuctovani, zrusVyporadani,
+  nastavSplatnost, oznacOdeslano, oznacVyporadano, smazVyuctovani, stornoVyuctovani, vydejVyuctovani, zrusVyporadani,
   type VydaniState,
 } from "@/lib/vyuctovaniNajemceActions";
 import { pridejDny, vyuctovaniNajemce, type NajemVstup, type SluzbaVyuctovani } from "@/lib/vyuctovani";
@@ -262,11 +262,12 @@ function Detail({ x, canEdit, diskPripojen, znovu }: { x: VydanoRadek; canEdit: 
   const [zruseno, zrusAkce] = useActionState<VydaniState, FormData>(zrusVyporadani, {});
   const [splatnost, splatnostAkce] = useActionState<VydaniState, FormData>(nastavSplatnost, {});
   const [storno, stornoAkce] = useActionState<VydaniState, FormData>(stornoVyuctovani, {});
+  const [smazano, smazAkce] = useActionState<VydaniState, FormData>(smazVyuctovani, {});
   const [zkopirovano, setZkopirovano] = useState(false);
 
   const zprava = textZpravy(x.snapshot, x.cislo, x.dueDate);
   const stornovano = x.status === "STORNO";
-  const hlaska = [odeslano, vyporadano, zruseno, splatnost, storno].find((s) => s.error || s.success) ?? {};
+  const hlaska = [odeslano, vyporadano, zruseno, splatnost, storno, smazano].find((s) => s.error || s.success) ?? {};
 
   return (
     <div className="space-y-5">
@@ -377,6 +378,23 @@ function Detail({ x, canEdit, diskPripojen, znovu }: { x: VydanoRadek; canEdit: 
 
       {stornovano && canEdit && (
         <button type="button" className="btn print:hidden" onClick={znovu}>Vyúčtovat toto období znovu</button>
+      )}
+
+      {/* Natvrdo smazat: jako by vyuctovani nikdy nebylo (vcetne priloh). Oproti stornu to nejde vratit. */}
+      {canEdit && (
+        <form action={smazAkce} className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4 print:hidden">
+          <input type="hidden" name="id" value={x.id} />
+          <p className="min-w-[12rem] flex-1 text-xs text-ink-muted">
+            Smazání odstraní vyúčtování i s přílohami úplně, jako by nikdy nebylo. Na rozdíl od storna to nejde vrátit.
+            Soubory na Google Disku půjdou do koše.
+          </p>
+          <button type="submit" className="btn text-xs text-bad"
+            onClick={(e) => {
+              if (!confirm(`Smazat natrvalo vyúčtování ${x.cislo}${x.status === "ODESLANO" || x.status === "VYPORADANO" ? " (už bylo odesláno nájemci)" : ""} včetně příloh? Nelze vrátit.`)) e.preventDefault();
+            }}>
+            Smazat natrvalo
+          </button>
+        </form>
       )}
     </div>
   );

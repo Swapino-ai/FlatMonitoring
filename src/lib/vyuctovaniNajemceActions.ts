@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getSession } from "./auth";
 import { prisma } from "./db";
+import { doKose } from "./googleDrive";
 import { vyuctovaniNajemce } from "./vyuctovani";
 import { nactiVstupyVyuctovani } from "./vyuctovaniData";
 import {
@@ -180,4 +181,30 @@ export async function stornoVyuctovani(_prev: VydaniState, formData: FormData): 
   });
   obnov(z.propertyId);
   return { success: `Vyúčtování ${z.cislo} stornováno. Období můžeš vyúčtovat znovu.` };
+}
+
+/**
+ * Smaze vydane vyuctovani natrvalo, jako by nikdy nebylo: zaznam, jeho prilohy v evidenci
+ * i soubory na Google Disku (ty jdou do kose na Disku, ne natvrdo). Cislo dokladu se uvolni.
+ */
+export async function smazVyuctovani(_prev: VydaniState, formData: FormData): Promise<VydaniState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+  const z = await nacti(String(formData.get("id") ?? ""));
+  if (!z) return { error: "Vyúčtování neexistuje." };
+
+  const prilohy = await prisma.dokument.findMany({ where: { statementId: z.id } });
+  let souboruNaDisku = 0;
+  for (const d of prilohy) {
+    try { await doKose(d.driveId); souboruNaDisku++; } catch { /* Disk nedostupny: evidenci smazeme, soubor zustane na Disku */ }
+  }
+  await prisma.$transaction([
+    prisma.dokument.deleteMany({ where: { statementId: z.id } }),
+    prisma.tenantStatement.delete({ where: { id: z.id } }),
+  ]);
+  obnov(z.propertyId);
+  return {
+    success: `Vyúčtování ${z.cislo} smazáno natrvalo.`,
+    warning: prilohy.length > souboruNaDisku ? "Některé přiložené soubory se na Disku nepodařilo přesunout do koše, zůstaly tam." : undefined,
+  };
 }
