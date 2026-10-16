@@ -279,6 +279,28 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const naUctu = souctyPohybu.prijmy - souctyPohybu.vydaje;
   const dluhyPlateb = prehledPlateb(navrhPlateb);
 
+  // Skutecny mesicni cash flow majitele: prumer z dokoncenych mesicu (max. poslednich 12)
+  // ze vsech pohybu a zaplacenych pravidelnych plateb. Kauce se nepocita (neni prijem ani naklad).
+  const toky = [
+    ...property.transactions.filter((t) => t.category !== "DEPOSIT").map((t) => ({ datum: denISO(t.date), castka: t.amount })),
+    ...navrhPlateb.filter((p) => p.zaplaceno?.zdroj === "EVIDENCE" && p.kategorie !== "DEPOSIT")
+      .map((p) => ({ datum: p.zaplaceno!.datum, castka: (p.castka >= 0 ? 1 : -1) * p.zaplaceno!.castka })),
+  ];
+  const skutecnyCashflow = (() => {
+    if (!toky.length) return null;
+    const dnes = new Date();
+    const konec = new Date(Date.UTC(dnes.getFullYear(), dnes.getMonth(), 1)); // zacatek aktualniho mesice
+    const prvni = toky.reduce((m, x) => (x.datum < m ? x.datum : m), toky[0].datum);
+    const od0 = new Date(`${prvni.slice(0, 7)}-01T00:00:00Z`);
+    const odLimit = new Date(Date.UTC(konec.getUTCFullYear(), konec.getUTCMonth() - 12, 1));
+    const od = od0 > odLimit ? od0 : odLimit;
+    const mesicu = (konec.getUTCFullYear() - od.getUTCFullYear()) * 12 + konec.getUTCMonth() - od.getUTCMonth();
+    if (mesicu < 1) return { mesicne: toky.reduce((a, x) => a + x.castka, 0), mesicu: 1, neuplny: true };
+    const odISO = od.toISOString().slice(0, 10), doISO = konec.toISOString().slice(0, 10);
+    const soucet = toky.filter((x) => x.datum >= odISO && x.datum < doISO).reduce((a, x) => a + x.castka, 0);
+    return { mesicne: soucet / mesicu, mesicu, neuplny: false };
+  })();
+
   const recentTx = [...property.transactions]
     .sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime());
 
@@ -417,8 +439,9 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
 
           {/* Hlavní číslo pro pronajímanou nemovitost: kolik měsíčně skutečně zbývá a kolik to je z investice */}
           {smluvniNajem > 0 && a.totalInvestment > 0 && (() => {
-            const mesicne = a.metrics.cashFlowAnnual / 12;
-            const procento = (a.metrics.cashFlowAnnual / a.totalInvestment) * 100;
+            const odhad = !skutecnyCashflow;
+            const mesicne = skutecnyCashflow ? skutecnyCashflow.mesicne : a.metrics.cashFlowAnnual / 12;
+            const procento = ((mesicne * 12) / a.totalInvestment) * 100;
             return (
               <div className={`rounded-card border p-5 ${mesicne >= 0 ? "border-good/30 bg-good/5" : "border-bad/30 bg-bad/5"}`}>
                 <div className="label">Čistý měsíční příjem</div>
@@ -427,7 +450,11 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                   <span className="text-lg font-medium tabular-nums">{pct(procento)} ročně z investice {czkCompact(a.totalInvestment)}</span>
                 </div>
                 <p className="mt-2 text-xs text-ink-secondary">
-                  Nájem po provozních nákladech a splátkách úvěru. Před splátkami úvěru {czk(a.metrics.noi / 12)} měsíčně ({pct(a.metrics.netYield)} ročně).
+                  {odhad
+                    ? "Zatím žádné pohyby, proto jen odhad ze smluv a nákladů. Skutečné číslo vznikne ze záložky Stav účtu."
+                    : skutecnyCashflow.neuplny
+                      ? "Zatím z pohybů za neúplný první měsíc."
+                      : `Skutečný průměr z pohybů a zaplacených pravidelných plateb za posledních ${skutecnyCashflow.mesicu} dokončených měsíců, po všech nákladech.`}
                 </p>
               </div>
             );
