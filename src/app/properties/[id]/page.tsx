@@ -469,9 +469,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           {/* Výkonnost a kondice vedle sebe — čísla i verdikt na jedné obrazovce */}
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <div className="grid grid-cols-2 gap-3 content-start">
-              <Stat label="Čistý výnos" term="cistyVynos" value={pct(a.metrics.netYield)}
-                sub={`Hrubý ${pct(a.metrics.grossYield)} · cap rate ${pct(a.metrics.capRate)}`}
-                tone={a.metrics.netYield >= 4 ? "good" : a.metrics.netYield >= 2 ? "neutral" : "warn"} />
               <Stat label="IRR od pořízení" term="irr" value={a.irr != null ? pct(a.irr) : "—"}
                 sub={a.estimatedYears.length ? `${a.estimatedYears.length} let odhadnuto z modelu` : "Ze skutečných toků"}
                 tone={(a.irr ?? 0) >= 5 ? "good" : "neutral"} />
