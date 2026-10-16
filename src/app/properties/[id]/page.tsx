@@ -600,7 +600,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           },
           {
             id: "pohyby",
-            nazev: "Pohyby",
+            nazev: "Stav účtu",
             pocet: property.transactions.length,
             obsah: (<>
           <div className="mb-3 space-y-3">
