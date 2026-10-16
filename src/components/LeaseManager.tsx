@@ -357,6 +357,8 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
   });
 
   // Zmena zaloh u existujici smlouvy potrebuje datum, od ktereho plati
+  // Ukoncena smlouva se uz nemeni "od dneska": zmena zaloh u ni je opravou za celou dobu
+  const [opravaZaloh, setOpravaZaloh] = useState(r != null && !r.isActive);
   const zmenaZaloh = r != null && !kopie && (cislo !== r.utilitiesMonthly || ser(aktualniPolozky) !== ser(puvodniPolozky));
 
   return (
@@ -511,9 +513,18 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
 
         {/* Zmena zaloh se zapisuje s datem: jinak by se prepsala minulost */}
         {zmenaZaloh && (
-          <Pole label="Nové zálohy platí od" name="advanceValidFrom" type="date" required
-            defaultValue={dnesISO()} sirka="sm:col-span-2"
-            hint="Předchozí výše zůstane v historii, takže půjde zjistit, co nájemce platil dřív." />
+          <div className="sm:col-span-2 space-y-2">
+            <Zaskrtavatko name="opravaZaloh" label="Oprava: nové zálohy platily od začátku smlouvy"
+              checked={opravaZaloh} onChange={setOpravaZaloh}
+              hint="Zaškrtni, když byly zálohy zadané špatně a mají se přepsat za celou dobu smlouvy. Jinak se změna projeví až od data níž." />
+            {opravaZaloh ? (
+              <input type="hidden" name="advanceValidFrom" value={denISO(r!.startDate)} />
+            ) : (
+              <Pole label="Nové zálohy platí od" name="advanceValidFrom" type="date" required
+                defaultValue={dnesISO()}
+                hint="Předchozí výše zůstane v historii, takže půjde zjistit, co nájemce platil dřív." />
+            )}
+          </div>
         )}
 
         {/* Zive srovnani se sluzbami: nesoulad je videt drive, nez se smlouva ulozi */}
