@@ -9,6 +9,7 @@ import { summarize } from "@/lib/portfolio";
 import { nactiPortfolio } from "@/lib/pohled";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { MapaPortfolia, type BodMapy } from "@/components/MapaPortfolia";
+import { nactiNavrhyPortfolia } from "@/lib/pravidelnePlatbyData";
 import { cashFlowSeries, equitySeries } from "@/lib/series";
 import { nactiTypySluzeb } from "@/lib/typySluzeb";
 import { findBundleOpportunities, summarizeSavings } from "@/lib/savings";
@@ -25,7 +26,7 @@ export default async function Dashboard() {
   const savings = summarizeSavings(findBundleOpportunities(properties, new Date(), nazvyDruhu));
 
   const equity = equitySeries(properties);
-  const cashflow = cashFlowSeries(properties);
+  const cashflow = cashFlowSeries(properties, 12, new Date(), await nactiNavrhyPortfolia(properties));
   const yields = analyses
     .filter((a) => a.property.status !== "SOLD")
     .map((a) => ({ name: a.property.name, vynos: Number(a.metrics.netYield.toFixed(2)) }))

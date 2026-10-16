@@ -32,6 +32,7 @@ import { cisloNajemce } from "@/lib/najemci";
 import { PravidelnePlatby } from "@/components/PravidelnePlatby";
 import { nactiNavrhPlatby, nactiZauctovanePlatby } from "@/lib/pravidelnePlatbyData";
 import { prehledPlateb } from "@/lib/pravidelnePlatby";
+import { tokyNemovitosti } from "@/lib/series";
 import { pronajimatelNemovitosti, pronajimatelZRef } from "@/lib/provozovatel";
 import { nactiStrany } from "@/lib/strany";
 import type { SnapshotVyuctovani } from "@/lib/vyuctovaniVydane";
@@ -286,16 +287,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   // Mesicni cash flow majitele: pravidelne platby (najem a zalohy od najemce, platby sluzeb
   // dodavatelum) podle predpisu, u zaplacenych podle skutecne zaplacene castky, plus ostatni
   // pohyby (opravy, pojisteni, splatky...). Kauce se nepocita (neni prijem ani naklad).
-  const klicePlateb = new Set(navrhPlateb.map((p) => p.klic));
-  const toky = [
-    ...navrhPlateb.filter((p) => p.kategorie !== "DEPOSIT").map((p) => ({
-      datum: `${p.mesic}-01`,
-      castka: p.zaplaceno ? (p.castka >= 0 ? 1 : -1) * p.zaplaceno.castka : p.castka,
-    })),
-    ...property.transactions
-      .filter((t) => t.category !== "DEPOSIT" && !(t.sourceKey && klicePlateb.has(t.sourceKey)))
-      .map((t) => ({ datum: denISO(t.date), castka: t.amount })),
-  ];
+  const toky = tokyNemovitosti(navrhPlateb, property.transactions);
   const skutecnyCashflow = (() => {
     if (!toky.length) return null;
     const dnes = new Date();

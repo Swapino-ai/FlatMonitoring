@@ -52,3 +52,9 @@ export async function nactiZauctovanePlatby(propertyId: string): Promise<Zauctov
     id: r.id, datum: denISO(r.date), mesic: denISO(r.date).slice(0, 7), popis: r.description ?? "Pravidelná platba", castka: r.amount,
   }));
 }
+
+/** Navrhy pravidelnych plateb vsech nemovitosti najednou (pro skutecny cash flow portfolia). */
+export async function nactiNavrhyPortfolia(nemovitosti: { id: string }[]): Promise<Map<string, NavrzenaPlatba[]>> {
+  const navrhy = await Promise.all(nemovitosti.map((p) => nactiNavrhPlatby(p.id)));
+  return new Map(nemovitosti.map((p, i) => [p.id, navrhy[i]]));
+}

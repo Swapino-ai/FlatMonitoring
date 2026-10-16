@@ -1,7 +1,8 @@
 /** Casove rady pro grafy. */
 
 import { balanceAt, sum } from "./finance";
-import { monthCz } from "./format";
+import { denISO, monthCz } from "./format";
+import type { NavrzenaPlatba } from "./pravidelnePlatby";
 import type { PropertyWithRelations } from "./portfolio";
 
 export interface EquityPoint { period: string; hodnota: number; dluh: number; equity: number }
@@ -48,11 +49,48 @@ export function equitySeries(properties: PropertyWithRelations[], asOf = new Dat
   return points.slice(-16);
 }
 
+/** Jeden skutecny penezni tok majitele (+ prijem, - vydaj). */
+export interface Tok { datum: string; castka: number; kategorie: string }
+
+/**
+ * Skutecny cash flow nemovitosti: pravidelne platby (najem a zalohy od najemce, platby
+ * sluzeb dodavatelum) podle predpisu, u zaplacenych podle skutecne castky a data, plus ostatni
+ * pohyby (opravy, pojisteni, splatky...). Pohyb, ktery je zaroven pravidelnou platbou,
+ * se nepocita dvakrat. Kauce se nepocita (neni prijem ani naklad). Prutokove zalohy se
+ * NEvyrazuji: jsou to skutecne penize, ktere prochazeji uctem.
+ */
+export function tokyNemovitosti(
+  navrh: NavrzenaPlatba[],
+  transakce: { date: Date; amount: number; category: string; sourceKey?: string | null }[],
+): Tok[] {
+  const klice = new Set(navrh.map((p) => p.klic));
+  return [
+    ...navrh.filter((p) => p.kategorie !== "DEPOSIT").map((p) => ({
+      datum: p.zaplaceno ? p.zaplaceno.datum : p.datum,
+      castka: p.zaplaceno ? (p.castka >= 0 ? 1 : -1) * p.zaplaceno.castka : p.castka,
+      kategorie: p.kategorie,
+    })),
+    ...transakce
+      .filter((t) => t.category !== "DEPOSIT" && !(t.sourceKey && klice.has(t.sourceKey)))
+      .map((t) => ({ datum: denISO(t.date), castka: t.amount, kategorie: t.category })),
+  ];
+}
+
+function tokyPortfolia(properties: PropertyWithRelations[], navrhy: Map<string, NavrzenaPlatba[]>): Tok[] {
+  return properties.flatMap((p) => tokyNemovitosti(navrhy.get(p.id) ?? [], p.transactions));
+}
+
 export interface CashFlowPoint { period: string; prijmy: number; vydaje: number; cisty: number }
 
 /** Mesicni cash flow ze skutecnych transakci za poslednich N mesicu. */
-export function cashFlowSeries(properties: PropertyWithRelations[], months = 12, asOf = new Date()): CashFlowPoint[] {
-  const txs = properties.flatMap((p) => p.transactions);
+export function cashFlowSeries(
+  properties: PropertyWithRelations[], months = 12, asOf = new Date(),
+  /** Kdyz jsou zadane pravidelne platby, pocita se skutecny cash flow vcetne nich. */
+  navrhy?: Map<string, NavrzenaPlatba[]>,
+): CashFlowPoint[] {
+  const txs = navrhy
+    ? tokyPortfolia(properties, navrhy).map((t) => ({ date: new Date(`${t.datum}T12:00:00Z`), amount: t.castka, taxTreatment: "" }))
+    : properties.flatMap((p) => p.transactions);
   const points: CashFlowPoint[] = [];
 
   for (let i = months - 1; i >= 0; i--) {
@@ -79,8 +117,20 @@ export function cashFlowSeries(properties: PropertyWithRelations[], months = 12,
 }
 
 /** Rozpad rocnich nakladu podle kategorie. */
-export function expenseBreakdown(properties: PropertyWithRelations[], year: number): { kategorie: string; castka: number }[] {
+export function expenseBreakdown(
+  properties: PropertyWithRelations[], year: number, navrhy?: Map<string, NavrzenaPlatba[]>,
+): { kategorie: string; castka: number }[] {
   const byCategory = new Map<string, number>();
+
+  if (navrhy) {
+    for (const t of tokyPortfolia(properties, navrhy)) {
+      if (t.datum.slice(0, 4) !== String(year) || t.castka >= 0) continue;
+      byCategory.set(t.kategorie, (byCategory.get(t.kategorie) ?? 0) + Math.abs(t.castka));
+    }
+    return [...byCategory.entries()]
+      .map(([kategorie, castka]) => ({ kategorie, castka: Math.round(castka) }))
+      .sort((a, b) => b.castka - a.castka);
+  }
 
   for (const p of properties) {
     for (const t of p.transactions) {

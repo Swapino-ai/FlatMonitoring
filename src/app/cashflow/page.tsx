@@ -2,11 +2,11 @@ import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Card, Empty, Stat, StatGrid } from "@/components/Stat";
-import { Napoveda } from "@/components/Napoveda";
 import { CashFlowChart, ExpenseBreakdownChart } from "@/components/charts";
 import { nactiPortfolio } from "@/lib/pohled";
 import { cashFlowSeries, expenseBreakdown } from "@/lib/series";
 import { categoryLabel } from "@/lib/categories";
+import { nactiNavrhyPortfolia } from "@/lib/pravidelnePlatbyData";
 import { czk, dateCz } from "@/lib/format";
 import { sum } from "@/lib/finance";
 
@@ -17,8 +17,9 @@ export default async function CashFlowPage() {
   const { properties } = await nactiPortfolio(user);
   const year = new Date().getFullYear();
 
-  const series = cashFlowSeries(properties, 12);
-  const expenses = expenseBreakdown(properties, year).map((e) => ({ kategorie: categoryLabel(e.kategorie), castka: e.castka }));
+  const navrhy = await nactiNavrhyPortfolia(properties);
+  const series = cashFlowSeries(properties, 12, new Date(), navrhy);
+  const expenses = expenseBreakdown(properties, year, navrhy).map((e) => ({ kategorie: categoryLabel(e.kategorie), castka: e.castka }));
 
   const totalIncome = sum(series.map((s) => s.prijmy));
   const totalExpense = sum(series.map((s) => s.vydaje));
@@ -38,8 +39,7 @@ export default async function CashFlowPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Cash flow</h1>
           <p className="mt-1 text-sm text-ink-secondary">
-            Skutečné peněžní toky za posledních 12 měsíců.{" "}
-            <Napoveda term="pruchozi">Průchozí zálohy na služby</Napoveda> se nezapočítávají.
+            Skutečné peněžní toky za posledních 12 měsíců: nájem a zálohy od nájemců, platby za služby a ostatní pohyby. U pravidelných plateb se bere předpis, u zaplacených skutečná částka a datum.
           </p>
         </div>
 
