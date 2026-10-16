@@ -13,17 +13,36 @@ import { Badge } from "./Stat";
 const POCET_MESICU = 6;
 
 /** Sipka pro sbaleni a rozbaleni oddilu. */
-/** Hromadne nastaveni data zaplaceni (vychozi dnes, jiny den z kalendare) u dosud nezaplacenych. */
-function HromadneDatum({ popisek, max, onPouzit }: { popisek: string; max: string; onPouzit: (iso: string) => void }) {
-  const [datum, setDatum] = useState<string | null>(dnesISO());
+/** Okno pro zadani data zaplaceni (kalendar nebo rucne) a u jedne platby i zaplacene castky. */
+function ZaplacenoOkno({ nadpis, datum: d0, castka: c0, max, onPotvrdit, onZavrit }: {
+  nadpis: string; datum: string; castka?: string; max: string;
+  onPotvrdit: (iso: string, castka?: string) => void; onZavrit: () => void;
+}) {
+  const [datum, setDatum] = useState<string | null>(d0);
+  const [castka, setCastka] = useState(c0 ?? "");
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") onZavrit(); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [onZavrit]);
   return (
-    <span className="flex items-center gap-1 normal-case tracking-normal font-normal">
-      <span className="w-32">
-        <DatumPole label={`${popisek} dne`} name={`hromadne-${popisek}`} skrytLabel max={max}
-          hodnota={datum} defaultValue={datum ?? ""} onChange={setDatum} />
-      </span>
-      <button type="button" disabled={!datum} className="btn px-2 py-0.5 text-xs" onClick={() => datum && onPouzit(datum)}>{popisek}</button>
-    </span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onZavrit}>
+      <div role="dialog" aria-modal="true" aria-label={nadpis} onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-card border border-line bg-surface-card p-5 shadow-pop">
+        <h3 className="mb-3 text-sm font-semibold">{nadpis}</h3>
+        <DatumPole label="Zaplaceno dne" name="okno-zaplaceno" max={max} hodnota={datum} defaultValue={d0} onChange={setDatum} />
+        {c0 !== undefined && (
+          <div className="mt-3">
+            <label className="label mb-1.5 block" htmlFor="okno-castka">Zaplacená částka (Kč)</label>
+            <input id="okno-castka" type="text" inputMode="decimal" className="input text-right tabular-nums" value={castka} onChange={(e) => setCastka(e.target.value)} />
+          </div>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" className="btn" onClick={onZavrit}>Zrušit</button>
+          <button type="button" className="btn btn-primary" disabled={!datum} onClick={() => datum && onPotvrdit(datum, c0 !== undefined ? castka : undefined)}>Zaplaceno</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -72,6 +91,7 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
   const radek = (k: string): Radek => upravy[k] ?? ulozene[k];
   const nastav = (k: string, zmena: Partial<Radek>) => setUpravy((u) => ({ ...u, [k]: { ...(u[k] ?? ulozene[k]), ...zmena } }));
 
+  const [okno, setOkno] = useState<{ nadpis: string; platby: NavrzenaPlatba[]; datum: string; castka?: string } | null>(null);
   const zmeneno = navrh.filter((p) => {
     if (p.zaplaceno?.zdroj === "POHYB") return false;
     const r = radek(p.klic), u = ulozene[p.klic];
@@ -108,6 +128,7 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
   }
 
   const dnes = dnesISO();
+  const otevriHromadne = (nadpis: string, platby: NavrzenaPlatba[]) => setOkno({ nadpis, platby, datum: dnes });
   const nastavDatum = (platby: NavrzenaPlatba[], datum: string) => {
     setUpravy((u) => {
       const n = { ...u };
@@ -195,7 +216,7 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
                 {dluh > 0
                   ? <Badge tone="bad">{nezapl > 0 ? `${nezapl} nezaplaceno` : "nedoplaceno"} · {czk(dluh)}</Badge>
                   : <Badge tone="good">vše zaplaceno</Badge>}
-                <HromadneDatum popisek="Vše zaplaceno" max={dnes} onPouzit={(d) => nastavDatum(radky, d)} />
+                <button type="button" className="btn px-2 py-0.5 text-xs font-normal" onClick={() => otevriHromadne(`Vše zaplaceno: ${nazevMesice(Number(m))} ${rok}`, radky)}>Vše zaplaceno</button>
               </div>
               {mesiceOtevrene.m.has(mesic) && skupiny(radky).map((sk) => {
                 const k = klicSkupiny(mesic, sk);
@@ -209,7 +230,7 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
                       <span className="min-w-0 flex-1 truncate">{sk.typ === "DODAVATEL" ? "Dodavatel" : "Nájemce"}: <span className="normal-case tracking-normal text-ink-primary">{sk.nazev}</span></span>
                       <span className="normal-case tracking-normal">{sk.platby.length}×</span>
                       <span className={`w-24 text-right normal-case tracking-normal tabular-nums ${dluhSk > 0 ? "text-bad" : "text-good"}`}>{dluhSk > 0 ? czk(dluhSk) : "zaplaceno"}</span>
-                      <HromadneDatum popisek="Zaplaceno" max={dnes} onPouzit={(d) => nastavDatum(sk.platby, d)} />
+                      <button type="button" className="btn px-2 py-0.5 text-[11px] normal-case tracking-normal font-normal" onClick={() => otevriHromadne(`Zaplaceno: ${sk.nazev}`, sk.platby)}>Zaplaceno</button>
                     </div>
                     {otevrena && (
                       <ul className="divide-y divide-line/60">
@@ -235,16 +256,15 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
                                   zaplaceno {dateCz(p.zaplaceno!.datum)} · {czk(p.zaplaceno!.castka)} <Badge tone="neutral">zaúčtováno jako pohyb</Badge>
                                 </span>
                               ) : (
-                                <>
-                                  <div className="w-44">
-                                    <DatumPole label={`Zaplaceno dne: ${p.popis}`} name={`zaplaceno-${p.klic}`} skrytLabel max={dnes}
-                                      hodnota={r.datum} defaultValue={r.datum ?? ""} onChange={(iso) => nastav(p.klic, { datum: iso })} />
-                                  </div>
-                                  <input type="text" inputMode="decimal" aria-label={`Zaplacená částka: ${p.popis}`} disabled={!r.datum}
-                                    className={`input w-28 py-1 text-right tabular-nums disabled:opacity-40 ${mene ? "border-warn" : ""}`}
-                                    value={r.castka} onChange={(e) => nastav(p.klic, { castka: e.target.value })} />
-                                  <span className="w-6 text-xs text-ink-muted">Kč</span>
-                                </>
+                                r.datum ? (
+                                  <span className="flex items-center gap-2 text-xs text-ink-secondary">
+                                    <span>zaplaceno {dateCz(r.datum)} · <span className={mene ? "text-warn" : ""}>{czk(zaplacenoCastka)}</span></span>
+                                    <button type="button" className="btn px-2 py-0.5 text-xs" onClick={() => setOkno({ nadpis: p.popis, platby: [p], datum: r.datum!, castka: r.castka })}>Změnit</button>
+                                    <button type="button" className="btn px-2 py-0.5 text-xs" onClick={() => nastav(p.klic, { datum: null })}>Zrušit</button>
+                                  </span>
+                                ) : (
+                                  <button type="button" className="btn px-2 py-0.5 text-xs" onClick={() => setOkno({ nadpis: p.popis, platby: [p], datum: dnes, castka: r.castka })}>Zaplaceno</button>
+                                )
                               )}
                             </li>
                           );
@@ -263,6 +283,15 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
         <button type="button" className="btn mt-3 w-full text-xs" onClick={() => setVsechnyMesice((v) => !v)}>
           {vsechnyMesice ? "Zobrazit jen nejnovější měsíce" : `Zobrazit starší měsíce (${mesice.length - POCET_MESICU})`}
         </button>
+      )}
+
+      {okno && (
+        <ZaplacenoOkno nadpis={okno.nadpis} datum={okno.datum} castka={okno.castka} max={dnes} onZavrit={() => setOkno(null)}
+          onPotvrdit={(iso, castka) => {
+            if (okno.castka !== undefined) nastav(okno.platby[0].klic, { datum: iso, castka: castka ?? okno.castka });
+            else nastavDatum(okno.platby, iso);
+            setOkno(null);
+          }} />
       )}
 
       <form action={akce} className="sticky bottom-3 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface-card px-4 py-3 shadow-pop">
