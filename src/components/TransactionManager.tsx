@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { deleteTransaction, saveTransaction, type EntityFormState } from "@/lib/entityActions";
 import { Hlaska, Pole, Rozbalovaci, SmazatTlacitko, UpravaPanel, UpravitTlacitko, Vyber, isoDatum } from "./form";
 import { CATEGORIES, categoryLabel } from "@/lib/categories";
-import { czk, dateCz } from "@/lib/format";
+import { czk, dateCz, denISO } from "@/lib/format";
 import { Ikona } from "./Ikony";
 
 interface Row {
@@ -29,6 +29,20 @@ export function TransactionManager({ propertyId, transactions, canEdit }: {
   const prijmy = CATEGORIES.filter((c) => c.kind === "INCOME").map((c) => [c.key, c.label] as [string, string]);
   const vydaje = CATEGORIES.filter((c) => c.kind === "EXPENSE").map((c) => [c.key, c.label] as [string, string]);
 
+  // Pohyby po letech: nejnovejsi rok je rozbaleny, starsi sbalene
+  const roky = (() => {
+    const m = new Map<string, Row[]>();
+    for (const t of transactions) {
+      const rok = denISO(t.date).slice(0, 4);
+      m.set(rok, [...(m.get(rok) ?? []), t]);
+    }
+    return [...m.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  })();
+  const [otevreneRoky, setOtevreneRoky] = useState<Set<string>>(() => new Set(roky[0] ? [roky[0][0]] : []));
+  const prepniRok = (r: string) => setOtevreneRoky((s) => { const n = new Set(s); if (n.has(r)) n.delete(r); else n.add(r); return n; });
+  // Rozeditovany pohyb nesmi zustat schovany ve sbalenem roce
+  const rokUpravy = upravovany ? denISO(upravovany.date).slice(0, 4) : null;
+
   return (
     <div>
       <Hlaska state={
@@ -41,49 +55,68 @@ export function TransactionManager({ propertyId, transactions, canEdit }: {
       {transactions.length === 0 ? (
         <p className="py-3 text-center text-sm text-ink-muted">Žádné pohyby.</p>
       ) : (
-        <table className="table-base">
-          <thead>
-            <tr>
-              <th>Datum</th><th>Kategorie</th><th>Popis</th><th className="num">Částka</th>
-              {canEdit && <th className="w-[5.5rem]"><span className="sr-only">Akce</span></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {transactions.map((t) => (
-              <tr key={t.id} className={upravaId === t.id ? "bg-accent/5" : undefined}>
-                <td className="tabular-nums text-ink-secondary">{dateCz(t.date)}</td>
-                <td>
-                  <div className="flex items-center gap-2.5">
-                    {/* Smer penez je videt driv, nez se precte kategorie. Neni to jedina
-                        informace: znamenko u castky a barva jen doplnuji. */}
-                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
-                      t.amount >= 0 ? "bg-good/15 text-good" : "bg-surface-sunken text-ink-muted"
-                    }`} title={t.amount >= 0 ? "Příjem" : "Výdaj"}>
-                      <Ikona nazev={t.amount >= 0 ? "sipkaDolu" : "sipkaNahoru"} trida="h-4 w-4" />
-                    </span>
-                    <span className="font-medium">{categoryLabel(t.category)}</span>
-                  </div>
-                </td>
-                <td className="max-w-[24rem] text-ink-secondary">
-                  <span className="line-clamp-2" title={t.description ?? undefined}>{t.description}</span>
-                  {t.documentRef && <span className="text-xs text-ink-muted">{t.documentRef}</span>}
-                </td>
-                <td className={`num font-semibold ${t.amount >= 0 ? "text-good" : ""}`}>
-                  {t.amount > 0 ? "+" : ""}{czk(t.amount)}
-                </td>
-                {canEdit && (
-                  <td>
-                    <div className="flex items-center justify-end gap-0.5">
-                      <UpravitTlacitko aktivni={upravaId === t.id}
-                        onClick={() => setUpravaId(upravaId === t.id ? null : t.id)} />
-                      <SmazatTlacitko action={delAction} id={t.id} potvrzeni="Opravdu smazat tento pohyb?" />
-                    </div>
-                  </td>
+        <div className="space-y-3">
+          {roky.map(([rok, radky]) => {
+            const otevreno = otevreneRoky.has(rok) || rokUpravy === rok;
+            const soucet = radky.reduce((a, t) => a + t.amount, 0);
+            return (
+              <section key={rok} className="overflow-hidden rounded-xl border border-line">
+                <button type="button" onClick={() => prepniRok(rok)} aria-expanded={otevreno}
+                  className="flex w-full items-center gap-2 bg-surface-sunken/60 px-3 py-2 text-left text-sm font-semibold">
+                  <svg viewBox="0 0 20 20" className={`h-4 w-4 shrink-0 text-ink-muted transition-transform ${otevreno ? "rotate-90" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M8 5l5 5-5 5" /></svg>
+                  <span className="flex-1">{rok}</span>
+                  <span className="text-xs font-normal text-ink-muted">{radky.length}×</span>
+                  <span className={`w-28 text-right tabular-nums ${soucet >= 0 ? "text-good" : ""}`}>{soucet > 0 ? "+" : ""}{czk(soucet)}</span>
+                </button>
+                {otevreno && (
+              <table className="table-base">
+                <thead>
+                  <tr>
+                    <th>Datum</th><th>Kategorie</th><th>Popis</th><th className="num">Částka</th>
+                    {canEdit && <th className="w-[5.5rem]"><span className="sr-only">Akce</span></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {radky.map((t) => (
+                    <tr key={t.id} className={upravaId === t.id ? "bg-accent/5" : undefined}>
+                      <td className="tabular-nums text-ink-secondary">{dateCz(t.date)}</td>
+                      <td>
+                        <div className="flex items-center gap-2.5">
+                          {/* Smer penez je videt driv, nez se precte kategorie. Neni to jedina
+                              informace: znamenko u castky a barva jen doplnuji. */}
+                          <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                            t.amount >= 0 ? "bg-good/15 text-good" : "bg-surface-sunken text-ink-muted"
+                          }`} title={t.amount >= 0 ? "Příjem" : "Výdaj"}>
+                            <Ikona nazev={t.amount >= 0 ? "sipkaDolu" : "sipkaNahoru"} trida="h-4 w-4" />
+                          </span>
+                          <span className="font-medium">{categoryLabel(t.category)}</span>
+                        </div>
+                      </td>
+                      <td className="max-w-[24rem] text-ink-secondary">
+                        <span className="line-clamp-2" title={t.description ?? undefined}>{t.description}</span>
+                        {t.documentRef && <span className="text-xs text-ink-muted">{t.documentRef}</span>}
+                      </td>
+                      <td className={`num font-semibold ${t.amount >= 0 ? "text-good" : ""}`}>
+                        {t.amount > 0 ? "+" : ""}{czk(t.amount)}
+                      </td>
+                      {canEdit && (
+                        <td>
+                          <div className="flex items-center justify-end gap-0.5">
+                            <UpravitTlacitko aktivni={upravaId === t.id}
+                              onClick={() => setUpravaId(upravaId === t.id ? null : t.id)} />
+                            <SmazatTlacitko action={delAction} id={t.id} potvrzeni="Opravdu smazat tento pohyb?" />
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
                 )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </section>
+            );
+          })}
+        </div>
       )}
 
       {canEdit && upravovany && (

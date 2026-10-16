@@ -262,8 +262,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const smluvniNajem = property.leases.find((l) => l.isActive)?.rentMonthly ?? 0;
 
   const recentTx = [...property.transactions]
-    .sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime())
-    .slice(0, 12);
+    .sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime());
 
   return (
     <>
@@ -594,12 +593,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           </SbalitelnaKarta>
           <SbalitelnaKarta klic="pohyby" title="Pohyby">
             <TransactionManager propertyId={property.id} transactions={recentTx} canEdit={user.role === "OWNER"} />
-            {property.transactions.length > recentTx.length && (
-              <p className="mt-3 text-xs text-ink-muted">
-                Zobrazeno posledních {recentTx.length} z {property.transactions.length} pohybů.{" "}
-                <Link href="/cashflow" className="text-accent">Všechny v Cash flow →</Link>
-              </p>
-            )}
           </SbalitelnaKarta>
             </>),
           },
