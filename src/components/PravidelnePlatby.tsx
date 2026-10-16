@@ -13,6 +13,20 @@ import { Badge } from "./Stat";
 const POCET_MESICU = 6;
 
 /** Sipka pro sbaleni a rozbaleni oddilu. */
+/** Hromadne nastaveni data zaplaceni (vychozi dnes, jiny den z kalendare) u dosud nezaplacenych. */
+function HromadneDatum({ popisek, max, onPouzit }: { popisek: string; max: string; onPouzit: (iso: string) => void }) {
+  const [datum, setDatum] = useState<string | null>(dnesISO());
+  return (
+    <span className="flex items-center gap-1 normal-case tracking-normal font-normal">
+      <span className="w-32">
+        <DatumPole label={`${popisek} dne`} name={`hromadne-${popisek}`} skrytLabel max={max}
+          hodnota={datum} defaultValue={datum ?? ""} onChange={setDatum} />
+      </span>
+      <button type="button" disabled={!datum} className="btn px-2 py-0.5 text-xs" onClick={() => datum && onPouzit(datum)}>{popisek}</button>
+    </span>
+  );
+}
+
 function Sipka({ otevreno, onClick, popisek }: { otevreno: boolean; onClick: () => void; popisek: string }) {
   return (
     <button type="button" onClick={onClick} aria-expanded={otevreno} aria-label={popisek} title={otevreno ? "Sbalit" : "Rozbalit"}
@@ -94,13 +108,13 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
   }
 
   const dnes = dnesISO();
-  const nastavDnes = (platby: NavrzenaPlatba[]) => {
+  const nastavDatum = (platby: NavrzenaPlatba[], datum: string) => {
     setUpravy((u) => {
       const n = { ...u };
       for (const p of platby) {
         if (p.zaplaceno?.zdroj === "POHYB") continue;
         const r = n[p.klic] ?? ulozene[p.klic];
-        if (!r.datum) n[p.klic] = { ...r, datum: dnes };
+        if (!r.datum) n[p.klic] = { ...r, datum };
       }
       return n;
     });
@@ -181,7 +195,7 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
                 {dluh > 0
                   ? <Badge tone="bad">{nezapl > 0 ? `${nezapl} nezaplaceno` : "nedoplaceno"} · {czk(dluh)}</Badge>
                   : <Badge tone="good">vše zaplaceno</Badge>}
-                <button type="button" className="btn px-2 py-0.5 text-xs font-normal" onClick={() => nastavDnes(radky)}>Vše zaplaceno dnes</button>
+                <HromadneDatum popisek="Vše zaplaceno" max={dnes} onPouzit={(d) => nastavDatum(radky, d)} />
               </div>
               {mesiceOtevrene.m.has(mesic) && skupiny(radky).map((sk) => {
                 const k = klicSkupiny(mesic, sk);
@@ -195,7 +209,7 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
                       <span className="min-w-0 flex-1 truncate">{sk.typ === "DODAVATEL" ? "Dodavatel" : "Nájemce"}: <span className="normal-case tracking-normal text-ink-primary">{sk.nazev}</span></span>
                       <span className="normal-case tracking-normal">{sk.platby.length}×</span>
                       <span className={`w-24 text-right normal-case tracking-normal tabular-nums ${dluhSk > 0 ? "text-bad" : "text-good"}`}>{dluhSk > 0 ? czk(dluhSk) : "zaplaceno"}</span>
-                      <button type="button" className="btn px-2 py-0.5 text-[11px] normal-case tracking-normal font-normal" onClick={() => nastavDnes(sk.platby)}>Dnes</button>
+                      <HromadneDatum popisek="Zaplaceno" max={dnes} onPouzit={(d) => nastavDatum(sk.platby, d)} />
                     </div>
                     {otevrena && (
                       <ul className="divide-y divide-line/60">
