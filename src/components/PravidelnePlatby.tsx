@@ -11,6 +11,24 @@ import { Badge } from "./Stat";
 
 const POCET_MESICU = 6;
 
+/** Sipka pro sbaleni a rozbaleni oddilu. */
+function Sipka({ otevreno, onClick, popisek }: { otevreno: boolean; onClick: () => void; popisek: string }) {
+  return (
+    <button type="button" onClick={onClick} aria-expanded={otevreno} aria-label={popisek} title={otevreno ? "Sbalit" : "Rozbalit"}
+      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-surface-sunken hover:text-ink-primary">
+      <svg viewBox="0 0 20 20" className={`h-3.5 w-3.5 transition-transform ${otevreno ? "rotate-90" : ""}`} fill="none" stroke="currentColor"
+        strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M7 4l6 6-6 6" /></svg>
+    </button>
+  );
+}
+
+/** Mnozina klicu s prepinanim: stav sbaleni jednotlivych oddilu. */
+function useMnozina(vychozi: () => string[]) {
+  const [m, setM] = useState<Set<string>>(() => new Set(vychozi()));
+  const prepni = (k: string) => setM((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  return { m, prepni, nastav: (klice: string[]) => setM(new Set(klice)) };
+}
+
 /**
  * Pravidelne platby: navrh mesicnich plateb (najem, zalohy od najemce, platby sluzeb) od zacatku
  * smlouvy. Zaskrtnete, co ma byt zauctovano, pripadne upravite castku, a jednim klikem to zapisete.
@@ -43,6 +61,12 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
     return [...m.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
   }, [cekajici]);
   const zobrazene = vsechnyMesice ? mesice : mesice.slice(0, POCET_MESICU);
+
+  // Rozbalene mesice (vychozi: jen nejnovejsi) a sbalene skupiny (najemce / dodavatel) uvnitr nich
+  const mesiceOtevrene = useMnozina(() => (mesice[0] ? [mesice[0][0]] : []));
+  const skupinyZavrene = useMnozina(() => []);
+  const vsechnyKlice = () => zobrazene.map(([k]) => k);
+  const klicSkupiny = (mesic: string, sk: { typ: string; nazev: string }) => `${mesic}|${sk.typ}|${sk.nazev}`;
 
   const hodnota = (p: NavrzenaPlatba) => {
     const t = castky[p.klic];
@@ -92,6 +116,8 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
           Nájemce zaplatil vše podle smlouvy, částku jde u řádku upravit.
         </p>
         <div className="flex gap-1.5">
+          <button type="button" className="btn text-xs" onClick={() => { mesiceOtevrene.nastav(vsechnyKlice()); skupinyZavrene.nastav([]); }}>Rozbalit vše</button>
+          <button type="button" className="btn text-xs" onClick={() => mesiceOtevrene.nastav([])}>Sbalit vše</button>
           <button type="button" className="btn text-xs" onClick={() => prepni(cekajici.map((p) => p.klic), true)}>Vybrat vše</button>
           <button type="button" className="btn text-xs" onClick={() => setVybrano(new Set())}>Zrušit výběr</button>
         </div>
@@ -104,22 +130,36 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
           const [rok, m] = mesic.split("-");
           return (
             <section key={mesic} className="overflow-hidden rounded-xl border border-line">
-              <label className="flex cursor-pointer items-center gap-3 bg-surface-sunken/60 px-3.5 py-2 text-sm font-semibold">
-                <input type="checkbox" checked={vse} onChange={(e) => prepni(klice, e.target.checked)} aria-label={`Vybrat celý měsíc ${mesic}`} />
-                <span className="capitalize">{nazevMesice(Number(m))} {rok}</span>
-              </label>
-              {skupiny(radky).map((sk) => {
+              <div className="flex items-center gap-2 bg-surface-sunken/60 px-3 py-2 text-sm font-semibold">
+                <Sipka otevreno={mesiceOtevrene.m.has(mesic)} onClick={() => mesiceOtevrene.prepni(mesic)} popisek={`Rozbalit nebo sbalit měsíc ${mesic}`} />
+                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+                  <input type="checkbox" checked={vse} onChange={(e) => prepni(klice, e.target.checked)} aria-label={`Vybrat celý měsíc ${mesic}`} />
+                  <span className="capitalize">{nazevMesice(Number(m))} {rok}</span>
+                </label>
+                <span className="text-xs font-normal text-ink-muted">
+                  {radky.filter((p) => vybrano.has(p.klic)).length}/{radky.length}
+                </span>
+                <span className="w-24 text-right text-xs font-medium tabular-nums">
+                  {czk(radky.filter((p) => vybrano.has(p.klic)).reduce((a, p) => a + hodnota(p), 0))}
+                </span>
+              </div>
+              {mesiceOtevrene.m.has(mesic) && skupiny(radky).map((sk) => {
                 const kl = sk.platby.map((p) => p.klic);
                 const soucet = sk.platby.filter((p) => vybrano.has(p.klic)).reduce((a, p) => a + hodnota(p), 0);
                 return (
                   <div key={`${sk.typ}:${sk.nazev}`} className="border-t border-line/60">
-                    <label className="flex cursor-pointer items-center gap-3 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                      <input type="checkbox" checked={kl.every((k) => vybrano.has(k))} onChange={(e) => prepni(kl, e.target.checked)}
-                        aria-label={`Vybrat skupinu ${sk.nazev}`} />
-                      <span className="min-w-0 flex-1 truncate">{sk.typ === "DODAVATEL" ? "Dodavatel" : "Nájemce"}: <span className="normal-case tracking-normal text-ink-primary">{sk.nazev}</span></span>
-                      <span className={`tabular-nums normal-case tracking-normal ${soucet < 0 ? "text-bad" : soucet > 0 ? "text-good" : ""}`}>{soucet ? czk(soucet) : ""}</span>
-                    </label>
-                    <ul className="divide-y divide-line/60">
+                    <div className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                      <Sipka otevreno={!skupinyZavrene.m.has(klicSkupiny(mesic, sk))} onClick={() => skupinyZavrene.prepni(klicSkupiny(mesic, sk))}
+                        popisek={`Rozbalit nebo sbalit skupinu ${sk.nazev}`} />
+                      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+                        <input type="checkbox" checked={kl.every((k) => vybrano.has(k))} onChange={(e) => prepni(kl, e.target.checked)}
+                          aria-label={`Vybrat skupinu ${sk.nazev}`} />
+                        <span className="min-w-0 flex-1 truncate">{sk.typ === "DODAVATEL" ? "Dodavatel" : "Nájemce"}: <span className="normal-case tracking-normal text-ink-primary">{sk.nazev}</span></span>
+                      </label>
+                      <span className="normal-case tracking-normal">{sk.platby.length}×</span>
+                      <span className={`w-24 text-right tabular-nums normal-case tracking-normal ${soucet < 0 ? "text-bad" : soucet > 0 ? "text-good" : ""}`}>{soucet ? czk(soucet) : ""}</span>
+                    </div>
+                    {!skupinyZavrene.m.has(klicSkupiny(mesic, sk)) && <ul className="divide-y divide-line/60">
                       {sk.platby.map((p) => (
                         <li key={p.klic} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 pl-9 pr-3.5">
                           <input type="checkbox" checked={vybrano.has(p.klic)} onChange={(e) => prepni([p.klic], e.target.checked)}
@@ -142,7 +182,7 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
                           <span className="w-6 text-xs text-ink-muted">Kč</span>
                         </li>
                       ))}
-                    </ul>
+                    </ul>}
                   </div>
                 );
               })}
@@ -197,6 +237,8 @@ function ZauctovanePlatby({ propertyId, platby, canDelete }: { propertyId: strin
   const [stav, akce, bezi] = useActionState<PlatbyState, FormData>(smazPlatby.bind(null, propertyId), {});
   const [otevreno, setOtevreno] = useState(false);
   const [vybrano, setVybrano] = useState<Set<string>>(new Set());
+  const [otevreneMesice, setOtevreneMesice] = useState<Set<string>>(new Set());
+  const prepniMesic = (k: string) => setOtevreneMesice((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
 
   const mesice = useMemo(() => {
     const m = new Map<string, ZauctovanaPlatba[]>();
@@ -226,11 +268,16 @@ function ZauctovanePlatby({ propertyId, platby, canDelete }: { propertyId: strin
             const ids = radky.map((p) => p.id);
             return (
               <section key={mesic} className="overflow-hidden rounded-xl border border-line">
-                <label className="flex cursor-pointer items-center gap-3 bg-surface-sunken/60 px-3.5 py-2 text-sm font-semibold">
-                  {canDelete && <input type="checkbox" checked={ids.every((i) => vybrano.has(i))} onChange={(e) => prepni(ids, e.target.checked)} aria-label={`Vybrat celý měsíc ${mesic}`} />}
-                  <span className="capitalize">{nazevMesice(Number(m))} {rok}</span>
-                </label>
-                <ul className="divide-y divide-line/60">
+                <div className="flex items-center gap-2 bg-surface-sunken/60 px-3 py-2 text-sm font-semibold">
+                  <Sipka otevreno={otevreneMesice.has(mesic)} onClick={() => prepniMesic(mesic)} popisek={`Rozbalit nebo sbalit měsíc ${mesic}`} />
+                  <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+                    {canDelete && <input type="checkbox" checked={ids.every((i) => vybrano.has(i))} onChange={(e) => prepni(ids, e.target.checked)} aria-label={`Vybrat celý měsíc ${mesic}`} />}
+                    <span className="capitalize">{nazevMesice(Number(m))} {rok}</span>
+                  </label>
+                  <span className="text-xs font-normal text-ink-muted">{radky.length}×</span>
+                  <span className="w-24 text-right text-xs font-medium tabular-nums">{czk(radky.reduce((a, p) => a + p.castka, 0))}</span>
+                </div>
+                {otevreneMesice.has(mesic) && <ul className="divide-y divide-line/60">
                   {radky.map((p) => (
                     <li key={p.id} className="flex items-center gap-3 px-3.5 py-1.5 text-sm">
                       {canDelete && <input type="checkbox" checked={vybrano.has(p.id)} onChange={(e) => prepni([p.id], e.target.checked)} aria-label={p.popis} />}
@@ -239,7 +286,7 @@ function ZauctovanePlatby({ propertyId, platby, canDelete }: { propertyId: strin
                       <span className={`w-24 text-right tabular-nums ${p.castka < 0 ? "text-bad" : "text-good"}`}>{czk(p.castka)}</span>
                     </li>
                   ))}
-                </ul>
+                </ul>}
               </section>
             );
           })}
