@@ -24,6 +24,7 @@ export async function exportujVse(): Promise<Zaloha> {
       service: await prisma.service.findMany(),
       serviceCostChange: await prisma.serviceCostChange.findMany(),
       tenant: await prisma.tenant.findMany(),
+      pravidelnaPlatba: await prisma.pravidelnaPlatba.findMany(),
       operator: await prisma.operator.findMany(),
       dokument: await prisma.dokument.findMany(),
       tenantStatement: await prisma.tenantStatement.findMany(),
@@ -72,6 +73,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.valuation.deleteMany();
     await tx.propertyOwner.deleteMany();
     await tx.dokument.deleteMany();
+    await tx.pravidelnaPlatba.deleteMany();
     await tx.tenantStatement.deleteMany();
     await tx.settlementReading.deleteMany();
     await tx.serviceSettlement.deleteMany();
@@ -210,6 +212,12 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       stornoAt: x.stornoAt ? dPovinne(x.stornoAt) : null, stornoReason: s(x.stornoReason), note: s(x.note),
     }));
     if (vyuctNajemci.length) obnoveno.tenantStatement = (await tx.tenantStatement.createMany({ data: vyuctNajemci })).count;
+
+    const platby = (t.pravidelnaPlatba as any[] ?? []).map((x) => ({
+      id: String(x.id), propertyId: String(x.propertyId), klic: String(x.klic),
+      paidAt: dPovinne(x.paidAt), amount: c(x.amount), createdAt: dPovinne(x.createdAt ?? new Date()),
+    }));
+    if (platby.length) obnoveno.pravidelnaPlatba = (await tx.pravidelnaPlatba.createMany({ data: platby })).count;
 
     const dokumenty = (t.dokument as any[] ?? []).map((x) => ({
       id: String(x.id), driveId: String(x.driveId), name: String(x.name), mime: String(x.mime), size: c(x.size),

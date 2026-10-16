@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { getSession } from "./auth";
 import { prisma } from "./db";
-import { CATEGORY_MAP } from "./categories";
 import { nactiNavrhPlatby } from "./pravidelnePlatbyData";
 
 export interface PlatbyState {
@@ -12,48 +11,52 @@ export interface PlatbyState {
 }
 
 /**
- * Zauctuje vybrane navrzene platby. Server navrh pocita znovu a bere jen klice, ktere v nem jsou,
- * takze klient nemuze zalozit nic jineho; upravit lze jen castku. Smi kazdy prihlaseny uzivatel.
+ * Zapise, co je zaplaceno: u kazde platby datum a skutecnou castku; bez data se zaznam zrusi
+ * (platba je zase nezaplacena). Server navrh pocita znovu a prijme jen klice, ktere v nem jsou.
+ * Nezaklada Pohyby — slouzi k prehledu dluhu. Smi kazdy prihlaseny uzivatel.
  */
-export async function zauctujPlatby(propertyId: string, _prev: PlatbyState, formData: FormData): Promise<PlatbyState> {
+export async function zapisZaplaceno(propertyId: string, _prev: PlatbyState, formData: FormData): Promise<PlatbyState> {
   const user = await getSession();
   if (!user) return { error: "Nejsi přihlášen." };
 
-  let vybrane: { klic: string; castka: number }[];
+  let zmeny: { klic: string; datum: string | null; castka: number }[];
   try {
     const raw = JSON.parse(String(formData.get("platby") ?? "[]"));
     if (!Array.isArray(raw)) throw new Error();
-    vybrane = raw.map((x) => ({ klic: String(x.klic), castka: Number(x.castka) }));
+    zmeny = raw.map((x) => ({ klic: String(x.klic), datum: x.datum ? String(x.datum) : null, castka: Number(x.castka) }));
   } catch {
-    return { error: "Neplatný výběr plateb." };
+    return { error: "Neplatná data." };
   }
-  if (vybrane.length === 0) return { error: "Nic není vybráno." };
-  if (vybrane.length > 1000) return { error: "Najednou jde zaúčtovat nejvýš 1000 plateb." };
-  if (vybrane.some((v) => !Number.isFinite(v.castka) || v.castka === 0)) return { error: "U každé platby musí být částka různá od nuly." };
+  if (zmeny.length === 0) return { error: "Nic není ke zpracování." };
+  if (zmeny.length > 2000) return { error: "Najednou jde uložit nejvýš 2000 plateb." };
 
+  const dnes = new Date().toISOString().slice(0, 10);
   const navrh = new Map((await nactiNavrhPlatby(propertyId)).map((p) => [p.klic, p]));
-  const data = [];
-  for (const v of vybrane) {
-    const p = navrh.get(v.klic);
+  const ulozit: { klic: string; datum: string; castka: number }[] = [];
+  const zrusit: string[] = [];
+  for (const z of zmeny) {
+    const p = navrh.get(z.klic);
     if (!p) return { error: "Některá platba už není v návrhu (změnila se smlouva nebo služba). Načti stránku znovu." };
-    if (p.stav === "zauctovano") continue;
-    const kat = CATEGORY_MAP.get(p.kategorie);
-    if (!kat) return { error: "Neznámá kategorie." };
-    // Znamenko urcuje druh platby (prijem/vydaj), uzivatel meni jen velikost
-    const castka = kat.kind === "EXPENSE" ? -Math.abs(v.castka) : Math.abs(v.castka);
-    data.push({
-      propertyId, date: new Date(p.datum), amount: Math.round(castka * 100) / 100, category: p.kategorie,
-      taxTreatment: kat.defaultTaxTreatment, description: p.popis, isRecurring: true, sourceKey: p.klic,
-    });
+    if (p.zaplaceno?.zdroj === "POHYB") continue; // starsi pohyb se tu nemeni
+    if (!z.datum) { if (p.zaplaceno) zrusit.push(z.klic); continue; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(z.datum) || Number.isNaN(Date.parse(z.datum))) return { error: "Datum zaplacení zadej jako platné datum." };
+    if (z.datum > dnes) return { error: "Datum zaplacení nemůže být v budoucnu." };
+    if (!Number.isFinite(z.castka) || z.castka <= 0) return { error: "Zaplacená částka musí být větší než nula." };
+    ulozit.push({ klic: z.klic, datum: z.datum, castka: Math.round(z.castka * 100) / 100 });
   }
-  if (data.length === 0) return { success: "Vše vybrané už bylo zaúčtované." };
 
-  // Unikatni klic brani zdvojeni i pri dvou soucasnych kliknutich
-  const vysledek = await prisma.transaction.createMany({ data, skipDuplicates: true });
+  await prisma.$transaction([
+    ...ulozit.map((u) => prisma.pravidelnaPlatba.upsert({
+      where: { klic: u.klic },
+      update: { paidAt: new Date(u.datum), amount: u.castka },
+      create: { propertyId, klic: u.klic, paidAt: new Date(u.datum), amount: u.castka },
+    })),
+    prisma.pravidelnaPlatba.deleteMany({ where: { propertyId, klic: { in: zrusit } } }),
+  ]);
 
-  for (const cesta of [`/properties/${propertyId}`, "/properties", "/", "/cashflow"]) revalidatePath(cesta);
-  const preskoceno = data.length - vysledek.count;
-  return { success: `Zaúčtováno ${vysledek.count} plateb.${preskoceno > 0 ? ` ${preskoceno} už bylo zaúčtováno.` : ""}` };
+  revalidatePath(`/properties/${propertyId}`);
+  const casti = [ulozit.length ? `zapsáno ${ulozit.length} zaplacených` : null, zrusit.length ? `zrušeno ${zrusit.length}` : null].filter(Boolean);
+  return { success: casti.length ? `Uloženo: ${casti.join(", ")}.` : "Beze změny." };
 }
 
 /**

@@ -39,11 +39,15 @@ function maskuj(text: string): string {
  * ovlivnit; tady je format i kalendar vzdy stejny. Formular dostane ISO
  * datum v skrytem poli, takze server se nemeni.
  */
-export function DatumPole({ label, name, hint, sirka = "", defaultValue = "", required, min, max, onChange }: {
+export function DatumPole({ label, name, hint, sirka = "", defaultValue = "", hodnota, required, min, max, onChange, skrytLabel }: {
   label: string; name: string; hint?: string; sirka?: string;
   defaultValue?: string; required?: boolean; min?: string; max?: string;
   /** Dostane ISO datum, nebo null, dokud neni zadane platne. */
   onChange?: (iso: string | null) => void;
+  /** Rizena hodnota (ISO, nebo null = prazdne): zmena zvenku prepise pole. */
+  hodnota?: string | null;
+  /** Popisek jen pro ctecky (do hustych tabulek). */
+  skrytLabel?: boolean;
 }) {
   const [text, setText] = useState(zobraz(defaultValue));
   const [otevreno, setOtevreno] = useState(false);
@@ -56,6 +60,14 @@ export function DatumPole({ label, name, hint, sirka = "", defaultValue = "", re
 
   useEffect(() => { onChange?.(iso); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [iso]);
+
+  // Zmena zvenku (napr. "zaplaceno dnes" pro celou skupinu) prepise text; psani se nerusi,
+  // protoze neuplny text ma iso null a to se s hodnotou null shoduje
+  useEffect(() => {
+    if (hodnota === undefined) return;
+    if ((hodnota ?? null) !== iso) setText(hodnota ? zobraz(hodnota) : "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hodnota]);
 
   const mimoRozsah = iso != null && ((min && iso < min) || (max && iso > max));
 
@@ -97,7 +109,7 @@ export function DatumPole({ label, name, hint, sirka = "", defaultValue = "", re
 
   return (
     <div className={sirka}>
-      <label className="label mb-1.5 block" htmlFor={name}>{label}</label>
+      <label className={skrytLabel ? "sr-only" : "label mb-1.5 block"} htmlFor={name}>{label}</label>
       <div ref={obal} className="relative">
         <input type="hidden" name={name} value={iso ?? ""} />
         <input

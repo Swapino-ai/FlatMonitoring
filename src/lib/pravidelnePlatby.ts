@@ -24,9 +24,18 @@ export interface NavrzenaPlatba {
   kategorie: string;
   /** Nesedi cely mesic (nastup ci konec najmu): castka je pomerna. */
   castecny?: boolean;
-  stav: "navrzeno" | "zauctovano" | "mozna";
-  /** U "mozna": co uz v danem mesici vypada jako totez zauctovane rucne. */
-  poznamka?: string;
+  /** Bez zaznamu o zaplaceni je platba nezaplacena. */
+  stav: "nezaplaceno" | "zaplaceno";
+  zaplaceno?: ZaplacenaPlatba;
+}
+
+export interface ZaplacenaPlatba {
+  /** Kdy byla zaplacena (rrrr-mm-dd). */
+  datum: string;
+  /** Skutecne zaplacena castka (kladna). */
+  castka: number;
+  /** EVIDENCE = zapsano v prehledu; POHYB = starsi platba zauctovana jako pohyb (jen ke cteni). */
+  zdroj: "EVIDENCE" | "POHYB";
 }
 
 export interface NajemPlatba extends NajemVyuct {
@@ -39,10 +48,12 @@ export interface SluzbaPlatba extends SluzbaVstup {
   nazevDruhu: string;
 }
 
+/** Starsi platba zauctovana jako pohyb (se klicem): povazuje se za zaplacenou k datu pohybu. */
 export interface ExistujiciPohyb {
   date: string;
   category: string;
   sourceKey: string | null;
+  amount?: number;
 }
 
 const KATEGORIE_SLUZBY: Record<string, string> = { SVJ_FEE: "SVJ_FEE", INSURANCE: "INSURANCE", MANAGEMENT: "MANAGEMENT" };
@@ -74,26 +85,23 @@ export function navrhniPlatby(a: {
   najmy: NajemPlatba[];
   sluzby: SluzbaPlatba[];
   pohyby: ExistujiciPohyb[];
+  /** Zaplacene platby z prehledu (klic -> datum a castka). */
+  zaplaceno?: { klic: string; datum: string; castka: number }[];
   dnes: string;
 }): NavrzenaPlatba[] {
   const { najmy, sluzby, pohyby, dnes } = a;
+  const zaplacenoMapa = new Map<string, ZaplacenaPlatba>();
+  for (const p of pohyby) if (p.sourceKey) zaplacenoMapa.set(p.sourceKey, { datum: p.date, castka: Math.abs(p.amount ?? 0), zdroj: "POHYB" });
+  for (const z of a.zaplaceno ?? []) zaplacenoMapa.set(z.klic, { datum: z.datum, castka: z.castka, zdroj: "EVIDENCE" });
   const zacatky = [...najmy.map((n) => n.od), ...sluzby.map((s) => (s.contractStart ? String(s.contractStart).slice(0, 10) : null)).filter((x): x is string => !!x)];
   if (zacatky.length === 0) return [];
   const od = zacatky.reduce((x, y) => (x < y ? x : y));
-  const hotove = new Set(pohyby.map((p) => p.sourceKey).filter((k): k is string => !!k));
-  const rucne = pohyby.filter((p) => !p.sourceKey);
 
   const out: NavrzenaPlatba[] = [];
-  const pridej = (p: Omit<NavrzenaPlatba, "stav" | "poznamka">) => {
+  const pridej = (p: Omit<NavrzenaPlatba, "stav" | "zaplaceno">) => {
     if (p.datum > dnes) return;
-    const ma = hotove.has(p.klic);
-    // Stejna kategorie v tomto mesici uz je zauctovana rucne: pravdepodobne totez, nezaskrtavat
-    const podobne = !ma && rucne.some((r) => r.category === p.kategorie && r.date.slice(0, 7) === p.mesic);
-    out.push({
-      ...p,
-      stav: ma ? "zauctovano" : podobne ? "mozna" : "navrzeno",
-      poznamka: podobne ? "Tento měsíc už je v kategorii zaúčtovaný pohyb zadaný ručně." : undefined,
-    });
+    const z = zaplacenoMapa.get(p.klic);
+    out.push({ ...p, stav: z ? "zaplaceno" : "nezaplaceno", zaplaceno: z });
   };
 
   for (const mesic of mesiceMezi(od, dnes)) {
@@ -150,3 +158,64 @@ export function navrhniPlatby(a: {
 }
 
 export { pridejDny };
+
+
+export interface DluhSkupiny {
+  typ: "NAJEMCE" | "DODAVATEL";
+  nazev: string;
+  /** Kolik chybi zaplatit (kladne cislo). */
+  dluh: number;
+  /** Z toho kolik polozek je uplne nezaplaceno. */
+  nezaplacenych: number;
+  /** Polozek, ktere jsou zaplacene mene, nez je predpis. */
+  nedoplaceno: number;
+  nejstarsi: string | null;
+  /** Zaplaceno navic oproti predpisu. */
+  preplaceno: number;
+}
+
+export interface PrehledPlateb {
+  najemci: DluhSkupiny[];
+  dodavatele: DluhSkupiny[];
+  /** Kolik celkem dluzi najemci. */
+  najemciDluzi: number;
+  /** Kolik celkem dluzim dodavatelum ja. */
+  dluzimDodavatelum: number;
+  zaplacenoCelkem: { prijmy: number; vydaje: number };
+}
+
+/**
+ * Prehled dluhu z navrzenych plateb: nezaplacena polozka dluzi celou castku, zaplacena mene dluzi
+ * rozdil. Vsechny navrzene platby jsou uz splatne (budouci se nenavrhuji), proto se pocitaji vsechny.
+ */
+export function prehledPlateb(navrh: NavrzenaPlatba[]): PrehledPlateb {
+  const m = new Map<string, DluhSkupiny>();
+  let prijmy = 0;
+  let vydaje = 0;
+  for (const p of navrh) {
+    const k = `${p.skupina.typ}:${p.skupina.nazev}`;
+    const g = m.get(k) ?? { typ: p.skupina.typ, nazev: p.skupina.nazev, dluh: 0, nezaplacenych: 0, nedoplaceno: 0, nejstarsi: null, preplaceno: 0 };
+    const predpis = Math.abs(p.castka);
+    if (!p.zaplaceno) {
+      g.dluh += predpis;
+      g.nezaplacenych += 1;
+      if (!g.nejstarsi || p.datum < g.nejstarsi) g.nejstarsi = p.datum;
+    } else {
+      const rozdil = predpis - p.zaplaceno.castka;
+      if (rozdil > 0.005) { g.dluh += rozdil; g.nedoplaceno += 1; if (!g.nejstarsi || p.datum < g.nejstarsi) g.nejstarsi = p.datum; }
+      else if (rozdil < -0.005) g.preplaceno += -rozdil;
+      if (p.castka > 0) prijmy += p.zaplaceno.castka; else vydaje += p.zaplaceno.castka;
+    }
+    m.set(k, g);
+  }
+  const zaokr = (n: number) => Math.round(n * 100) / 100;
+  const skupiny = [...m.values()].map((g) => ({ ...g, dluh: zaokr(g.dluh), preplaceno: zaokr(g.preplaceno) }));
+  const najemci = skupiny.filter((g) => g.typ === "NAJEMCE").sort((a, b) => b.dluh - a.dluh);
+  const dodavatele = skupiny.filter((g) => g.typ === "DODAVATEL").sort((a, b) => b.dluh - a.dluh);
+  return {
+    najemci, dodavatele,
+    najemciDluzi: zaokr(najemci.reduce((a, g) => a + g.dluh, 0)),
+    dluzimDodavatelum: zaokr(dodavatele.reduce((a, g) => a + g.dluh, 0)),
+    zaplacenoCelkem: { prijmy: zaokr(prijmy), vydaje: zaokr(vydaje) },
+  };
+}

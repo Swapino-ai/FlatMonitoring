@@ -1,4 +1,4 @@
-import { mesiceMezi, navrhniPlatby, type NajemPlatba, type SluzbaPlatba } from "../src/lib/pravidelnePlatby";
+import { mesiceMezi, navrhniPlatby, prehledPlateb, type NajemPlatba, type SluzbaPlatba } from "../src/lib/pravidelnePlatby";
 let chyb = 0;
 const over = (n: string, ok: boolean, d?: unknown) => { if (!ok) { chyb++; console.error("CHYBA:", n, d ?? ""); } };
 
@@ -15,19 +15,19 @@ over("zalohy 3 mesice", p.filter((x) => x.druh === "ZALOHA").length === 3 && p.f
 const s = p.filter((x) => x.druh === "SLUZBA");
 over("sluzba od unora, zaporna", s.length === 2 && s.every((x) => x.castka === -800) && s[0].mesic === "2026-02", s.map((x) => x.mesic));
 over("kategorie sluzby", s[0].kategorie === "UTILITIES");
-over("vse navrzeno", p.every((x) => x.stav === "navrzeno"));
+over("vse nezaplaceno", p.every((x) => x.stav === "nezaplaceno" && !x.zaplaceno));
 
 // Budouci platba se nenavrhuje: splatnost 15., dnes 10.
 over("budouci mimo", navrhniPlatby({ najmy: [A], sluzby: [], pohyby: [], dnes: "2026-03-10" }).filter((x) => x.druh === "NAJEM").length === 2);
 
-// Zauctovane se poznaji a necitaji znovu
-const znovu = navrhniPlatby({ najmy: [A], sluzby: [sl], pohyby: [{ date: "2026-01-15", category: "RENT", sourceKey: "najem:A:2026-01" }], dnes: "2026-03-20" });
-over("zauctovano", znovu.find((x) => x.klic === "najem:A:2026-01")?.stav === "zauctovano");
-over("ostatni stale navrzeno", znovu.find((x) => x.klic === "najem:A:2026-02")?.stav === "navrzeno");
-
-// Rucne zadany pohyb v kategorii a mesici -> "mozna"
-const rucne = navrhniPlatby({ najmy: [A], sluzby: [], pohyby: [{ date: "2026-02-10", category: "RENT", sourceKey: null }], dnes: "2026-03-20" });
-over("mozna duplicita", rucne.find((x) => x.klic === "najem:A:2026-02")?.stav === "mozna" && !!rucne.find((x) => x.klic === "najem:A:2026-02")?.poznamka);
+// Zaplacene (zaznam z prehledu) se poznaji a nesmazou se z navrhu
+const zapl = navrhniPlatby({ najmy: [A], sluzby: [sl], pohyby: [], zaplaceno: [{ klic: "najem:A:2026-01", datum: "2026-01-16", castka: 10000 }], dnes: "2026-03-20" });
+const jan = zapl.find((x) => x.klic === "najem:A:2026-01")!;
+over("zaplaceno", jan.stav === "zaplaceno" && jan.zaplaceno?.datum === "2026-01-16" && jan.zaplaceno.zdroj === "EVIDENCE");
+over("ostatni nezaplaceno", zapl.find((x) => x.klic === "najem:A:2026-02")?.stav === "nezaplaceno");
+// Starsi platba zauctovana jako pohyb se bere jako zaplacena (jen ke cteni)
+const legacy = navrhniPlatby({ najmy: [A], sluzby: [], pohyby: [{ date: "2026-02-15", category: "RENT", sourceKey: "najem:A:2026-02", amount: 10000 }], dnes: "2026-03-20" });
+over("pohyb jako zaplaceno", legacy.find((x) => x.klic === "najem:A:2026-02")?.zaplaceno?.zdroj === "POHYB");
 
 // Castecny mesic: nastup 21.1. = 11 z 31 dni
 const B: NajemPlatba = { ...A, id: "B", od: "2026-01-21", utilitiesMonthly: 3100 };
@@ -57,6 +57,26 @@ over("bez dat nic", navrhniPlatby({ najmy: [], sluzby: [], pohyby: [], dnes: "20
   over("dodavatele", sk("DODAVATEL").size === 2 && sk("DODAVATEL").has("ČEZ") && sk("DODAVATEL").has("Vodárna"), [...sk("DODAVATEL")]);
   over("najemce", [...sk("NAJEMCE")].join() === "Novák");
   over("cez ma dve sluzby", g.filter((x) => x.skupina.nazev === "ČEZ" && x.mesic === "2026-03").length === 2);
+}
+
+// Prehled dluhu
+{
+  const vse = navrhniPlatby({ najmy: [A], sluzby: [sl], pohyby: [], zaplaceno: [
+    { klic: "najem:A:2026-01", datum: "2026-01-16", castka: 10000 },
+    { klic: "najem:A:2026-02", datum: "2026-02-20", castka: 9000 },      // zaplaceno o 1000 mene
+    { klic: "sluzba:s1:2026-02", datum: "2026-02-02", castka: 800 },
+  ], dnes: "2026-03-20" });
+  const pr = prehledPlateb(vse);
+  // najemce: unor nedoplatek 1000 + unor zalohy 3000 + brezen najem 10000 + zalohy 3000 + leden zalohy 3000 = 20000
+  over("najemce dluzi", pr.najemciDluzi === 20000, pr.najemciDluzi);
+  const n = pr.najemci[0];
+  over("rozpis najemce", n.nazev === "Novák" && n.nedoplaceno === 1 && n.nezaplacenych === 4 && n.nejstarsi === "2026-01-15", JSON.stringify(n));
+  // sluzba: unor zaplaceno, brezen nezaplaceno 800
+  over("dluzim dodavatelum", pr.dluzimDodavatelum === 800 && pr.dodavatele[0].nazev === "Vodárna", JSON.stringify(pr.dodavatele));
+  over("zaplaceno celkem", pr.zaplacenoCelkem.prijmy === 19000 && pr.zaplacenoCelkem.vydaje === 800, JSON.stringify(pr.zaplacenoCelkem));
+  const navic = prehledPlateb(navrhniPlatby({ najmy: [A], sluzby: [], pohyby: [], zaplaceno: [{ klic: "najem:A:2026-01", datum: "2026-01-15", castka: 10500 }], dnes: "2026-01-20" }));
+  over("preplatek", navic.najemci[0].preplaceno === 500 && navic.najemci[0].dluh === 3000, JSON.stringify(navic.najemci[0]));
+  over("prazdny", prehledPlateb([]).najemciDluzi === 0);
 }
 
 console.log(chyb ? `${chyb} chyb` : "vše v pořádku");

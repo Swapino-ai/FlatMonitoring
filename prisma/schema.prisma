@@ -681,3 +681,18 @@ model Operator {
   createdAt  DateTime   @default(now())
   properties Property[]
 }
+
+/// Zaplacena pravidelna platba (najem, zalohy od najemce, platba sluzby dodavateli).
+/// Klic odpovida navrhu plateb ("najem:<smlouva>:2026-03"); bez zaznamu je platba nezaplacena.
+/// Nejde do Pohybu: slouzi k prehledu, kolik kdo dluzi a kolik se dluzi dodavatelum.
+model PravidelnaPlatba {
+  id         String   @id @default(cuid())
+  propertyId String
+  klic       String   @unique
+  paidAt     DateTime
+  /// Skutecne zaplacena castka (kladna); rozdil proti predpisu je nedoplatek ci preplatek
+  amount     Float
+  createdAt  DateTime @default(now())
+
+  @@index([propertyId])
+}

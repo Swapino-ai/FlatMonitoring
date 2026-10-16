@@ -30,7 +30,8 @@ Odškrtávej postupně.
   Build ve Vercelu (`vercel-build`) taky dělá `prisma db push`, který se u nových **unikátních** sloupců zastaví na varování
   (`--accept-data-loss`). Takové nasazení spadne a na webu zůstane stará verze (číslo verze je vidět v horní liště).
   Řešení: spustit schema push workflow s přepínačem „Přijmout varování Prismy“, pak Redeploy.
-- [ ] Zaúčtovat smí **kdokoli přihlášený** (pravidelné platby), i uživatel jen pro čtení. Rozhodnout, jestli to v ostré tak nechat.
+- [ ] Pravidelné platby jsou jen přehled dluhů (datum zaplacení); **nevstupují do Pohybů, cash flow ani daní**.
+- [ ] Zapsat zaplacení smí **kdokoli přihlášený** (pravidelné platby), i uživatel jen pro čtení. Rozhodnout, jestli to v ostré tak nechat.
 
 ## C. Přihlášení a oprávnění
 

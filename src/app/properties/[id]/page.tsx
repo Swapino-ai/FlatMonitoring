@@ -587,9 +587,9 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             pocet: property.transactions.length,
             obsah: (<>
           <SbalitelnaKarta klic="pravidelne-platby" title="Pravidelné platby"
-            shrnuti={navrhPlateb.filter((p) => p.stav !== "zauctovano").length
-              ? `${navrhPlateb.filter((p) => p.stav !== "zauctovano").length} k zaúčtování`
-              : navrhPlateb.length ? "vše zaúčtováno" : undefined}>
+            shrnuti={navrhPlateb.filter((p) => p.stav === "nezaplaceno").length
+              ? `${navrhPlateb.filter((p) => p.stav === "nezaplaceno").length} nezaplaceno`
+              : navrhPlateb.length ? "vše zaplaceno" : undefined}>
             <PravidelnePlatby propertyId={property.id} navrh={navrhPlateb} zauctovane={zauctovanePlatby} canDelete={user.role === "OWNER"} />
           </SbalitelnaKarta>
           <SbalitelnaKarta klic="pohyby" title="Pohyby">
