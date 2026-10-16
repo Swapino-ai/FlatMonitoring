@@ -260,7 +260,7 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
                                   <span className="flex items-center gap-2 text-xs text-ink-secondary">
                                     <span>zaplaceno {dateCz(r.datum)} · <span className={mene ? "text-warn" : ""}>{czk(zaplacenoCastka)}</span></span>
                                     <button type="button" className="btn px-2 py-0.5 text-xs" onClick={() => setOkno({ nadpis: p.popis, platby: [p], datum: r.datum!, castka: r.castka })}>Změnit</button>
-                                    <button type="button" className="btn px-2 py-0.5 text-xs" onClick={() => nastav(p.klic, { datum: null })}>Zrušit</button>
+                                    <button type="button" className="btn px-2 py-0.5 text-xs" onClick={() => nastav(p.klic, { datum: null })}>Zrušit zaplacení</button>
                                   </span>
                                 ) : (
                                   <button type="button" className="btn px-2 py-0.5 text-xs" onClick={() => setOkno({ nadpis: p.popis, platby: [p], datum: dnes, castka: r.castka })}>Zaplaceno</button>
