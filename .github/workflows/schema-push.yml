@@ -10,6 +10,11 @@ name: Promítnout schéma do databáze
 
 on:
   workflow_dispatch:
+    inputs:
+      akceptovat:
+        description: 'Přijmout varování Prismy (např. nový unikátní sloupec). Zapni jen když víš, že nic nemizí.'
+        type: boolean
+        default: false
 
 jobs:
   push:
@@ -39,7 +44,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-        run: npx prisma db push --skip-generate
+        run: npx prisma db push --skip-generate ${{ inputs.akceptovat && '--accept-data-loss' || '' }}
 
       - name: Záloha po změně schématu
         env:
