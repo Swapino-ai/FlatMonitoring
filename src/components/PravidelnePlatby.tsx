@@ -15,12 +15,18 @@ const POCET_MESICU = 6;
 
 /** Sipka pro sbaleni a rozbaleni oddilu. */
 /** Okno pro zadani data zaplaceni (kalendar nebo rucne) a u jedne platby i zaplacene castky. */
-function ZaplacenoOkno({ nadpis, datum: d0, castka: c0, max, onPotvrdit, onZavrit }: {
+function ZaplacenoOkno({ nadpis, datum: d0, castka: c0, max, splatnost, onPotvrdit, onZavrit }: {
   nadpis: string; datum: string; castka?: string; max: string;
-  onPotvrdit: (iso: string, castka?: string) => void; onZavrit: () => void;
+  /** Splatnost jedne platby (ISO): nabidne se jako rychla volba. U hromadneho zadani chybi. */
+  splatnost?: string;
+  /** iso = jedno datum pro vsechny; null = kazda platba podle sve splatnosti. */
+  onPotvrdit: (iso: string | null, castka?: string) => void; onZavrit: () => void;
 }) {
   const [datum, setDatum] = useState<string | null>(d0);
   const [castka, setCastka] = useState(c0 ?? "");
+  const [dleSplatnosti, setDleSplatnosti] = useState(false);
+  const jedna = c0 !== undefined;
+  const splatnostDo = splatnost && splatnost < max ? splatnost : max;
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === "Escape") onZavrit(); };
     window.addEventListener("keydown", k);
@@ -31,7 +37,15 @@ function ZaplacenoOkno({ nadpis, datum: d0, castka: c0, max, onPotvrdit, onZavri
       <div role="dialog" aria-modal="true" aria-label={nadpis} onClick={(e) => e.stopPropagation()}
         className="w-full max-w-sm rounded-card border border-line bg-surface-card p-5 shadow-pop">
         <h3 className="mb-3 text-sm font-semibold">{nadpis}</h3>
-        <DatumPole label="Zaplaceno dne" name="okno-zaplaceno" max={max} hodnota={datum} defaultValue={d0} onChange={setDatum} />
+        <div className="mb-3 flex flex-wrap gap-2">
+          <button type="button" className="btn px-3 py-1 text-xs" onClick={() => { setDleSplatnosti(false); setDatum(max); }}>Dnes</button>
+          <button type="button" className="btn px-3 py-1 text-xs" onClick={() => { if (jedna) { setDleSplatnosti(false); setDatum(splatnostDo); } else setDleSplatnosti(true); }}>
+            {jedna ? "Tento měsíc (ke splatnosti)" : "Ke splatnosti každé"}
+          </button>
+        </div>
+        {dleSplatnosti
+          ? <p className="rounded-lg bg-surface-sunken px-3 py-2 text-sm text-ink-secondary">Každá platba se označí jako zaplacená ke dni své splatnosti (nejpozději dnes).</p>
+          : <DatumPole label="Zaplaceno dne" name="okno-zaplaceno" max={max} hodnota={datum} defaultValue={d0} onChange={setDatum} />}
         {c0 !== undefined && (
           <div className="mt-3">
             <label className="label mb-1.5 block" htmlFor="okno-castka">Zaplacená částka (Kč)</label>
@@ -40,7 +54,7 @@ function ZaplacenoOkno({ nadpis, datum: d0, castka: c0, max, onPotvrdit, onZavri
         )}
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" className="btn" onClick={onZavrit}>Zrušit</button>
-          <button type="button" className="btn btn-primary" disabled={!datum} onClick={() => datum && onPotvrdit(datum, c0 !== undefined ? castka : undefined)}>Zaplaceno</button>
+          <button type="button" className="btn btn-primary" disabled={!datum && !dleSplatnosti} onClick={() => (dleSplatnosti ? onPotvrdit(null) : datum && onPotvrdit(datum, jedna ? castka : undefined))}>Zaplaceno</button>
         </div>
       </div>
     </div>
@@ -130,13 +144,13 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
 
   const dnes = dnesISO();
   const otevriHromadne = (nadpis: string, platby: NavrzenaPlatba[]) => setOkno({ nadpis, platby, datum: dnes });
-  const nastavDatum = (platby: NavrzenaPlatba[], datum: string) => {
+  const nastavDatum = (platby: NavrzenaPlatba[], datum: string | null) => {
     setUpravy((u) => {
       const n = { ...u };
       for (const p of platby) {
         if (p.zaplaceno?.zdroj === "POHYB") continue;
         const r = n[p.klic] ?? ulozene[p.klic];
-        if (!r.datum) n[p.klic] = { ...r, datum };
+        if (!r.datum) n[p.klic] = { ...r, datum: datum ?? (p.datum < dnes ? p.datum : dnes) };
       }
       return n;
     });
@@ -300,9 +314,9 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
       )}
 
       {okno && (
-        <ZaplacenoOkno nadpis={okno.nadpis} datum={okno.datum} castka={okno.castka} max={dnes} onZavrit={() => setOkno(null)}
+        <ZaplacenoOkno nadpis={okno.nadpis} datum={okno.datum} castka={okno.castka} max={dnes} splatnost={okno.platby.length === 1 ? okno.platby[0].datum : undefined} onZavrit={() => setOkno(null)}
           onPotvrdit={(iso, castka) => {
-            if (okno.castka !== undefined) nastav(okno.platby[0].klic, { datum: iso, castka: castka ?? okno.castka });
+            if (okno.castka !== undefined && iso) nastav(okno.platby[0].klic, { datum: iso, castka: castka ?? okno.castka });
             else nastavDatum(okno.platby, iso);
             setOkno(null);
           }} />
