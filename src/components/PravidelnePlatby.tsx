@@ -216,6 +216,9 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
           U každé platby zapiš, <strong>kdy byla zaplacena</strong>. Bez data je nezaplacená a počítá se do dluhu.
         </p>
         <div className="flex gap-1.5">
+          {navrh.some((p) => !radek(p.klic).datum && p.zaplaceno?.zdroj !== "POHYB") && (
+            <button type="button" className="btn btn-primary text-xs" onClick={() => otevriHromadne("Zaplatit vše", navrh)}>Zaplatit vše</button>
+          )}
           <button type="button" className="btn text-xs" onClick={() => { rokyOtevrene.nastav(roky.map(([r]) => r)); mesiceOtevrene.nastav(mesice.map(([k]) => k)); }}>Rozbalit vše</button>
           <button type="button" className="btn text-xs" onClick={() => { rokyOtevrene.nastav([]); mesiceOtevrene.nastav([]); skupinyOtevrene.nastav([]); }}>Sbalit vše</button>
         </div>
@@ -232,6 +235,10 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
                 <Sipka otevreno={otevrenyRok} onClick={() => rokyOtevrene.prepni(rok)} popisek={`Rozbalit nebo sbalit rok ${rok}`} />
                 <span className="flex-1">{rok}</span>
                 {dluhRoku > 0 ? <Badge tone="bad">{czk(dluhRoku)}</Badge> : <Badge tone="good">vše zaplaceno</Badge>}
+                {mesiceRoku.some(([, r]) => r.some((p) => !radek(p.klic).datum && p.zaplaceno?.zdroj !== "POHYB")) && (
+                  <button type="button" className="btn px-2 py-0.5 text-xs font-normal"
+                    onClick={() => otevriHromadne(`Vše zaplaceno: ${rok}`, mesiceRoku.flatMap(([, r]) => r))}>Vše zaplaceno</button>
+                )}
               </div>
               {otevrenyRok && (
                 <div className="mt-2 space-y-3">
