@@ -480,21 +480,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             </div>
           </div>
 
-          {/* Vývoj trhu v čase */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card title="Vývoj tržního nájmu">
-              {vyvojNajmu.length > 1
-                ? <VyvojChart data={vyvojNajmu} nazev="Tržní nájem"
-                    reference={smluvniNajem > 0 ? { hodnota: smluvniNajem, popisek: "tvůj nájem" } : undefined} />
-                : <p className="py-6 text-center text-sm text-ink-muted">Graf vznikne, jakmile bude aspoň druhý odhad. Sken běží každou noc.</p>}
-            </Card>
-            <Card title="Vývoj odhadní hodnoty">
-              {vyvojHodnoty.length > 1
-                ? <VyvojChart data={vyvojHodnoty} nazev="Odhadní hodnota" kompaktni />
-                : <p className="py-6 text-center text-sm text-ink-muted">Graf vznikne, jakmile bude aspoň druhé ocenění.</p>}
-            </Card>
-          </div>
-
           {/* Hlavní číslo pro pronajímanou nemovitost: kolik měsíčně skutečně zbývá a kolik to je z investice */}
           {smluvniNajem > 0 && a.totalInvestment > 0 && (() => {
             const odhad = !skutecnyCashflow;
@@ -517,6 +502,21 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
               </div>
             );
           })()}
+
+          {/* Vývoj trhu v čase */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card title="Vývoj tržního nájmu">
+              {vyvojNajmu.length > 1
+                ? <VyvojChart data={vyvojNajmu} nazev="Tržní nájem"
+                    reference={smluvniNajem > 0 ? { hodnota: smluvniNajem, popisek: "tvůj nájem" } : undefined} />
+                : <p className="py-6 text-center text-sm text-ink-muted">Graf vznikne, jakmile bude aspoň druhý odhad. Sken běží každou noc.</p>}
+            </Card>
+            <Card title="Vývoj odhadní hodnoty">
+              {vyvojHodnoty.length > 1
+                ? <VyvojChart data={vyvojHodnoty} nazev="Odhadní hodnota" kompaktni />
+                : <p className="py-6 text-center text-sm text-ink-muted">Graf vznikne, jakmile bude aspoň druhé ocenění.</p>}
+            </Card>
+          </div>
 
           {/* Výkonnost a kondice vedle sebe — čísla i verdikt na jedné obrazovce */}
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
