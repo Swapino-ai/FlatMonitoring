@@ -26,6 +26,12 @@ Odškrtávej postupně.
 - [ ] Produkční větev: veškerá práce je na větvi `claude/real-estate-management-app-kc3cz0`. Do ostré je potřeba ji **sloučit do hlavní větve**
   a nastavit ve Vercelu, ze které větve se nasazuje Production.
 
+- [ ] **Pořadí při změně schématu:** nejdřív workflow „Promítnout schéma do databáze“, teprve potom nasazení aplikace.
+  Build ve Vercelu (`vercel-build`) taky dělá `prisma db push`, který se u nových **unikátních** sloupců zastaví na varování
+  (`--accept-data-loss`). Takové nasazení spadne a na webu zůstane stará verze (číslo verze je vidět v horní liště).
+  Řešení: spustit schema push workflow s přepínačem „Přijmout varování Prismy“, pak Redeploy.
+- [ ] Zaúčtovat smí **kdokoli přihlášený** (pravidelné platby), i uživatel jen pro čtení. Rozhodnout, jestli to v ostré tak nechat.
+
 ## C. Přihlášení a oprávnění
 
 - [ ] Silný `AUTH_SECRET` (jen ve Vercelu, ne v repozitáři), min. 32 náhodných znaků.
