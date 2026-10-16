@@ -4,6 +4,7 @@ import { page } from "@/lib/guard";
 import { srovnejPlatnost } from "@/lib/platnost";
 import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
+import { VyvojChart } from "@/components/charts";
 import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { AmortizationChart } from "@/components/charts";
 import { Napoveda } from "@/components/Napoveda";
@@ -55,7 +56,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const [
     , typy, property, pohled, strany, diskPripojen, katastr, nejnovejsiNajem,
     zmenyNakladu, zmenyZaloh, vyuctovaniDb, dokumentyDb, vydanaDb, dokumentyVydanych,
-    najemciVsi, dokumentySmluv, uzivatele, stavVyuctovani, navrhPlateb, zauctovanePlatby,
+    najemciVsi, dokumentySmluv, uzivatele, stavVyuctovani, navrhPlateb, zauctovanePlatby, historieNajmu,
   ] = await Promise.all([
     srovnejPlatnost(),
     nactiTypySluzeb(),
@@ -94,6 +95,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     // Navrh pravidelnych plateb (najem, zalohy, sluzby) k zauctovani
     nactiNavrhPlatby(id),
     nactiZauctovanePlatby(id),
+    // Historie odhadu najmu pro graf vyvoje
+    prisma.rentEstimate.findMany({ where: { propertyId: id }, orderBy: { date: "asc" }, select: { date: true, monthlyRent: true } }),
   ]);
   if (!property) notFound();
 
@@ -307,6 +310,17 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     return { mesicne: soucet / mesicu, mesicu, neuplny: false };
   })();
 
+  // Rady pro grafy vyvoje trhu: posledni zaznam dne, od nejstarsiho
+  const rada = (zaznamy: { date: Date; hodnota: number }[]) => {
+    const poDnech = new Map<string, number>();
+    for (const z of [...zaznamy].sort((x, y) => x.date.getTime() - y.date.getTime())) poDnech.set(denISO(z.date), z.hodnota);
+    return [...poDnech.entries()].map(([d, hodnota]) => ({ datum: dateCz(d), hodnota }));
+  };
+  const vyvojNajmu = rada(historieNajmu.map((h) => ({ date: h.date, hodnota: h.monthlyRent })));
+  const vyvojHodnoty = rada(property.valuations.map((v) => ({ date: v.date, hodnota: v.value })));
+  const zmenaProcent = (r: { hodnota: number }[]) =>
+    r.length > 1 && r[0].hodnota ? ((r[r.length - 1].hodnota - r[0].hodnota) / r[0].hodnota) * 100 : null;
+
   const recentTx = [...property.transactions]
     .sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime());
 
@@ -413,34 +427,72 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             />
 
             <div className="card">
-              <div className="label">Tržní nájem</div>
-              <div className="mt-1 text-3xl font-semibold leading-none tracking-tight">
-                {nejnovejsiNajem ? `${czk(nejnovejsiNajem.monthlyRent)}/měs.` : "—"}
+              <div className="flex items-start justify-between gap-2">
+                <div className="label">Tržní nájem</div>
+                {nejnovejsiNajem && (nejnovejsiNajem.sampleSize ?? 0) < 3 && <Badge tone="warn">málo nabídek</Badge>}
+              </div>
+              <div className="mt-1 text-3xl font-semibold leading-none tracking-tight tabular-nums">
+                {nejnovejsiNajem ? <>{czk(nejnovejsiNajem.monthlyRent)}<span className="text-base font-normal text-ink-muted">/měs.</span></> : "—"}
               </div>
               {nejnovejsiNajem ? (
-                <div className="mt-2 text-sm text-ink-secondary">
-                  {smluvniNajem > 0 ? (
-                    <>
-                      Tvůj {czk(smluvniNajem)}
-                      {(() => {
-                        const r = ((smluvniNajem - nejnovejsiNajem.monthlyRent) / nejnovejsiNajem.monthlyRent) * 100;
-                        if ((nejnovejsiNajem.sampleSize ?? 0) < 3) return " · odhad z málo nabídek, neporovnávej";
-                        if (r < -8) return ` · ${pct(Math.abs(r), 0)} pod trhem, ročně ${czk((nejnovejsiNajem.monthlyRent - smluvniNajem) * 12)}`;
-                        if (r > 8) return ` · ${pct(r, 0)} nad trhem`;
-                        return " · odpovídá trhu";
-                      })()}
-                    </>
-                  ) : "Zatím nepronajato"}
-                  <span className="block text-xs text-ink-muted">
-                    {nejnovejsiNajem.sampleSize} nabídek · {dateCz(nejnovejsiNajem.date)}
-                  </span>
-                </div>
+                <>
+                  {smluvniNajem > 0 && (() => {
+                    const trh = nejnovejsiNajem.monthlyRent;
+                    const r = ((smluvniNajem - trh) / trh) * 100;
+                    const max = Math.max(trh, smluvniNajem);
+                    const spolehlivy = (nejnovejsiNajem.sampleSize ?? 0) >= 3;
+                    return (
+                      <div className="mt-4 space-y-2">
+                        {[["Tvůj nájem", smluvniNajem, "bg-accent"], ["Trh", trh, "bg-ink-muted/40"]].map(([n, h, barva]) => (
+                          <div key={n as string} className="flex items-center gap-2 text-xs">
+                            <span className="w-16 shrink-0 text-ink-secondary">{n}</span>
+                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-sunken">
+                              <div className={`h-full rounded-full ${barva}`} style={{ width: `${((h as number) / max) * 100}%` }} />
+                            </div>
+                            <span className="w-20 shrink-0 text-right tabular-nums">{czk(h as number)}</span>
+                          </div>
+                        ))}
+                        {spolehlivy && (
+                          <p className="pt-1 text-sm">
+                            {r < -8 ? <span className="font-medium text-warn">{pct(Math.abs(r), 0)} pod trhem · ročně přicházíš o {czk((trh - smluvniNajem) * 12)}</span>
+                              : r > 8 ? <span className="font-medium text-warn">{pct(r, 0)} nad trhem</span>
+                              : <span className="font-medium text-good">odpovídá trhu</span>}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  {smluvniNajem <= 0 && <p className="mt-2 text-sm text-ink-secondary">Zatím nepronajato</p>}
+                  <div className="mt-3 flex flex-wrap items-center gap-x-2 text-xs text-ink-muted">
+                    <span>{nejnovejsiNajem.sampleSize} nabídek · {dateCz(nejnovejsiNajem.date)}</span>
+                    {zmenaProcent(vyvojNajmu) != null && (
+                      <span className={zmenaProcent(vyvojNajmu)! >= 0 ? "text-good" : "text-bad"}>
+                        {zmenaProcent(vyvojNajmu)! >= 0 ? "▲" : "▼"} {pct(Math.abs(zmenaProcent(vyvojNajmu)!), 1)} od {vyvojNajmu[0].datum}
+                      </span>
+                    )}
+                  </div>
+                </>
               ) : (
                 <p className="mt-2 text-sm text-ink-secondary">
                   Odhad zatím nevznikl. Sken běží každou noc; ručně ho pustíš níž u tržního nájmu.
                 </p>
               )}
             </div>
+          </div>
+
+          {/* Vývoj trhu v čase */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card title="Vývoj tržního nájmu">
+              {vyvojNajmu.length > 1
+                ? <VyvojChart data={vyvojNajmu} nazev="Tržní nájem"
+                    reference={smluvniNajem > 0 ? { hodnota: smluvniNajem, popisek: "tvůj nájem" } : undefined} />
+                : <p className="py-6 text-center text-sm text-ink-muted">Graf vznikne, jakmile bude aspoň druhý odhad. Sken běží každou noc.</p>}
+            </Card>
+            <Card title="Vývoj odhadní hodnoty">
+              {vyvojHodnoty.length > 1
+                ? <VyvojChart data={vyvojHodnoty} nazev="Odhadní hodnota" kompaktni />
+                : <p className="py-6 text-center text-sm text-ink-muted">Graf vznikne, jakmile bude aspoň druhé ocenění.</p>}
+            </Card>
           </div>
 
           {/* Hlavní číslo pro pronajímanou nemovitost: kolik měsíčně skutečně zbývá a kolik to je z investice */}

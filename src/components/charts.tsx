@@ -161,3 +161,38 @@ export function AmortizationChart({ data }: { data: { rok: number; jistina: numb
     </ResponsiveContainer>
   );
 }
+
+/** Vyvoj jedne hodnoty v case (trzni najem, odhadni hodnota) s volitelnou vodorovnou referenci. */
+export function VyvojChart({ data, nazev, reference, kompaktni = false }: {
+  data: { datum: string; hodnota: number }[];
+  nazev: string;
+  /** Napr. smluvni najem: vodorovna carkovana cara s popiskem. */
+  reference?: { hodnota: number; popisek: string };
+  /** Osa v tisicich/milionech (u cen nemovitosti). */
+  kompaktni?: boolean;
+}) {
+  const f = kompaktni ? czkCompact : czk;
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id={`gVyvoj-${nazev}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={SERIES[0]} stopOpacity={0.22} />
+            <stop offset="100%" stopColor={SERIES[0]} stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid stroke={GRID} strokeDasharray="2 4" vertical={false} />
+        <XAxis dataKey="datum" tick={AXIS} tickLine={false} axisLine={{ stroke: GRID }} minTickGap={32} />
+        <YAxis tick={AXIS} tickLine={false} axisLine={false} width={64} tickFormatter={f}
+          domain={[(min: number) => Math.floor((reference ? Math.min(min, reference.hodnota) : min) * 0.95), (max: number) => Math.ceil((reference ? Math.max(max, reference.hodnota) : max) * 1.05)]} />
+        <Tooltip content={<ChartTooltip formatter={(v: number) => czk(v)} />} cursor={{ stroke: GRID }} />
+        {reference && (
+          <ReferenceLine y={reference.hodnota} stroke={SERIES[2]} strokeDasharray="5 4"
+            label={{ value: reference.popisek, position: "insideTopRight", fontSize: 11, fill: "rgb(var(--text-secondary))" }} />
+        )}
+        <Area type="monotone" dataKey="hodnota" name={nazev} stroke={SERIES[0]} strokeWidth={2} fill={`url(#gVyvoj-${nazev})`}
+          dot={data.length <= 24} activeDot={{ r: 4 }} />
+      </ComposedChart>
+    </ResponsiveContainer>
+  );
+}
