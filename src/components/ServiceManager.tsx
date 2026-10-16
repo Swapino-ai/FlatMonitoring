@@ -51,7 +51,12 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   const poplatkova = services.find((s) => s.id === poplatekId) ?? null;
 
   const upravovana = services.find((s) => s.id === upravaId) ?? null;
-  const skupiny = [...new Set(services.map((s) => s.groupName).filter((g): g is string => !!g))].sort();
+  const jeUkoncena = (x: Row) => x.activeTo != null && x.activeTo.getTime() < Date.now();
+  const aktivni = services.filter((x) => !jeUkoncena(x));
+  const ukoncene = services.filter(jeUkoncena);
+  // Nazvy skupin pro naseptavani ve formulari z vsech sluzeb, v seznamu jen z platnych
+  const skupiny = [...new Set(services.map((x) => x.groupName).filter((g): g is string => !!g))].sort();
+  const skupinyAktivni = [...new Set(aktivni.map((x) => x.groupName).filter((g): g is string => !!g))].sort();
   // Soucet z vyse, ktere jsou v radcich videt (posledni zapsana, i budouci)
   // Skupiny sluzeb: sbalene, v zahlavi pocet a soucet; sluzby bez skupiny jsou vzdy videt
   const [skupinyOtevrene, setSkupinyOtevrene] = useState<Set<string>>(new Set());
@@ -61,18 +66,28 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
     const a = zm[0];
     return a ? a.monthlyCost + (a.annualCost ?? 0) / 12 : sl.monthlyCost + (sl.annualCost ?? 0) / 12;
   };
-  type Polozka = { typ: "skupina"; nazev: string; sluzby: Row[]; otevrena: boolean } | { typ: "sluzba"; s: Row; vSkupine: boolean };
+  const [ukonceneOtevrene, setUkonceneOtevrene] = useState(false);
+  type Polozka = { typ: "skupina"; nazev: string; sluzby: Row[]; otevrena: boolean }
+    | { typ: "sluzba"; s: Row; vSkupine: boolean; ukoncena?: boolean }
+    | { typ: "ukoncene"; sluzby: Row[]; otevrena: boolean };
   const poradi: Polozka[] = [];
-  for (const sl of services.filter((x) => !x.groupName)) poradi.push({ typ: "sluzba", s: sl, vSkupine: false });
-  for (const g of skupiny) {
-    const clenove = services.filter((x) => x.groupName === g);
+  for (const sl of aktivni.filter((x) => !x.groupName)) poradi.push({ typ: "sluzba", s: sl, vSkupine: false });
+  for (const g of skupinyAktivni) {
+    const clenove = aktivni.filter((x) => x.groupName === g);
     // Rozeditovana sluzba nesmi zustat schovana ve sbalene skupine
     const otevrena = skupinyOtevrene.has(g) || clenove.some((x) => x.id === upravaId || x.id === poplatekId);
     poradi.push({ typ: "skupina", nazev: g, sluzby: clenove, otevrena });
     if (otevrena) for (const sl of clenove) poradi.push({ typ: "sluzba", s: sl, vSkupine: true });
   }
+  if (ukoncene.length > 0) {
+    // Rozeditovana ukoncena sluzba nesmi zustat schovana
+    const otevrena = ukonceneOtevrene || ukoncene.some((x) => x.id === upravaId || x.id === poplatekId);
+    poradi.push({ typ: "ukoncene", sluzby: ukoncene, otevrena });
+    if (otevrena) for (const sl of ukoncene) poradi.push({ typ: "sluzba", s: sl, vSkupine: false, ukoncena: true });
+  }
 
-  const celkem = services.reduce((a, s) => {
+  // Celkem jen za sluzby, ktere plati
+  const celkem = aktivni.reduce((a, s) => {
     const posledni = [...(historie[s.id] ?? [])]
       .sort((x, y) => new Date(y.validFrom).getTime() - new Date(x.validFrom).getTime())[0];
     return a + (posledni ? posledni.monthlyCost + (posledni.annualCost ?? 0) / 12 : s.monthlyCost + (s.annualCost ?? 0) / 12);
@@ -131,6 +146,25 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                     </tr>
                   );
                 }
+                if (pol.typ === "ukoncene") {
+                  return (
+                    <tr key="ukoncene" className="border-t-2 border-line bg-surface-sunken">
+                      <td colSpan={canEdit ? 5 : 4} className="!py-2">
+                        <button type="button" onClick={() => setUkonceneOtevrene((x) => !x)} aria-expanded={pol.otevrena}
+                          className="flex w-full items-center gap-3 text-left text-ink-secondary">
+                          <svg viewBox="0 0 20 20" className={`h-4 w-4 shrink-0 text-ink-muted transition-transform ${pol.otevrena ? "rotate-90" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M8 5l5 5-5 5" /></svg>
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-line/60 text-ink-muted">
+                            <Ikona nazev="historie" />
+                          </span>
+                          <span>
+                            <span className="block font-semibold leading-tight">Ukončené služby</span>
+                            <span className="block text-xs text-ink-muted">{pol.sluzby.length} {pol.sluzby.length === 1 ? "služba" : pol.sluzby.length < 5 ? "služby" : "služeb"} · už se nepočítají do nákladů</span>
+                          </span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
                 const s = pol.s;
                 const zmeny = [...(historie[s.id] ?? [])]
                   .sort((a, b) => new Date(b.validFrom).getTime() - new Date(a.validFrom).getTime());
@@ -143,7 +177,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                 const otevrena = rozbaleno.has(s.id);
                 return (
                 <Fragment key={s.id}>
-                <tr className={upravaId === s.id || poplatekId === s.id ? "!bg-accent-soft/60" : undefined}>
+                <tr className={`${upravaId === s.id || poplatekId === s.id ? "!bg-accent-soft/60" : ""} ${pol.ukoncena ? "bg-surface-sunken/60 opacity-70" : ""}`}>
                   <td>
                     <div className={`flex items-center gap-3 ${pol.vSkupine ? "pl-7" : ""}`}>
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
@@ -246,7 +280,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
             </tbody>
             <tfoot>
               <tr className="border-t-4 border-double border-line bg-surface-card">
-                <td className="px-3 py-4 font-semibold uppercase tracking-wide text-ink-secondary">Celkem měsíčně</td>
+                <td className="px-3 py-4 font-semibold uppercase tracking-wide text-ink-secondary">Celkem měsíčně (platné)</td>
                 <td className="hidden sm:table-cell" />
                 <td className="num px-3 py-4 text-lg font-bold">{czk(celkem)}</td>
                 <td className="hidden sm:table-cell" />
