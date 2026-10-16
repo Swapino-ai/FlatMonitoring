@@ -29,6 +29,7 @@ import { VyuctovaniNajemceKarta, type NajemceNajem, type VydanoRadek } from "@/c
 import { cisloNajemce } from "@/lib/najemci";
 import { PravidelnePlatby } from "@/components/PravidelnePlatby";
 import { nactiNavrhPlatby, nactiZauctovanePlatby } from "@/lib/pravidelnePlatbyData";
+import { prehledPlateb } from "@/lib/pravidelnePlatby";
 import { pronajimatelNemovitosti, pronajimatelZRef } from "@/lib/provozovatel";
 import { nactiStrany } from "@/lib/strany";
 import type { SnapshotVyuctovani } from "@/lib/vyuctovaniVydane";
@@ -260,6 +261,23 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
 
   // Proti trhu porovnavame cely najem, ne jen podil prihlaseneho vlastnika
   const smluvniNajem = property.leases.find((l) => l.isActive)?.rentMonthly ?? 0;
+
+  // Zakladni prehled pohybu. Platby zapsane jako zaplacene v Pravidelnych platbach
+  // (zdroj EVIDENCE) se pricitaji; ty zaucotovane jako pohyb uz v pohybech jsou.
+  const evidovane = navrhPlateb.filter((p) => p.zaplaceno?.zdroj === "EVIDENCE")
+    .map((p) => ({ datum: p.zaplaceno!.datum, castka: (p.castka >= 0 ? 1 : -1) * p.zaplaceno!.castka }));
+  const letos = String(new Date().getFullYear());
+  const vse = [
+    ...property.transactions.map((t) => ({ datum: denISO(t.date), castka: t.amount })),
+    ...evidovane,
+  ];
+  const souctyPohybu = {
+    prijmy: vse.filter((x) => x.castka > 0).reduce((a, x) => a + x.castka, 0),
+    vydaje: -vse.filter((x) => x.castka < 0).reduce((a, x) => a + x.castka, 0),
+    letos: vse.filter((x) => x.datum.startsWith(letos)).reduce((a, x) => a + x.castka, 0),
+  };
+  const naUctu = souctyPohybu.prijmy - souctyPohybu.vydaje;
+  const dluhyPlateb = prehledPlateb(navrhPlateb);
 
   const recentTx = [...property.transactions]
     .sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime());
@@ -585,6 +603,24 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             nazev: "Pohyby",
             pocet: property.transactions.length,
             obsah: (<>
+          <div className="mb-3 space-y-3">
+            <StatGrid>
+              <Stat label="Na účtu" value={czk(naUctu)} tone={naUctu >= 0 ? "good" : "bad"}
+                sub="součet všech pohybů a zaplacených pravidelných plateb" />
+              <Stat label="Příjmy celkem" value={czk(souctyPohybu.prijmy)} tone="good" />
+              <Stat label="Výdaje celkem" value={czk(souctyPohybu.vydaje)} />
+              <Stat label={`Výsledek ${letos}`} value={czk(souctyPohybu.letos)} tone={souctyPohybu.letos >= 0 ? "good" : "bad"}
+                sub="příjmy minus výdaje letos" />
+            </StatGrid>
+            {(dluhyPlateb.najemciDluzi > 0 || dluhyPlateb.dluzimDodavatelum > 0) && (
+              <StatGrid>
+                <Stat label="Nájemci dluží" value={czk(dluhyPlateb.najemciDluzi)} tone={dluhyPlateb.najemciDluzi > 0 ? "bad" : "good"} />
+                <Stat label="Dlužím dodavatelům" value={czk(dluhyPlateb.dluzimDodavatelum)} tone={dluhyPlateb.dluzimDodavatelum > 0 ? "bad" : "good"} />
+                <Stat label="Po vyrovnání dluhů" value={czk(naUctu + dluhyPlateb.najemciDluzi - dluhyPlateb.dluzimDodavatelum)}
+                  sub="kolik by bylo na účtu, kdyby se vše zaplatilo" />
+              </StatGrid>
+            )}
+          </div>
           <SbalitelnaKarta klic="pravidelne-platby" title="Pravidelné platby"
             shrnuti={navrhPlateb.filter((p) => p.stav === "nezaplaceno").length
               ? `${navrhPlateb.filter((p) => p.stav === "nezaplaceno").length} nezaplaceno`
