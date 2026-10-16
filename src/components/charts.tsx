@@ -172,25 +172,37 @@ export function VyvojChart({ data, nazev, reference, kompaktni = false }: {
   kompaktni?: boolean;
 }) {
   const f = kompaktni ? czkCompact : czk;
+  // Id gradientu bez diakritiky a mezer; jinak url(#...) neplati a vypln je cerna
+  const gid = `gVyvoj-${nazev.normalize("NFD").replace(/[^a-zA-Z0-9]/g, "")}`;
+  // "Hezke" osy: zaokrouhlene hranice a 4-5 rovnomernych popisku
+  const hodnoty = [...data.map((d) => d.hodnota), ...(reference ? [reference.hodnota] : [])];
+  const min = Math.min(...hodnoty), max = Math.max(...hodnoty);
+  const hruby = Math.max((max - min) * 1.2, max * 0.02, 1) / 4;
+  const mocnina = Math.pow(10, Math.floor(Math.log10(hruby)));
+  const krok = [1, 2, 5, 10].map((k) => k * mocnina).find((k) => k >= hruby) ?? 10 * mocnina;
+  const dolni = Math.floor((min - (max - min) * 0.1) / krok) * krok;
+  const horni = Math.ceil((max + (max - min) * 0.1) / krok) * krok;
+  const znacky: number[] = [];
+  for (let v = dolni; v <= horni + krok / 2; v += krok) znacky.push(Math.round(v * 100) / 100);
   return (
     <ResponsiveContainer width="100%" height={300}>
       <ComposedChart data={data} margin={{ top: 24, right: 24, left: 8, bottom: 12 }}>
         <defs>
-          <linearGradient id={`gVyvoj-${nazev}`} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={SERIES[0]} stopOpacity={0.12} />
             <stop offset="100%" stopColor={SERIES[0]} stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid stroke={GRID} strokeOpacity={0.5} strokeDasharray="1 6" vertical={false} />
         <XAxis dataKey="datum" tick={AXIS} tickLine={false} axisLine={false} minTickGap={56} tickMargin={12} />
-        <YAxis tick={AXIS} tickLine={false} axisLine={false} width={64} tickMargin={8} tickCount={4} tickFormatter={f}
-          domain={[(min: number) => Math.floor((reference ? Math.min(min, reference.hodnota) : min) * 0.95), (max: number) => Math.ceil((reference ? Math.max(max, reference.hodnota) : max) * 1.05)]} />
+        <YAxis tick={AXIS} tickLine={false} axisLine={false} width={kompaktni ? 84 : 76} tickMargin={8}
+          ticks={znacky} domain={[dolni, horni]} tickFormatter={(v: number) => f(v)} />
         <Tooltip content={<ChartTooltip formatter={(v: number) => czk(v)} />} cursor={{ stroke: GRID }} />
         {reference && (
           <ReferenceLine y={reference.hodnota} stroke={SERIES[2]} strokeDasharray="5 4"
             label={{ value: reference.popisek, position: "insideTopRight", fontSize: 11, fill: "rgb(var(--text-secondary))" }} />
         )}
-        <Area type="monotone" dataKey="hodnota" name={nazev} stroke={SERIES[0]} strokeWidth={1.75} fill={`url(#gVyvoj-${nazev})`}
+        <Area type="monotone" dataKey="hodnota" name={nazev} stroke={SERIES[0]} strokeWidth={1.75} fill={`url(#${gid})`}
           dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: "rgb(var(--surface-card))" }} />
       </ComposedChart>
     </ResponsiveContainer>
