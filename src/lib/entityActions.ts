@@ -288,7 +288,7 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
     const ser = (p: unknown) => JSON.stringify(
       ((p as { serviceId: string; amount: number }[] | null) ?? []).map((x) => [x.serviceId, x.amount]).sort(),
     );
-    // Oprava za celou dobu: zalohy se nastavi od zacatku smlouvy a drivejsi zmeny se zahodi
+    // Oprava od zacatku smlouvy: vyse plati od zacatku, pozdejsi zmeny zaloh se zachovaji
     const oprava = formData.get("opravaZaloh") === "on";
     const zmenaZaloh = oprava || stara.utilitiesMonthly !== d.utilitiesMonthly || ser(stara.advanceItems) !== ser(polozky);
     if (zmenaZaloh && !oprava) {
@@ -300,16 +300,8 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
       await tx.lease.update({ where: { id }, data: bezZaloh });
       if (!zmenaZaloh) return;
 
-      if (oprava) {
-        await tx.leaseAdvanceChange.deleteMany({ where: { leaseId: id } });
-        await tx.leaseAdvanceChange.create({
-          data: { leaseId: id, validFrom: data.startDate, amount: d.utilitiesMonthly, items: polozkyJson },
-        });
-        await prepocitejAktualniZalohy(tx, id);
-        return;
-      }
-
-      const platiOd = new Date(d.advanceValidFrom!);
+      // Oprava: nova vyse plati od zacatku smlouvy; pozdejsi zmeny v prubehu roku zustavaji
+      const platiOd = oprava ? data.startDate : new Date(d.advanceValidFrom!);
       // Puvodni hodnota je pocatecni zaznam: plati od zacatku smlouvy, nebo o den
       // pred zmenou, kdyz by zmena pripadla pred zacatek smlouvy
       if (stara.advanceChanges.length === 0) {

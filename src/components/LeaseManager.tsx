@@ -514,9 +514,9 @@ function Formular({ propertyId, r, services, action, pending, popisekTlacitka, k
         {/* Zmena zaloh se zapisuje s datem: jinak by se prepsala minulost */}
         {r != null && !kopie && (
           <div className="sm:col-span-2 space-y-2">
-            <Zaskrtavatko name="opravaZaloh" label="Použít tyto zálohy za celou dobu smlouvy"
+            <Zaskrtavatko name="opravaZaloh" label="Opravit zálohy od začátku smlouvy"
               checked={opravaZaloh} onChange={setOpravaZaloh}
-              hint="Přepíše zálohy od začátku smlouvy a zahodí dřívější změny záloh. Hodí se při chybně zadaných zálohách, nebo když se zálohy po smlouvě nepřepočítaly." />
+              hint="Nová výše záloh bude platit od začátku smlouvy až do první pozdější změny. Změny záloh v průběhu roku zůstanou zachované." />
             {!opravaZaloh && zmenaZaloh && (
               <Pole label="Nové zálohy platí od" name="advanceValidFrom" type="date" required
                 defaultValue={dnesISO()}
