@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { DivIcon, Map as LeafletMap, Marker } from "leaflet";
+import type { DivIcon, LayerGroup, Map as LeafletMap, Marker } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { ikonaDomecek } from "@/lib/mapaIkona";
 
@@ -11,7 +11,18 @@ import { ikonaDomecek } from "@/lib/mapaIkona";
  *
  * Leaflet sahá na window, takze se nacita az v prohlizeci.
  */
-export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72", zoom = 17 }: {
+export interface BodOkoli {
+  lat: number; lon: number;
+  druh: "PRODEJ" | "NAJEM";
+  /** Radky popisu v okne po klepnuti. */
+  popis: string[];
+  url?: string | null;
+}
+
+const ZADNE_OKOLI: BodOkoli[] = [];
+const BARVY_OKOLI = { PRODEJ: "#7c3aed", NAJEM: "#0d9488" } as const;
+
+export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72", zoom = 17, okoli = ZADNE_OKOLI }: {
   latitude: number | null;
   longitude: number | null;
   /** Kdyz je zadana, jde do mapy klepnout a posunout znacku. */
@@ -19,6 +30,8 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
   /** Vyska jako trida, at je na telefonu nizsi nez na monitoru. */
   vyskaTrida?: string;
   zoom?: number;
+  /** Srovnatelne nabidky, ze kterych vznikl odhad; jdou zapnout a vypnout po druzich. */
+  okoli?: BodOkoli[];
 }) {
   const uzel = useRef<HTMLDivElement>(null);
   const mapa = useRef<LeafletMap | null>(null);
@@ -34,6 +47,14 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
   useEffect(() => { zmenaRef.current = onZmena; }, [onZmena]);
 
   const ikona = useRef<DivIcon | null>(null);
+  const vrstvaOkoli = useRef<LayerGroup | null>(null);
+  const [pripravena, setPripravena] = useState(false);
+  const [druhy, setDruhy] = useState({ PRODEJ: true, NAJEM: true });
+  const pocty = {
+    PRODEJ: okoli.filter((b) => b.druh === "PRODEJ").length,
+    NAJEM: okoli.filter((b) => b.druh === "NAJEM").length,
+  };
+  const oknaVychozi = useRef(true);
 
   useEffect(() => {
     if (!uzel.current || mapa.current) return;
@@ -97,6 +118,7 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
       if (zruseno) { m.remove(); return; }
 
       mapa.current = m;
+      setPripravena(true);
 
       // Leaflet si pamatuje velikost z okamziku vzniku. Kdyz kontejner mezitim
       // dostane jine rozmery (rozbaleni karty, nacteni pisma), zustane mapa
@@ -120,6 +142,49 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
     // Mapa se staví jednou; na změnu souřadnic reaguje efekt níž
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Srovnatelne nabidky: kolecka podle druhu, v okne po klepnuti popis a odkaz
+  useEffect(() => {
+    const m = mapa.current;
+    if (!m || !pripravena) return;
+    let zruseno = false;
+    import("leaflet").then(({ default: L }) => {
+      if (zruseno || !mapa.current) return;
+      vrstvaOkoli.current?.remove();
+      const skupina = L.layerGroup();
+      for (const b of okoli) {
+        if (!druhy[b.druh]) continue;
+        const kolo = L.circleMarker([b.lat, b.lon], {
+          radius: 7, color: "#ffffff", weight: 2, fillColor: BARVY_OKOLI[b.druh], fillOpacity: 0.9,
+        });
+        const uzel = document.createElement("div");
+        uzel.style.fontSize = "12px";
+        for (const [i, r] of b.popis.entries()) {
+          const radek = document.createElement(i === 0 ? "strong" : "div");
+          radek.textContent = r;
+          uzel.appendChild(radek);
+        }
+        if (b.url && !b.url.includes("/x/x/")) {
+          const a = document.createElement("a");
+          a.href = b.url; a.target = "_blank"; a.rel = "noreferrer noopener"; a.textContent = "Otevřít inzerát →";
+          a.style.display = "block"; a.style.marginTop = "4px";
+          uzel.appendChild(a);
+        }
+        kolo.bindPopup(uzel).addTo(skupina);
+      }
+      skupina.addTo(mapa.current);
+      vrstvaOkoli.current = skupina;
+      // Poprve zaberou mapou vsechny nabidky i nemovitost
+      if (oknaVychozi.current && okoli.length > 0) {
+        oknaVychozi.current = false;
+        const body: [number, number][] = okoli.map((b) => [b.lat, b.lon]);
+        if (latitude != null && longitude != null) body.push([latitude, longitude]);
+        mapa.current.fitBounds(L.latLngBounds(body), { padding: [32, 32], maxZoom: 16 });
+      }
+    });
+    return () => { zruseno = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [okoli, druhy, pripravena]);
 
   // Vyber z naseptavace posune znacku i vyrez
   useEffect(() => {
@@ -159,6 +224,19 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
           </button>
         )}
       </div>
+      {okoli.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <span className="text-ink-muted">Srovnatelné nabídky, ze kterých vznikl odhad:</span>
+          {(["PRODEJ", "NAJEM"] as const).map((d) => pocty[d] > 0 && (
+            <label key={d} className="flex cursor-pointer items-center gap-1.5">
+              <input type="checkbox" checked={druhy[d]} onChange={(e) => setDruhy((x) => ({ ...x, [d]: e.target.checked }))}
+                className="h-3.5 w-3.5 rounded border-line accent-accent" />
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: BARVY_OKOLI[d] }} aria-hidden />
+              {d === "PRODEJ" ? "Prodej" : "Nájem"} ({pocty[d]})
+            </label>
+          ))}
+        </div>
+      )}
       {chyba
         ? <p className="mt-1 text-xs text-warn">{chyba}</p>
         : onZmena && (

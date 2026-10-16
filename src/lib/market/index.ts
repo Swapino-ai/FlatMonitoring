@@ -287,6 +287,8 @@ export async function nabidkyVOkoli(
         scrapedAt: r.scrapedAt.toISOString(),
         klic: r.externalId ? `${r.source}|${r.externalId}` : null,
         vzdalenostKm: km == null ? null : Math.round(km * 10) / 10,
+        latitude: r.latitude ?? null,
+        longitude: r.longitude ?? null,
         zLokality: km != null && km <= vychozi,
       };
     })
@@ -601,6 +603,8 @@ export async function comparableStats(opts: {
       scrapedAt: r.scrapedAt.toISOString(),
       klic: r.externalId ? `${r.source}|${r.externalId}` : null,
       vzdalenostKm: km == null ? null : Math.round(km * 10) / 10,
+      latitude: r.latitude ?? null,
+      longitude: r.longitude ?? null,
       // Bez souradnic nevime, kde nabidka je — radsi ji za "z lokality"
       // nevydavame, nez bychom tvrdili neco, co nemuzeme doložit
       zLokality: km != null && kroky[0] != null && km <= kroky[0],

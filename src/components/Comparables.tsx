@@ -19,6 +19,9 @@ export interface Nabidka {
   vzdalenostKm?: number | null;
   /** Je nabídka přímo z lokality, nebo až z rozšířeného okruhu? */
   zLokality?: boolean;
+  /** Souřadnice nabídky (pro mapu); null u starších snímků. */
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 /**

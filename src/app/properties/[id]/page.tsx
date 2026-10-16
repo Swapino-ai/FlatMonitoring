@@ -10,7 +10,8 @@ import { AmortizationChart } from "@/components/charts";
 import { Napoveda } from "@/components/Napoveda";
 import { LoanManager } from "@/components/LoanManager";
 import { LeaseManager } from "@/components/LeaseManager";
-import { Mapa } from "@/components/Mapa";
+import type { Nabidka } from "@/components/Comparables";
+import { Mapa, type BodOkoli } from "@/components/Mapa";
 import { Hero, Kondice, type Kontrola } from "@/components/Kondice";
 import { ServiceManager } from "@/components/ServiceManager";
 import { TransactionManager } from "@/components/TransactionManager";
@@ -321,6 +322,29 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const zmenaProcent = (r: { hodnota: number }[]) =>
     r.length > 1 && r[0].hodnota ? ((r[r.length - 1].hodnota - r[0].hodnota) / r[0].hodnota) * 100 : null;
 
+  // Srovnatelne nabidky z posledniho oceneni (prodej) a odhadu najmu pro mapu
+  const okoliNabidek = (() => {
+    const body: BodOkoli[] = [];
+    let bezSouradnic = 0;
+    const pridej = (druh: BodOkoli["druh"], zdroj: unknown) => {
+      if (!Array.isArray(zdroj)) return;
+      for (const n of zdroj as Nabidka[]) {
+        if (n.latitude == null || n.longitude == null) { bezSouradnic++; continue; }
+        body.push({
+          lat: n.latitude, lon: n.longitude, druh, url: n.url,
+          popis: [
+            `${druh === "PRODEJ" ? "Prodej" : "Nájem"}${n.disposition ? ` ${n.disposition}` : ""}${n.areaM2 ? ` · ${n.areaM2} m²` : ""}`,
+            druh === "PRODEJ" ? `${czk(n.price)} · ${czk(n.pricePerM2)}/m²` : `${czk(n.price)}/měs. · ${czk(n.pricePerM2)}/m²`,
+            ...(n.vzdalenostKm != null ? [`${String(n.vzdalenostKm).replace(".", ",")} km od nemovitosti`] : []),
+          ],
+        });
+      }
+    };
+    pridej("PRODEJ", property.valuations.find((v) => v.comparables != null)?.comparables);
+    pridej("NAJEM", nejnovejsiNajem?.comparables);
+    return { body, bezSouradnic };
+  })();
+
   const recentTx = [...property.transactions]
     .sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime());
 
@@ -369,12 +393,13 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           }>
             {property.latitude != null && property.longitude != null ? (
               <>
-                <Mapa latitude={property.latitude} longitude={property.longitude} vyskaTrida="h-64 lg:h-80" />
+                <Mapa latitude={property.latitude} longitude={property.longitude} vyskaTrida="h-64 lg:h-80" okoli={okoliNabidek.body} />
                 <p className="mt-2 text-xs text-ink-muted">
                   {property.scanRadiusKm
                     ? `Srovnání se hledá v pevném okruhu ${property.scanRadiusKm} km.`
                     : `Podle téhle polohy se hledá srovnání — od ${okruhProTyp(property.type)} km dál, dokud není dost nabídek.`}
                   {property.excludedCities && ` Nezapočítává se: ${property.excludedCities}.`}
+                  {okoliNabidek.bezSouradnic > 0 && ` ${okoliNabidek.bezSouradnic} srovnatelných nabídek nemá uloženou polohu (starší sken), objeví se po dalším skenu.`}
                 </p>
               </>
             ) : (
