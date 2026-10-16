@@ -79,5 +79,22 @@ over("bez dat nic", navrhniPlatby({ najmy: [], sluzby: [], pohyby: [], dnes: "20
   over("prazdny", prehledPlateb([]).najemciDluzi === 0);
 }
 
+// Uver a vyuctovani sluzeb
+{
+  const u = { id: "u1", veritel: "Banka", od: "2026-01-10", pocetSplatek: 240, splatka: 12000 };
+  const g = navrhniPlatby({ najmy: [A], sluzby: [], pohyby: [], uvery: [u], dnes: "2026-03-20" });
+  const spl = g.filter((x) => x.druh === "UVER");
+  // prvni splatka o mesic po cerpani: unor a brezen, ne leden
+  over("splatky uveru", spl.length === 2 && spl[0].castka === -12000 && spl.every((x) => x.datum.endsWith("-10")) && spl[0].skupina.nazev === "Banka", JSON.stringify(spl.map((x) => x.klic)));
+  const v = { id: "v1", datum: "2026-03-05", obdobiOd: "2025-01-01", obdobiDo: "2025-12-31", rozdil: 1500, dodavator: "x", dodavatel: "ČEZ", nazevDruhu: "Elektřina" };
+  const g2 = navrhniPlatby({ najmy: [A], sluzby: [], pohyby: [], vyuctovani: [v, { ...v, id: "v2", rozdil: -400, dodavatel: "Vodárna" }], dnes: "2026-03-20" });
+  const nedo = g2.find((x) => x.klic === "vyuctovani:v1")!;
+  over("nedoplatek", nedo.castka === -1500 && nedo.popis.startsWith("Nedoplatek"), JSON.stringify(nedo));
+  const pr = prehledPlateb(g2);
+  over("dluh i pohledavka", pr.dluzimDodavatelum === 1500 && pr.dodavateleDluzi === 400, JSON.stringify([pr.dluzimDodavatelum, pr.dodavateleDluzi]));
+  const vyrovnano = prehledPlateb(navrhniPlatby({ najmy: [], sluzby: [], pohyby: [], vyuctovani: [v], zaplaceno: [{ klic: "vyuctovani:v1", datum: "2026-03-10", castka: 1500 }], dnes: "2026-03-20" }));
+  over("vyrovnano", vyrovnano.dluzimDodavatelum === 0);
+}
+
 console.log(chyb ? `${chyb} chyb` : "vše v pořádku");
 process.exit(chyb ? 1 : 0);

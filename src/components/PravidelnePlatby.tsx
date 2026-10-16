@@ -202,9 +202,10 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
       <Hlaska state={stav} />
 
       {/* Prehled: kolik kde chybi */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={`grid gap-3 ${prehled.dodavateleDluzi > 0 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
         {tile("Nájemci dluží", prehled.najemciDluzi, `nájemné a zálohy, které nejsou zaplacené (zaplaceno ${czk(prehled.zaplacenoCelkem.prijmy)})`, true)}
         {tile("Dlužím dodavatelům", prehled.dluzimDodavatelum, `platby za služby, které jsem nezaplatil (zaplaceno ${czk(prehled.zaplacenoCelkem.vydaje)})`, true)}
+        {prehled.dodavateleDluzi > 0 && tile("Dodavatelé mi dluží", prehled.dodavateleDluzi, "přeplatky z vyúčtování, které mi ještě nevrátili", false)}
       </div>
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         {rozpis("najemci", "Po nájemcích", prehled.najemci, "Žádný nájemce.")}

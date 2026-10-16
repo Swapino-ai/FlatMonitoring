@@ -7,12 +7,14 @@ import type { PolozkaZalohy } from "./zalohy";
 
 /** Navrh pravidelnych plateb nemovitosti z dat v databazi (pocita server, klient jen zobrazuje). */
 export async function nactiNavrhPlatby(propertyId: string): Promise<NavrzenaPlatba[]> {
-  const [smlouvy, sluzby, pohyby, zaplaceno, typy] = await Promise.all([
+  const [smlouvy, sluzby, pohyby, zaplaceno, typy, uvery, vyuctovani] = await Promise.all([
     prisma.lease.findMany({ where: { propertyId }, include: { tenant: true, advanceChanges: { orderBy: { validFrom: "asc" } } } }),
     prisma.service.findMany({ where: { propertyId }, include: { costChanges: { orderBy: { validFrom: "asc" } } } }),
     prisma.transaction.findMany({ where: { propertyId, sourceKey: { not: null } }, select: { date: true, category: true, sourceKey: true, amount: true } }),
     prisma.pravidelnaPlatba.findMany({ where: { propertyId } }),
     nactiTypySluzeb(),
+    prisma.loan.findMany({ where: { propertyId, isActive: true } }),
+    prisma.serviceSettlement.findMany({ where: { service: { propertyId } }, include: { service: true } }),
   ]);
 
   return navrhniPlatby({
@@ -26,6 +28,11 @@ export async function nactiNavrhPlatby(propertyId: string): Promise<NavrzenaPlat
       monthlyCost: s.monthlyCost, annualCost: s.annualCost, chargedToTenant: s.chargedToTenant,
       contractStart: s.contractStart ? denISO(s.contractStart) : null,
       historie: s.costChanges.map((z) => ({ validFrom: z.validFrom, monthlyCost: z.monthlyCost, annualCost: z.annualCost })),
+    })),
+    uvery: uvery.map((u) => ({ id: u.id, veritel: u.lender, od: denISO(u.startDate), pocetSplatek: u.termMonths, splatka: u.monthlyPayment })),
+    vyuctovani: vyuctovani.map((v) => ({
+      id: v.id, datum: denISO(v.createdAt), obdobiOd: denISO(v.periodFrom), obdobiDo: denISO(v.periodTo),
+      rozdil: v.totalCost - v.supplierAdvances, dodavatel: v.service.provider, nazevDruhu: nazevDruhu(typy, v.service.type),
     })),
     pohyby: pohyby.map((p) => ({ date: denISO(p.date), category: p.category, sourceKey: p.sourceKey, amount: p.amount })),
     zaplaceno: zaplaceno.map((z) => ({ klic: z.klic, datum: denISO(z.paidAt), castka: z.amount })),

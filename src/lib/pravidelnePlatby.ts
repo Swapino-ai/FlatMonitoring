@@ -6,7 +6,7 @@ import { mesicniNaklad, sluzbaKDatu, type SluzbaVstup } from "./zalohy";
  * Cisty vypocet bez databaze. Nic se nezauctuje samo: navrh se ukaze a clovek ho potvrdi.
  */
 
-export type DruhPlatby = "NAJEM" | "ZALOHA" | "SLUZBA";
+export type DruhPlatby = "NAJEM" | "ZALOHA" | "SLUZBA" | "UVER" | "VYUCTOVANI";
 
 export interface NavrzenaPlatba {
   /** Stabilni klic, podle ktereho se pozna, ze uz je zauctovano. */
@@ -48,6 +48,28 @@ export interface SluzbaPlatba extends SluzbaVstup {
   nazevDruhu: string;
 }
 
+/** Uver se mesicni splatkou (aktivni). Splatka pada na stejny den v mesici jako zacatek uveru. */
+export interface UverPlatba {
+  id: string;
+  veritel: string;
+  /** rrrr-mm-dd */
+  od: string;
+  pocetSplatek: number;
+  splatka: number;
+}
+
+/** Vysledek vyuctovani sluzby od dodavatele: rozdil > 0 = nedoplatek (dluzim), < 0 = preplatek (dodavatel vraci). */
+export interface VyuctovaniPlatba {
+  id: string;
+  /** Kdy vyuctovani prislo (rrrr-mm-dd). */
+  datum: string;
+  obdobiOd: string;
+  obdobiDo: string;
+  rozdil: number;
+  dodavatel: string;
+  nazevDruhu: string;
+}
+
 /** Starsi platba zauctovana jako pohyb (se klicem): povazuje se za zaplacenou k datu pohybu. */
 export interface ExistujiciPohyb {
   date: string;
@@ -84,6 +106,8 @@ export function mesiceMezi(od: string, doDne: string): string[] {
 export function navrhniPlatby(a: {
   najmy: NajemPlatba[];
   sluzby: SluzbaPlatba[];
+  uvery?: UverPlatba[];
+  vyuctovani?: VyuctovaniPlatba[];
   pohyby: ExistujiciPohyb[];
   /** Zaplacene platby z prehledu (klic -> datum a castka). */
   zaplaceno?: { klic: string; datum: string; castka: number }[];
@@ -94,8 +118,13 @@ export function navrhniPlatby(a: {
   for (const p of pohyby) if (p.sourceKey) zaplacenoMapa.set(p.sourceKey, { datum: p.date, castka: Math.abs(p.amount ?? 0), zdroj: "POHYB" });
   for (const z of a.zaplaceno ?? []) zaplacenoMapa.set(z.klic, { datum: z.datum, castka: z.castka, zdroj: "EVIDENCE" });
   const zacatky = [...najmy.map((n) => n.od), ...sluzby.map((s) => (s.contractStart ? String(s.contractStart).slice(0, 10) : null)).filter((x): x is string => !!x)];
-  if (zacatky.length === 0) return [];
-  const od = zacatky.reduce((x, y) => (x < y ? x : y));
+  const uvery = a.uvery ?? [];
+  const vyuctovani = a.vyuctovani ?? [];
+  // Okno sledovani zacina nejstarsi smlouvou ci sluzbou; splatky uveru pred nim uz nikoho nezajimaji
+  const zacatekSledovani = zacatky.length ? zacatky.reduce((x, y) => (x < y ? x : y)) : null;
+  const zacatkyVse = [...zacatky, ...uvery.map((u) => u.od), ...vyuctovani.map((v) => v.datum)];
+  if (zacatkyVse.length === 0) return [];
+  const od = zacatkyVse.reduce((x, y) => (x < y ? x : y));
 
   const out: NavrzenaPlatba[] = [];
   const pridej = (p: Omit<NavrzenaPlatba, "stav" | "zaplaceno">) => {
@@ -154,6 +183,40 @@ export function navrhniPlatby(a: {
       });
     }
   }
+
+  // Splatky uveru: kazdy mesic trvani uveru, den dle zacatku uveru
+  for (const u of uvery) {
+    if (u.splatka <= 0) continue;
+    const prvniMesic = zacatekSledovani && zacatekSledovani > u.od ? zacatekSledovani.slice(0, 7) : u.od.slice(0, 7);
+    // Prvni splatka je o mesic po cerpani; posledni po poctu splatek
+    let r = Number(u.od.slice(0, 4)), m = Number(u.od.slice(5, 7)) - 1;
+    const den = Math.min(Number(u.od.slice(8, 10)), 28);
+    for (let i = 1; i <= u.pocetSplatek; i++) {
+      m += 1;
+      if (m > 11) { m = 0; r += 1; }
+      const mesic = `${r}-${dvou(m + 1)}`;
+      if (mesic < prvniMesic) continue;
+      pridej({
+        klic: `uver:${u.id}:${mesic}`, druh: "UVER", mesic, datum: `${mesic}-${dvou(den)}`, kategorie: "LOAN_PRINCIPAL",
+        skupina: { typ: "DODAVATEL", nazev: u.veritel.trim() || "Úvěr" },
+        popis: `Splátka úvěru ${mesic.slice(5)}/${r} · ${u.veritel}`,
+        castka: -u.splatka,
+      });
+    }
+  }
+
+  // Nedoplatky a preplatky z vyuctovani sluzeb od dodavatelu
+  const dateCz = (iso: string) => `${Number(iso.slice(8, 10))}. ${Number(iso.slice(5, 7))}. ${iso.slice(0, 4)}`;
+  for (const v of vyuctovani) {
+    if (Math.abs(v.rozdil) < 0.5) continue;
+    pridej({
+      klic: `vyuctovani:${v.id}`, druh: "VYUCTOVANI", mesic: v.datum.slice(0, 7), datum: v.datum,
+      kategorie: v.rozdil > 0 ? "UTILITIES" : "OTHER_INCOME",
+      skupina: { typ: "DODAVATEL", nazev: v.dodavatel.trim() || "Bez dodavatele" },
+      popis: `${v.rozdil > 0 ? "Nedoplatek" : "Přeplatek"} z vyúčtování · ${v.nazevDruhu} ${dateCz(v.obdobiOd)} – ${dateCz(v.obdobiDo)}`,
+      castka: -Math.round(v.rozdil * 100) / 100,
+    });
+  }
   return out;
 }
 
@@ -181,6 +244,8 @@ export interface PrehledPlateb {
   najemciDluzi: number;
   /** Kolik celkem dluzim dodavatelum ja. */
   dluzimDodavatelum: number;
+  /** Preplatky z vyuctovani, ktere mi dodavatele jeste nevratili. */
+  dodavateleDluzi: number;
   zaplacenoCelkem: { prijmy: number; vydaje: number };
 }
 
@@ -192,10 +257,21 @@ export function prehledPlateb(navrh: NavrzenaPlatba[]): PrehledPlateb {
   const m = new Map<string, DluhSkupiny>();
   let prijmy = 0;
   let vydaje = 0;
+  let pohledavky = 0;
   for (const p of navrh) {
     const k = `${p.skupina.typ}:${p.skupina.nazev}`;
     const g = m.get(k) ?? { typ: p.skupina.typ, nazev: p.skupina.nazev, dluh: 0, nezaplacenych: 0, nedoplaceno: 0, nejstarsi: null, preplaceno: 0 };
     const predpis = Math.abs(p.castka);
+    // Preplatek od dodavatele: dodavatel dluzi mne, nezapocitava se do toho, co dluzim ja
+    if (p.skupina.typ === "DODAVATEL" && p.castka > 0) {
+      if (!p.zaplaceno) pohledavky += predpis;
+      else {
+        const chybi = predpis - p.zaplaceno.castka;
+        if (chybi > 0.005) pohledavky += chybi;
+        prijmy += p.zaplaceno.castka;
+      }
+      continue;
+    }
     if (!p.zaplaceno) {
       g.dluh += predpis;
       g.nezaplacenych += 1;
@@ -216,6 +292,7 @@ export function prehledPlateb(navrh: NavrzenaPlatba[]): PrehledPlateb {
     najemci, dodavatele,
     najemciDluzi: zaokr(najemci.reduce((a, g) => a + g.dluh, 0)),
     dluzimDodavatelum: zaokr(dodavatele.reduce((a, g) => a + g.dluh, 0)),
+    dodavateleDluzi: zaokr(pohledavky),
     zaplacenoCelkem: { prijmy: zaokr(prijmy), vydaje: zaokr(vydaje) },
   };
 }
