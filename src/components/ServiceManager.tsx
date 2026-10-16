@@ -5,7 +5,7 @@ import { deleteService, novyPoplatek, saveService, smazZmenuNakladu, type Entity
 import {
   Hlaska, Pole, Rozbalovaci, SmazatTlacitko, TextPole, UpravaPanel, UpravitTlacitko, Vyber, Zaskrtavatko, isoDatum,
 } from "./form";
-import { nazevDruhu, type TypySluzeb } from "@/lib/categories";
+import { navrhniIkonu, nazevDruhu, type TypySluzeb } from "@/lib/categories";
 import { czk, dateCz } from "@/lib/format";
 import { Ikona, type NazevIkony } from "./Ikony";
 import { DatumPole } from "./DatumPole";
@@ -53,6 +53,25 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   const upravovana = services.find((s) => s.id === upravaId) ?? null;
   const skupiny = [...new Set(services.map((s) => s.groupName).filter((g): g is string => !!g))].sort();
   // Soucet z vyse, ktere jsou v radcich videt (posledni zapsana, i budouci)
+  // Skupiny sluzeb: sbalene, v zahlavi pocet a soucet; sluzby bez skupiny jsou vzdy videt
+  const [skupinyOtevrene, setSkupinyOtevrene] = useState<Set<string>>(new Set());
+  const prepniSkupinu = (g: string) => setSkupinyOtevrene((x) => { const n = new Set(x); if (n.has(g)) n.delete(g); else n.add(g); return n; });
+  const vyseSluzby = (sl: Row) => {
+    const zm = [...(historie[sl.id] ?? [])].sort((a, b) => new Date(b.validFrom).getTime() - new Date(a.validFrom).getTime());
+    const a = zm[0];
+    return a ? a.monthlyCost + (a.annualCost ?? 0) / 12 : sl.monthlyCost + (sl.annualCost ?? 0) / 12;
+  };
+  type Polozka = { typ: "skupina"; nazev: string; sluzby: Row[]; otevrena: boolean } | { typ: "sluzba"; s: Row; vSkupine: boolean };
+  const poradi: Polozka[] = [];
+  for (const sl of services.filter((x) => !x.groupName)) poradi.push({ typ: "sluzba", s: sl, vSkupine: false });
+  for (const g of skupiny) {
+    const clenove = services.filter((x) => x.groupName === g);
+    // Rozeditovana sluzba nesmi zustat schovana ve sbalene skupine
+    const otevrena = skupinyOtevrene.has(g) || clenove.some((x) => x.id === upravaId || x.id === poplatekId);
+    poradi.push({ typ: "skupina", nazev: g, sluzby: clenove, otevrena });
+    if (otevrena) for (const sl of clenove) poradi.push({ typ: "sluzba", s: sl, vSkupine: true });
+  }
+
   const celkem = services.reduce((a, s) => {
     const posledni = [...(historie[s.id] ?? [])]
       .sort((x, y) => new Date(y.validFrom).getTime() - new Date(x.validFrom).getTime())[0];
@@ -87,7 +106,32 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
               </tr>
             </thead>
             <tbody>
-              {services.map((s) => {
+              {poradi.map((pol) => {
+                if (pol.typ === "skupina") {
+                  const soucet = pol.sluzby.reduce((a, x) => a + vyseSluzby(x), 0);
+                  const ikona = navrhniIkonu(pol.nazev) ?? typy[pol.sluzby[0].type]?.icon ?? "tri";
+                  return (
+                    <tr key={`g:${pol.nazev}`} className="bg-surface-sunken/60">
+                      <td colSpan={2} className="!py-2">
+                        <button type="button" onClick={() => prepniSkupinu(pol.nazev)} aria-expanded={pol.otevrena}
+                          className="flex w-full items-center gap-3 text-left">
+                          <svg viewBox="0 0 20 20" className={`h-4 w-4 shrink-0 text-ink-muted transition-transform ${pol.otevrena ? "rotate-90" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M8 5l5 5-5 5" /></svg>
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent text-white">
+                            <Ikona nazev={ikona as NazevIkony} />
+                          </span>
+                          <span>
+                            <span className="block font-semibold leading-tight">{pol.nazev}</span>
+                            <span className="block text-xs text-ink-muted">{pol.sluzby.length} {pol.sluzby.length === 1 ? "služba" : pol.sluzby.length < 5 ? "služby" : "služeb"}</span>
+                          </span>
+                        </button>
+                      </td>
+                      <td className="num font-semibold">{czk(soucet)}</td>
+                      <td className="hidden sm:table-cell" />
+                      {canEdit && <td />}
+                    </tr>
+                  );
+                }
+                const s = pol.s;
                 const zmeny = [...(historie[s.id] ?? [])]
                   .sort((a, b) => new Date(b.validFrom).getTime() - new Date(a.validFrom).getTime());
                 // Hlavni je posledni zapsana vyse, i kdyz zacne platit az v budoucnu
@@ -101,7 +145,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                 <Fragment key={s.id}>
                 <tr className={upravaId === s.id || poplatekId === s.id ? "!bg-accent-soft/60" : undefined}>
                   <td>
-                    <div className="flex items-center gap-3">
+                    <div className={`flex items-center gap-3 ${pol.vSkupine ? "pl-7" : ""}`}>
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
                         <Ikona nazev={(typy[s.type]?.icon ?? "tri") as NazevIkony} />
                       </span>
@@ -116,7 +160,6 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                         {s.activeTo && s.activeTo.getTime() < Date.now() && (
                           <div className="mt-0.5"><Badge tone="neutral">ukončená</Badge></div>
                         )}
-                        {s.groupName && <div className="mt-0.5 text-xs text-ink-muted">skupina: {s.groupName}</div>}
                         {s.chargedToTenant && (
                           <div className="mt-0.5 flex items-center gap-1 text-xs font-medium text-accent">
                             <Ikona nazev="najemce" trida="h-3.5 w-3.5" />hradí nájemce zálohou

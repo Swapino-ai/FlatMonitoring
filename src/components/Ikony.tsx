@@ -36,6 +36,9 @@ const CESTY: Record<string, string> = {
   televize: "M3 6h18v12H3zM8 21h8M12 18v3",
   kamera: "M3 8h13v9H3zM16 11l5-3v9l-5-3",
   parkovani: "M5 3h14v18H5zM10 17V8h3a2.5 2.5 0 0 1 0 5h-3",
+  radiator: "M4 6h16v11H4zM8.5 6v11M12 6v11M15.5 6v11M6.5 17v3M17.5 17v3",
+  teplaVoda: "M12 3s5 5.5 5 9.5a5 5 0 0 1-10 0C7 8.5 12 3 12 3zM9.5 13.5c.8.8 1.7.8 2.5 0s1.7-.8 2.5 0",
+  kohoutek: "M3 10h10a3 3 0 0 1 3 3v1M3 10V7M8 10V7M5.5 7h5M16 18s2.5 2.3 2.5 3.8a2.5 2.5 0 0 1-5 0C13.5 20.3 16 18 16 18z",
   najemce: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8",
 };
 
@@ -55,7 +58,7 @@ export const IKONA_SLUZBY: Record<string, NazevIkony> = {
   ELECTRICITY: "blesk",
   GAS: "plamen",
   WATER: "kapka",
-  HEATING: "teplomer",
+  HEATING: "radiator",
   INTERNET: "wifi",
   INSURANCE: "stit",
   SVJ_FEE: "budova",

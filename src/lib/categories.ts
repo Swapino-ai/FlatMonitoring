@@ -77,7 +77,7 @@ export type TypySluzeb = Record<string, DruhSluzby>;
 
 const VYCHOZI_PRECTENE_KLICE = new Set(["WATER", "HEATING", "GAS", "WASTE"]);
 const VYCHOZI_IKONY: Record<string, string> = {
-  ELECTRICITY: "blesk", GAS: "plamen", WATER: "kapka", HEATING: "teplomer", INTERNET: "wifi",
+  ELECTRICITY: "blesk", GAS: "plamen", WATER: "kapka", HEATING: "radiator", INTERNET: "wifi",
   INSURANCE: "stit", SVJ_FEE: "budova", MANAGEMENT: "kufr", WASTE: "odpad", OTHER: "tri",
 };
 
@@ -110,8 +110,10 @@ const PRAVIDLA_IKON: [RegExp, string][] = [
   [/odpad|smetn|popelnic/, "odpad"],
   [/elektr|proud/, "blesk"],
   [/plyn/, "plamen"],
+  [/tepl\w* vod|ohrev vod|\btuv\b/, "teplaVoda"],
+  [/studen\w* vod/, "kohoutek"],
   [/vod[ay]|vodne|stocn/, "kapka"],
-  [/teplo|topen|vytap|ohrev/, "teplomer"],
+  [/teplo|topen|vytap|ohrev|radiator/, "radiator"],
   [/pojist/, "stit"],
   [/sprav/, "kufr"],
 ];

@@ -12,6 +12,7 @@ const IKONY: [NazevIkony, string][] = [
   ["penize", "Peníze"], ["dokument", "Dokument"], ["najemce", "Lidé"], ["tri", "Tři tečky"],
   ["uklid", "Koště (úklid)"], ["zelen", "Strom (zeleň)"], ["vytah", "Výtah"], ["schody", "Schody"],
   ["zarovka", "Žárovka (osvětlení)"], ["klic", "Klíč (domovník)"], ["naradi", "Nářadí (opravy)"],
+  ["radiator", "Radiátor (topení)"], ["teplaVoda", "Teplá voda"], ["kohoutek", "Kohoutek (studená voda)"],
   ["televize", "Televize"], ["kamera", "Kamera (ostraha)"], ["parkovani", "Parkování"],
 ];
 
