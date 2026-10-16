@@ -5,17 +5,14 @@ import { prisma } from "./db";
 import { getSession } from "./auth";
 import { nactiTypySluzeb } from "./typySluzeb";
 import { navrhniIkonu } from "./categories";
+import { VSECHNY_IKONY } from "@/components/Ikony";
 
 export interface TypyFormState {
   error?: string;
   success?: string;
 }
 
-const IKONY = new Set([
-  "blesk", "plamen", "kapka", "teplomer", "wifi", "stit", "budova", "kufr", "odpad", "tri",
-  "kalendar", "penize", "dokument", "najemce", "uklid", "zelen", "vytah", "schody", "zarovka", "klic", "naradi",
-  "televize", "kamera", "parkovani",
-]);
+const IKONY = VSECHNY_IKONY;
 
 async function majitel() {
   const user = await getSession();

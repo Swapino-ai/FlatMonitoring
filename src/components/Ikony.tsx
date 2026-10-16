@@ -44,6 +44,9 @@ const CESTY: Record<string, string> = {
 
 export type NazevIkony = keyof typeof CESTY;
 
+/** Vsechny dostupne ikony; server podle toho overuje vyber, takze se seznam nemuze rozejit s vykreslovanim. */
+export const VSECHNY_IKONY: ReadonlySet<string> = new Set(Object.keys(CESTY));
+
 export function Ikona({ nazev, trida = "h-[18px] w-[18px]" }: { nazev: NazevIkony; trida?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={`${trida} shrink-0`} fill="none" stroke="currentColor" strokeWidth={1.8}
