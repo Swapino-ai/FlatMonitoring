@@ -64,7 +64,9 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
 
   // Rozbalene mesice (vychozi: jen nejnovejsi) a sbalene skupiny (najemce / dodavatel) uvnitr nich
   const mesiceOtevrene = useMnozina(() => (mesice[0] ? [mesice[0][0]] : []));
-  const skupinyZavrene = useMnozina(() => []);
+  // Vychozi: skupiny dodavatelu jsou sbalene (nejdriv najemce), rozbalit jde jednotlive i tlacitkem "Rozbalit vše"
+  const skupinyDodavatelu = () => cekajici.filter((p) => p.skupina.typ === "DODAVATEL").map((p) => `${p.mesic}|DODAVATEL|${p.skupina.nazev}`);
+  const skupinyZavrene = useMnozina(skupinyDodavatelu);
   const vsechnyKlice = () => zobrazene.map(([k]) => k);
   const klicSkupiny = (mesic: string, sk: { typ: string; nazev: string }) => `${mesic}|${sk.typ}|${sk.nazev}`;
 
@@ -117,7 +119,7 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
         </p>
         <div className="flex gap-1.5">
           <button type="button" className="btn text-xs" onClick={() => { mesiceOtevrene.nastav(vsechnyKlice()); skupinyZavrene.nastav([]); }}>Rozbalit vše</button>
-          <button type="button" className="btn text-xs" onClick={() => mesiceOtevrene.nastav([])}>Sbalit vše</button>
+          <button type="button" className="btn text-xs" onClick={() => { mesiceOtevrene.nastav([]); skupinyZavrene.nastav(skupinyDodavatelu()); }}>Sbalit vše</button>
           <button type="button" className="btn text-xs" onClick={() => prepni(cekajici.map((p) => p.klic), true)}>Vybrat vše</button>
           <button type="button" className="btn text-xs" onClick={() => setVybrano(new Set())}>Zrušit výběr</button>
         </div>
