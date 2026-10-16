@@ -32,7 +32,7 @@ import { cisloNajemce } from "@/lib/najemci";
 import { PravidelnePlatby } from "@/components/PravidelnePlatby";
 import { nactiNavrhPlatby, nactiZauctovanePlatby } from "@/lib/pravidelnePlatbyData";
 import { prehledPlateb } from "@/lib/pravidelnePlatby";
-import { tokyNemovitosti } from "@/lib/series";
+import { prumernyMesicniTok, tokyNemovitosti } from "@/lib/series";
 import { pronajimatelNemovitosti, pronajimatelZRef } from "@/lib/provozovatel";
 import { nactiStrany } from "@/lib/strany";
 import type { SnapshotVyuctovani } from "@/lib/vyuctovaniVydane";
@@ -288,20 +288,9 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   // dodavatelum) podle predpisu, u zaplacenych podle skutecne zaplacene castky, plus ostatni
   // pohyby (opravy, pojisteni, splatky...). Kauce se nepocita (neni prijem ani naklad).
   const toky = tokyNemovitosti(navrhPlateb, property.transactions);
-  const skutecnyCashflow = (() => {
-    if (!toky.length) return null;
-    const dnes = new Date();
-    const konec = new Date(Date.UTC(dnes.getFullYear(), dnes.getMonth(), 1)); // zacatek aktualniho mesice
-    const prvni = toky.reduce((m, x) => (x.datum < m ? x.datum : m), toky[0].datum);
-    const od0 = new Date(`${prvni.slice(0, 7)}-01T00:00:00Z`);
-    const odLimit = new Date(Date.UTC(konec.getUTCFullYear(), konec.getUTCMonth() - 12, 1));
-    const od = od0 > odLimit ? od0 : odLimit;
-    const mesicu = (konec.getUTCFullYear() - od.getUTCFullYear()) * 12 + konec.getUTCMonth() - od.getUTCMonth();
-    if (mesicu < 1) return { mesicne: toky.reduce((a, x) => a + x.castka, 0), mesicu: 1, neuplny: true };
-    const odISO = od.toISOString().slice(0, 10), doISO = konec.toISOString().slice(0, 10);
-    const soucet = toky.filter((x) => x.datum >= odISO && x.datum < doISO).reduce((a, x) => a + x.castka, 0);
-    return { mesicne: soucet / mesicu, mesicu, neuplny: false };
-  })();
+  const prumer = prumernyMesicniTok(toky);
+  // Stejny podil jako u ostatnich cisel nemovitosti (pohled spoluvlastnika)
+  const skutecnyCashflow = prumer ? { ...prumer, mesicne: prumer.mesicne * podil } : null;
 
   // Rady pro grafy vyvoje trhu: posledni zaznam dne, od nejstarsiho
   const rada = (zaznamy: { date: Date; hodnota: number }[]) => {

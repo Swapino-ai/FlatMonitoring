@@ -76,6 +76,26 @@ export function tokyNemovitosti(
   ];
 }
 
+export interface PrumernyTok { mesicne: number; mesicu: number; neuplny: boolean }
+
+/**
+ * Prumerny mesicni cash flow z poslednich (max. 12) dokoncenych mesicu. Rozbehnuty
+ * aktualni mesic se nepocita, aby cislo nezkreslil. Bez tokù vraci null.
+ */
+export function prumernyMesicniTok(toky: Tok[], asOf = new Date()): PrumernyTok | null {
+  if (!toky.length) return null;
+  const konec = new Date(Date.UTC(asOf.getFullYear(), asOf.getMonth(), 1));
+  const prvni = toky.reduce((m, x) => (x.datum < m ? x.datum : m), toky[0].datum);
+  const od0 = new Date(`${prvni.slice(0, 7)}-01T00:00:00Z`);
+  const odLimit = new Date(Date.UTC(konec.getUTCFullYear(), konec.getUTCMonth() - 12, 1));
+  const od = od0 > odLimit ? od0 : odLimit;
+  const mesicu = (konec.getUTCFullYear() - od.getUTCFullYear()) * 12 + konec.getUTCMonth() - od.getUTCMonth();
+  if (mesicu < 1) return { mesicne: toky.reduce((a, x) => a + x.castka, 0), mesicu: 1, neuplny: true };
+  const odISO = od.toISOString().slice(0, 10), doISO = konec.toISOString().slice(0, 10);
+  const soucet = toky.filter((x) => x.datum >= odISO && x.datum < doISO).reduce((a, x) => a + x.castka, 0);
+  return { mesicne: soucet / mesicu, mesicu, neuplny: false };
+}
+
 function tokyPortfolia(properties: PropertyWithRelations[], navrhy: Map<string, NavrzenaPlatba[]>): Tok[] {
   return properties.flatMap((p) => tokyNemovitosti(navrhy.get(p.id) ?? [], p.transactions));
 }

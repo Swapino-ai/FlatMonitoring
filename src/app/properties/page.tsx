@@ -5,6 +5,8 @@ import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty } from "@/components/Stat";
 import { nactiPortfolio } from "@/lib/pohled";
 import { PohledPrepinac } from "@/components/PohledPrepinac";
+import { nactiNavrhyPortfolia } from "@/lib/pravidelnePlatbyData";
+import { prumernyMesicniTok, tokyNemovitosti } from "@/lib/series";
 import { czk, czkCompact, dateCz, pct, STATUS_LABELS } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +14,12 @@ export const dynamic = "force-dynamic";
 export default async function PropertiesPage() {
   const user = await page();
   const { pohled, analyses, maSpoluvlastnictvi } = await nactiPortfolio(user);
+  // Skutecny mesicni cash flow z plateb a pohybu; odhad ze smluv jen dokud zadne nejsou
+  const navrhy = await nactiNavrhyPortfolia(analyses.map((a) => a.property));
+  const skutecny = new Map(analyses.map((a) => {
+    const t = prumernyMesicniTok(tokyNemovitosti(navrhy.get(a.property.id) ?? [], a.property.transactions));
+    return [a.property.id, t ? t.mesicne * a.podil : null] as const;
+  }));
 
   return (
     <>
@@ -34,7 +42,10 @@ export default async function PropertiesPage() {
           <Card><Empty>Zatím žádné nemovitosti.</Empty></Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {analyses.map((a) => (
+            {analyses.map((a) => {
+              const mesicne = skutecny.get(a.property.id) ?? a.metrics.cashFlowAnnual / 12;
+              const odhad = skutecny.get(a.property.id) == null;
+              return (
               <Link key={a.property.id} href={`/properties/${a.property.id}`} className="card transition-colors hover:border-accent/50">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -74,13 +85,16 @@ export default async function PropertiesPage() {
                     <dd className="tabular-nums">{a.monthlyRent ? `${czk(a.monthlyRent)}/měs.` : "—"}</dd>
                   </div>
                   <div>
-                    <dt className="label">Čistý výnos</dt>
-                    <dd className="font-medium tabular-nums">{pct(a.metrics.netYield)}</dd>
+                    <dt className="label">Výnos z investice</dt>
+                    <dd className="font-medium tabular-nums" title={odhad ? "Odhad ze smluv" : "Ze skutečného cash flow"}>
+                      {a.totalInvestment > 0 ? pct((mesicne * 12 / a.totalInvestment) * 100) : "—"}
+                    </dd>
                   </div>
                   <div>
                     <dt className="label">Cash flow</dt>
-                    <dd className={`font-medium tabular-nums ${a.metrics.cashFlowAnnual >= 0 ? "text-good" : "text-bad"}`}>
-                      {czk(a.metrics.cashFlowAnnual / 12)}/měs.
+                    <dd className={`font-medium tabular-nums ${mesicne >= 0 ? "text-good" : "text-bad"}`}
+                      title={odhad ? "Odhad ze smluv, zatím žádné platby ani pohyby" : "Skutečný průměr za dokončené měsíce"}>
+                      {czk(mesicne)}/měs.{odhad && <span className="ml-1 text-xs font-normal text-ink-muted">odhad</span>}
                     </dd>
                   </div>
                 </dl>
@@ -91,7 +105,8 @@ export default async function PropertiesPage() {
                   </p>
                 )}
               </Link>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>
