@@ -288,8 +288,10 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
     const ser = (p: unknown) => JSON.stringify(
       ((p as { serviceId: string; amount: number }[] | null) ?? []).map((x) => [x.serviceId, x.amount]).sort(),
     );
-    const zmenaZaloh = stara.utilitiesMonthly !== d.utilitiesMonthly || ser(stara.advanceItems) !== ser(polozky);
-    if (zmenaZaloh) {
+    // Oprava za celou dobu: zalohy se nastavi od zacatku smlouvy a drivejsi zmeny se zahodi
+    const oprava = formData.get("opravaZaloh") === "on";
+    const zmenaZaloh = oprava || stara.utilitiesMonthly !== d.utilitiesMonthly || ser(stara.advanceItems) !== ser(polozky);
+    if (zmenaZaloh && !oprava) {
       if (!d.advanceValidFrom) return { error: "Zadej, od kdy nové zálohy platí." };
     }
 
@@ -297,6 +299,15 @@ export async function saveLease(id: string | null, _prev: EntityFormState, formD
     await prisma.$transaction(async (tx) => {
       await tx.lease.update({ where: { id }, data: bezZaloh });
       if (!zmenaZaloh) return;
+
+      if (oprava) {
+        await tx.leaseAdvanceChange.deleteMany({ where: { leaseId: id } });
+        await tx.leaseAdvanceChange.create({
+          data: { leaseId: id, validFrom: data.startDate, amount: d.utilitiesMonthly, items: polozkyJson },
+        });
+        await prepocitejAktualniZalohy(tx, id);
+        return;
+      }
 
       const platiOd = new Date(d.advanceValidFrom!);
       // Puvodni hodnota je pocatecni zaznam: plati od zacatku smlouvy, nebo o den
