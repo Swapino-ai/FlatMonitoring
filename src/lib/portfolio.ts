@@ -28,6 +28,7 @@ const withRelations = {
         taxTreatment: true,
         description: true,
         documentRef: true,
+        sourceKey: true,
       },
       orderBy: { date: "desc" },
     },

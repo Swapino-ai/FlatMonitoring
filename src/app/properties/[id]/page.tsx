@@ -279,12 +279,18 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const naUctu = souctyPohybu.prijmy - souctyPohybu.vydaje;
   const dluhyPlateb = prehledPlateb(navrhPlateb);
 
-  // Skutecny mesicni cash flow majitele: prumer z dokoncenych mesicu (max. poslednich 12)
-  // ze vsech pohybu a zaplacenych pravidelnych plateb. Kauce se nepocita (neni prijem ani naklad).
+  // Mesicni cash flow majitele: pravidelne platby (najem a zalohy od najemce, platby sluzeb
+  // dodavatelum) podle predpisu, u zaplacenych podle skutecne zaplacene castky, plus ostatni
+  // pohyby (opravy, pojisteni, splatky...). Kauce se nepocita (neni prijem ani naklad).
+  const klicePlateb = new Set(navrhPlateb.map((p) => p.klic));
   const toky = [
-    ...property.transactions.filter((t) => t.category !== "DEPOSIT").map((t) => ({ datum: denISO(t.date), castka: t.amount })),
-    ...navrhPlateb.filter((p) => p.zaplaceno?.zdroj === "EVIDENCE" && p.kategorie !== "DEPOSIT")
-      .map((p) => ({ datum: p.zaplaceno!.datum, castka: (p.castka >= 0 ? 1 : -1) * p.zaplaceno!.castka })),
+    ...navrhPlateb.filter((p) => p.kategorie !== "DEPOSIT").map((p) => ({
+      datum: `${p.mesic}-01`,
+      castka: p.zaplaceno ? (p.castka >= 0 ? 1 : -1) * p.zaplaceno.castka : p.castka,
+    })),
+    ...property.transactions
+      .filter((t) => t.category !== "DEPOSIT" && !(t.sourceKey && klicePlateb.has(t.sourceKey)))
+      .map((t) => ({ datum: denISO(t.date), castka: t.amount })),
   ];
   const skutecnyCashflow = (() => {
     if (!toky.length) return null;
@@ -454,7 +460,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                     ? "Zatím žádné pohyby, proto jen odhad ze smluv a nákladů. Skutečné číslo vznikne ze záložky Stav účtu."
                     : skutecnyCashflow.neuplny
                       ? "Zatím z pohybů za neúplný první měsíc."
-                      : `Skutečný průměr z pohybů a zaplacených pravidelných plateb za posledních ${skutecnyCashflow.mesicu} dokončených měsíců, po všech nákladech.`}
+                      : `Průměr za posledních ${skutecnyCashflow.mesicu} dokončených měsíců: nájem, zálohy, platby za služby a ostatní pohyby. U plateb se bere předpis, u zaplacených skutečná částka.`}
                 </p>
               </div>
             );
