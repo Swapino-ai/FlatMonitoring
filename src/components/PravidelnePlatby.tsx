@@ -217,7 +217,7 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
                 {dluh > 0
                   ? <Badge tone="bad">{nezapl > 0 ? `${nezapl} nezaplaceno` : "nedoplaceno"} · {czk(dluh)}</Badge>
                   : <Badge tone="good">vše zaplaceno</Badge>}
-                <button type="button" className="btn px-2 py-0.5 text-xs font-normal" onClick={() => otevriHromadne(`Vše zaplaceno: ${nazevMesice(Number(m))} ${rok}`, radky)}>Vše zaplaceno</button>
+                {radky.some((p) => !radek(p.klic).datum) && <button type="button" className="btn px-2 py-0.5 text-xs font-normal" onClick={() => otevriHromadne(`Vše zaplaceno: ${nazevMesice(Number(m))} ${rok}`, radky)}>Vše zaplaceno</button>}
               </div>
               {mesiceOtevrene.m.has(mesic) && skupiny(radky).map((sk) => {
                 const k = klicSkupiny(mesic, sk);
@@ -231,7 +231,7 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
                       <span className="min-w-0 flex-1 truncate">{sk.typ === "DODAVATEL" ? "Dodavatel" : "Nájemce"}: <span className="normal-case tracking-normal text-ink-primary">{sk.nazev}</span></span>
                       <span className="normal-case tracking-normal">{sk.platby.length}×</span>
                       <span className={`w-24 text-right normal-case tracking-normal tabular-nums ${dluhSk > 0 ? "text-bad" : "text-good"}`}>{dluhSk > 0 ? czk(dluhSk) : "zaplaceno"}</span>
-                      <button type="button" className="btn px-2 py-0.5 text-[11px] normal-case tracking-normal font-normal" onClick={() => otevriHromadne(`Zaplaceno: ${sk.nazev}`, sk.platby)}>Zaplaceno</button>
+                      {sk.platby.some((p) => !radek(p.klic).datum) && <button type="button" className="btn px-2 py-0.5 text-[11px] normal-case tracking-normal font-normal" onClick={() => otevriHromadne(`Zaplaceno: ${sk.nazev}`, sk.platby)}>Zaplaceno</button>}
                     </div>
                     {otevrena && (
                       <ul className="divide-y divide-line/60">
