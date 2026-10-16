@@ -32,7 +32,16 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npx tsx scripts/kontrola-pripojeni.ts
 
-      - name: Záloha před zásahem
+      # Nejdřív schéma: záloha čte všechny sloupce aktuálního schématu, takže by na nové
+      # (ještě nepřidané) sloupce spadla. `db push` bez --accept-data-loss je bezpečný:
+      # přidá sloupce a tabulky a při jakékoli ztrátě dat se zastaví.
+      - name: Promítnutí schématu (jen bezpečné změny)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx prisma db push --skip-generate
+
+      - name: Záloha po změně schématu
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
@@ -44,12 +53,6 @@ jobs:
           name: zaloha-pred-schematem-${{ github.run_number }}
           path: zalohy/*.json
           retention-days: 90
-
-      - name: Náhled změn
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
-        run: npx prisma db push --skip-generate
 
       - name: Kontrola, že je schéma v souladu
         env:
