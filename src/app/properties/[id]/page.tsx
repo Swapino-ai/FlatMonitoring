@@ -415,6 +415,24 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             </div>
           </div>
 
+          {/* Hlavní číslo pro pronajímanou nemovitost: kolik měsíčně skutečně zbývá a kolik to je z investice */}
+          {smluvniNajem > 0 && a.totalInvestment > 0 && (() => {
+            const mesicne = a.metrics.cashFlowAnnual / 12;
+            const procento = (a.metrics.cashFlowAnnual / a.totalInvestment) * 100;
+            return (
+              <div className={`rounded-card border p-5 ${mesicne >= 0 ? "border-good/30 bg-good/5" : "border-bad/30 bg-bad/5"}`}>
+                <div className="label">Čistý měsíční příjem</div>
+                <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                  <span className={`text-4xl font-semibold tabular-nums tracking-tight ${mesicne >= 0 ? "text-good" : "text-bad"}`}>{czk(mesicne)}</span>
+                  <span className="text-lg font-medium tabular-nums">{pct(procento)} ročně z investice {czkCompact(a.totalInvestment)}</span>
+                </div>
+                <p className="mt-2 text-xs text-ink-secondary">
+                  Nájem po provozních nákladech a splátkách úvěru. Před splátkami úvěru {czk(a.metrics.noi / 12)} měsíčně ({pct(a.metrics.netYield)} ročně).
+                </p>
+              </div>
+            );
+          })()}
+
           {/* Výkonnost a kondice vedle sebe — čísla i verdikt na jedné obrazovce */}
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <div className="grid grid-cols-2 gap-3 content-start">
