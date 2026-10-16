@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Ikona } from "./Ikony";
 import { DatumPole } from "./DatumPole";
+import { denISO } from "@/lib/format";
 
 export function Pole({ label, name, hint, sirka = "", ...rest }: {
   label: string; name: string; hint?: string; sirka?: string;
@@ -172,9 +173,7 @@ export function UpravaPanel({ nadpis, onZavrit, children }: {
 
 /** Datum pro <input type="date">; prazdne, kdyz neni zadane. */
 export function isoDatum(d: Date | string | null | undefined): string | undefined {
-  if (!d) return undefined;
-  const dd = typeof d === "string" ? new Date(d) : d;
-  return Number.isNaN(dd.getTime()) ? undefined : dd.toISOString().slice(0, 10);
+  return denISO(d) || undefined;
 }
 
 /** Viceradkove pole pro poznamky. */

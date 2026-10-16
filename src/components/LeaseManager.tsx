@@ -18,7 +18,7 @@ import { nazevDruhu, type TypySluzeb } from "@/lib/categories";
 import {
   mesicniNaklad, popisPorovnani, porovnejZalohy, sluzbaKDatu, type PorovnaniZaloh, type SluzbaVstup,
 } from "@/lib/zalohy";
-import { czk, dateCz } from "@/lib/format";
+import { czk, dateCz, denISO } from "@/lib/format";
 
 interface Row {
   id: string; tenantName: string; tenantEmail: string | null; tenantPhone: string | null;
@@ -144,7 +144,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
                           onClick={() => {
                             setUpravaId(null); setListId(null);
                             if (kopie?.id === l.id) { setKopie(null); return; }
-                            const navrh = l.endDate ? l.endDate.toISOString().slice(0, 10) : dnesISO();
+                            const navrh = l.endDate ? denISO(l.endDate) : dnesISO();
                             setKonecVstup(navrh);
                             setKopie({ id: l.id, konec: null });
                           }}
@@ -245,7 +245,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
             zalohyAktualni: listSmlouva.utilitiesMonthly,
             zalohyHistorie: (historie[listSmlouva.id] ?? []) as { validFrom: Date | string; amount: number; items?: { serviceId: string; amount: number }[] | null }[],
             zalohyPolozky: listSmlouva.advanceItems as { serviceId: string; amount: number }[] | null,
-            odKdy: listSmlouva.startDate.toISOString().slice(0, 10),
+            odKdy: denISO(listSmlouva.startDate),
             prectene: services,
           }} />
         </UpravaPanel>
@@ -271,7 +271,7 @@ export function LeaseManager({ propertyId, leases, canEdit, services, porovnani,
           {kopie.konec === null ? (
             <div className="space-y-4">
               <DatumPole key={kopirovana.id} label="Stará smlouva končí dne" name="konecStare" required
-                min={kopirovana.startDate.toISOString().slice(0, 10)}
+                min={denISO(kopirovana.startDate)}
                 defaultValue={konecVstup ?? ""} onChange={setKonecVstup}
                 hint={konecVstup ? `Nová smlouva začne ${dateCz(new Date(`${denPo(konecVstup)}T00:00:00Z`))}.` : "Zadej platné datum."} />
               <button type="button" className="btn btn-primary" disabled={!konecVstup}

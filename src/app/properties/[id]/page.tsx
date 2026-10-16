@@ -36,7 +36,7 @@ import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
 import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
 import { categoryLabel, nazevDruhu } from "@/lib/categories";
 import { nactiTypySluzeb } from "@/lib/typySluzeb";
-import { czk, czkCompact, dateCz, num, pct, STATUS_LABELS } from "@/lib/format";
+import { czk, czkCompact, dateCz, denISO, num, pct, STATUS_LABELS } from "@/lib/format";
 import { NEMOVITOST_MAP, nazevNemovitosti } from "@/lib/catalogs";
 import { okruhProTyp } from "@/lib/geo";
 
@@ -116,7 +116,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const historieZaloh: Record<string, typeof zmenyZaloh> = {};
   for (const z of zmenyZaloh) (historieZaloh[z.leaseId] ??= []).push(z);
 
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const iso = (d: Date) => denISO(d);
   const vyuctovani: VyuctovaniRadek[] = vyuctovaniDb.map((v) => ({
     id: v.id, serviceId: v.serviceId, od: iso(v.periodFrom), do: iso(v.periodTo),
     naklad: v.totalCost, zalohyDodavateli: v.supplierAdvances,
