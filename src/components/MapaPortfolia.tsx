@@ -64,6 +64,7 @@ export function MapaPortfolia({ body, vyskaTrida = "h-72 lg:h-[26rem]" }: {
   useEffect(() => {
     if (!uzel.current || mapa.current || body.length === 0) return;
     let zruseno = false;
+    let pozorovatel: ResizeObserver | undefined;
 
     (async () => {
       const L = (await import("leaflet")).default;
@@ -165,10 +166,17 @@ export function MapaPortfolia({ body, vyskaTrida = "h-72 lg:h-[26rem]" }: {
       if (zruseno) { m.remove(); return; }
       mapa.current = m;
       setTimeout(() => mapa.current?.invalidateSize(), 0);
+      // Kazda zmena rozmeru kontejneru (rozbaleni karty, prepnuti zalozky,
+      // nacteni pisma) mapu prepocita; jednorazovy prepocet nestaci.
+      if (typeof ResizeObserver !== "undefined") {
+        pozorovatel = new ResizeObserver(() => mapa.current?.invalidateSize());
+        pozorovatel.observe(m.getContainer());
+      }
     })();
 
     return () => {
       zruseno = true;
+      pozorovatel?.disconnect();
       mapa.current?.remove();
       mapa.current = null;
     };

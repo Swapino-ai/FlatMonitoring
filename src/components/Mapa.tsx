@@ -38,6 +38,7 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
   useEffect(() => {
     if (!uzel.current || mapa.current) return;
     let zruseno = false;
+    let pozorovatel: ResizeObserver | undefined;
 
     (async () => {
       const L = (await import("leaflet")).default;
@@ -101,10 +102,17 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
       // dostane jine rozmery (rozbaleni karty, nacteni pisma), zustane mapa
       // seda nebo posunuta — tohle ji prepocita.
       setTimeout(() => mapa.current?.invalidateSize(), 0);
+      // Kazda zmena rozmeru kontejneru (rozbaleni karty, prepnuti zalozky,
+      // nacteni pisma) mapu prepocita; jednorazovy prepocet nestaci.
+      if (typeof ResizeObserver !== "undefined") {
+        pozorovatel = new ResizeObserver(() => mapa.current?.invalidateSize());
+        pozorovatel.observe(m.getContainer());
+      }
     })();
 
     return () => {
       zruseno = true;
+      pozorovatel?.disconnect();
       mapa.current?.remove();
       mapa.current = null;
       znacka.current = null;
