@@ -27,6 +27,8 @@ import { casovaOsa, porovnejProNemovitost, type NajemVstup, type PolozkaZalohy, 
 import { VyuctovaniSluzeb, type NajemRadek, type VyuctovaniRadek } from "@/components/Vyuctovani";
 import { VyuctovaniNajemceKarta, type NajemceNajem, type VydanoRadek } from "@/components/VyuctovaniNajemceKarta";
 import { cisloNajemce } from "@/lib/najemci";
+import { PravidelnePlatby } from "@/components/PravidelnePlatby";
+import { nactiNavrhPlatby } from "@/lib/pravidelnePlatbyData";
 import { pronajimatelNemovitosti, pronajimatelZRef } from "@/lib/provozovatel";
 import { nactiStrany } from "@/lib/strany";
 import type { SnapshotVyuctovani } from "@/lib/vyuctovaniVydane";
@@ -52,7 +54,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const [
     , typy, property, pohled, strany, diskPripojen, katastr, nejnovejsiNajem,
     zmenyNakladu, zmenyZaloh, vyuctovaniDb, dokumentyDb, vydanaDb, dokumentyVydanych,
-    najemciVsi, dokumentySmluv, uzivatele, stavVyuctovani,
+    najemciVsi, dokumentySmluv, uzivatele, stavVyuctovani, navrhPlateb,
   ] = await Promise.all([
     srovnejPlatnost(),
     nactiTypySluzeb(),
@@ -88,6 +90,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     prisma.tenantStatement.findMany({
       where: { propertyId: id, status: { not: "STORNO" } }, select: { leaseId: true, periodTo: true },
     }),
+    // Navrh pravidelnych plateb (najem, zalohy, sluzby) k zauctovani
+    nactiNavrhPlatby(id),
   ]);
   if (!property) notFound();
 
@@ -581,6 +585,12 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             nazev: "Pohyby",
             pocet: property.transactions.length,
             obsah: (<>
+          <SbalitelnaKarta klic="pravidelne-platby" title="Pravidelné platby"
+            shrnuti={navrhPlateb.filter((p) => p.stav !== "zauctovano").length
+              ? `${navrhPlateb.filter((p) => p.stav !== "zauctovano").length} k zaúčtování`
+              : navrhPlateb.length ? "vše zaúčtováno" : undefined}>
+            <PravidelnePlatby propertyId={property.id} navrh={navrhPlateb} />
+          </SbalitelnaKarta>
           <SbalitelnaKarta klic="pohyby" title="Pohyby">
             <TransactionManager propertyId={property.id} transactions={recentTx} canEdit={user.role === "OWNER"} />
             {property.transactions.length > recentTx.length && (

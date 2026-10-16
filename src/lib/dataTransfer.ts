@@ -178,7 +178,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       id: String(x.id), propertyId: String(x.propertyId), date: dPovinne(x.date),
       amount: c(x.amount), category: String(x.category),
       description: s(x.description), taxTreatment: String(x.taxTreatment ?? "EXPENSE_DEDUCTIBLE"),
-      isRecurring: !!x.isRecurring, documentRef: s(x.documentRef),
+      isRecurring: !!x.isRecurring, sourceKey: s(x.sourceKey), documentRef: s(x.documentRef),
     }));
     if (transactions.length) obnoveno.transaction = (await tx.transaction.createMany({ data: transactions })).count;
 

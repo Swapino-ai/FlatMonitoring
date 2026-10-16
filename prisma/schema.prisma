@@ -232,6 +232,8 @@ model Transaction {
 
   isRecurring Boolean @default(false)
   documentRef String? // cislo faktury / odkaz na doklad
+  /// Klic automaticky zauctovane pravidelne platby (napr. "najem:<smlouva>:2026-03"); brani zdvojeni
+  sourceKey   String? @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
