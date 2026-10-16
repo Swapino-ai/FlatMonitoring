@@ -8,6 +8,7 @@ import { czk, dateCz } from "@/lib/format";
 import { nazevMesice } from "@/lib/zalohy";
 import { DatumPole } from "./DatumPole";
 import { Hlaska } from "./form";
+import { Ikona } from "./Ikony";
 import { Badge } from "./Stat";
 
 const POCET_MESICU = 6;
@@ -257,13 +258,26 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
                                 </span>
                               ) : (
                                 r.datum ? (
-                                  <span className="flex items-center gap-2 text-xs text-ink-secondary">
-                                    <span>zaplaceno {dateCz(r.datum)} · <span className={mene ? "text-warn" : ""}>{czk(zaplacenoCastka)}</span></span>
-                                    <button type="button" className="btn px-2 py-0.5 text-xs" onClick={() => setOkno({ nadpis: p.popis, platby: [p], datum: r.datum!, castka: r.castka })}>Změnit</button>
-                                    <button type="button" className="btn px-2 py-0.5 text-xs" onClick={() => nastav(p.klic, { datum: null })}>Zrušit zaplacení</button>
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-right leading-tight">
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-good/10 px-2 py-0.5 text-xs font-medium text-good">
+                                        <Ikona nazev="ok" trida="h-3 w-3" />zaplaceno {dateCz(r.datum)}
+                                      </span>
+                                      <div className={`mt-0.5 text-sm font-semibold tabular-nums ${mene ? "text-warn" : ""}`}>{czk(zaplacenoCastka)}</div>
+                                    </div>
+                                    <button type="button" title="Změnit datum nebo částku" aria-label="Změnit zaplacení"
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted hover:bg-accent-soft hover:text-accent"
+                                      onClick={() => setOkno({ nadpis: p.popis, platby: [p], datum: r.datum!, castka: r.castka })}>
+                                      <Ikona nazev="pero" />
+                                    </button>
+                                    <button type="button" title="Zrušit zaplacení" aria-label="Zrušit zaplacení"
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted hover:bg-bad/10 hover:text-bad"
+                                      onClick={() => nastav(p.klic, { datum: null })}>
+                                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6L6 18" /></svg>
+                                    </button>
+                                  </div>
                                 ) : (
-                                  <button type="button" className="btn px-2 py-0.5 text-xs" onClick={() => setOkno({ nadpis: p.popis, platby: [p], datum: dnes, castka: r.castka })}>Zaplaceno</button>
+                                  <button type="button" className="btn px-3 py-1 text-xs" onClick={() => setOkno({ nadpis: p.popis, platby: [p], datum: dnes, castka: r.castka })}>Zaplaceno</button>
                                 )
                               )}
                             </li>
