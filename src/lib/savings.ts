@@ -44,6 +44,8 @@ export function findBundleOpportunities(properties: PropertyWithRelations[], asO
     if (p.status === "SOLD") continue;
     for (const s of p.services) {
       if (!s.isBundleable) continue;
+      // Ukoncena sluzba uz neni co poptavat
+      if (s.activeTo && new Date(s.activeTo) < asOf) continue;
       const list = byType.get(s.type) ?? [];
       list.push({ service: s, property: p });
       byType.set(s.type, list);

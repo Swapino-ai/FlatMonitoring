@@ -188,7 +188,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       id: String(x.id), propertyId: String(x.propertyId), type: String(x.type),
       provider: String(x.provider), contractNo: s(x.contractNo),
       monthlyCost: c(x.monthlyCost), annualCost: x.annualCost == null ? null : c(x.annualCost),
-      contractStart: d(x.contractStart), contractEnd: d(x.contractEnd),
+      contractStart: d(x.contractStart), contractEnd: d(x.contractEnd), activeTo: d(x.activeTo),
       noticePeriodMonths: Math.round(c(x.noticePeriodMonths)),
       isBundleable: x.isBundleable !== false, notes: s(x.notes),
       // Starsi zalohy pole nemaji; chybejici hodnota znamena "nepreuctovava se"

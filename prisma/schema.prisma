@@ -254,6 +254,7 @@ model Service {
 
   contractStart      DateTime?
   contractEnd        DateTime? // konec zavazku — kdy lze prejit jinam
+  activeTo           DateTime? // posledni den, kdy sluzba platila (ukoncena sluzba); prazdne = plati dosud
   noticePeriodMonths Int       @default(0)
 
   isBundleable Boolean @default(true) // lze zahrnout do hromadne poptavky?

@@ -134,7 +134,8 @@ export function analyzeProperty(
     activeLoans.map((l) => loanYearBreakdown({ ...l, startDate: new Date(l.startDate) }, year).interest),
   );
 
-  const monthlyServiceCost = sum(p.services.map((s) => s.monthlyCost + (s.annualCost ?? 0) / 12));
+  // Ukoncene sluzby uz nic nestoji
+  const monthlyServiceCost = sum(p.services.filter((s) => !s.activeTo || new Date(s.activeTo) >= asOf).map((s) => s.monthlyCost + (s.annualCost ?? 0) / 12));
 
   const metrics = computeYields({
     totalInvestment,

@@ -27,6 +27,7 @@ export async function nactiNavrhPlatby(propertyId: string): Promise<NavrzenaPlat
       id: s.id, type: s.type, provider: s.provider, nazevDruhu: nazevDruhu(typy, s.type),
       monthlyCost: s.monthlyCost, annualCost: s.annualCost, chargedToTenant: s.chargedToTenant,
       contractStart: s.contractStart ? denISO(s.contractStart) : null,
+      activeTo: s.activeTo ? denISO(s.activeTo) : null,
       historie: s.costChanges.map((z) => ({ validFrom: z.validFrom, monthlyCost: z.monthlyCost, annualCost: z.annualCost })),
     })),
     uvery: uvery.map((u) => ({ id: u.id, veritel: u.lender, od: denISO(u.startDate), pocetSplatek: u.termMonths, splatka: u.monthlyPayment })),

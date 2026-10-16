@@ -71,7 +71,7 @@ async function varovaniZaloh(propertyId: string): Promise<string | undefined> {
     prisma.service.findMany({
       where: { propertyId },
       select: {
-        type: true, provider: true, monthlyCost: true, annualCost: true, chargedToTenant: true, contractStart: true,
+        type: true, provider: true, monthlyCost: true, annualCost: true, chargedToTenant: true, contractStart: true, activeTo: true,
         costChanges: { select: { validFrom: true, monthlyCost: true, annualCost: true } },
       },
     }),
@@ -370,6 +370,8 @@ const sluzbaSchema = z.object({
   monthlyCost: cislo(),
   annualCost: cisloNeboNic,
   contractEnd: datumNeboNic,
+  /** Posledni den, kdy sluzba platila; prazdne = plati dosud. */
+  activeTo: datumNeboNic,
   /** Od kdy sluzba plati — povinne. */
   contractStart: z.string().min(1, "Zadej, od kdy služba platí."),
   noticePeriodMonths: cislo(),
@@ -395,6 +397,10 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
     return { error: "Služba nemůže být vázaná do data před tím, než začala platit." };
   }
 
+  if (d.activeTo && d.activeTo < d.contractStart) {
+    return { error: "Služba nemohla skončit dřív, než začala platit." };
+  }
+
   const data = {
     type: d.type,
     provider: d.provider,
@@ -403,6 +409,7 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
     annualCost: d.annualCost,
     contractStart: new Date(d.contractStart),
     contractEnd: d.contractEnd ? new Date(d.contractEnd) : null,
+    activeTo: d.activeTo ? new Date(d.activeTo) : null,
     noticePeriodMonths: Math.round(d.noticePeriodMonths),
     isBundleable: d.isBundleable,
     chargedToTenant: d.chargedToTenant,
