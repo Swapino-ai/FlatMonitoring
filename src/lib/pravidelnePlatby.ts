@@ -17,6 +17,8 @@ export interface NavrzenaPlatba {
   /** rrrr-mm-dd */
   datum: string;
   popis: string;
+  /** Seskupeni: nájemce (najem a zalohy) nebo dodavatel (platby sluzeb). */
+  skupina: { typ: "NAJEMCE" | "DODAVATEL"; nazev: string };
   /** Kladne = prijem, zaporne = vydaj. */
   castka: number;
   kategorie: string;
@@ -115,6 +117,7 @@ export function navrhniPlatby(a: {
       if (n.rentMonthly > 0) {
         pridej({
           klic: `najem:${n.id}:${mesic}`, druh: "NAJEM", mesic, datum, kategorie: "RENT", castecny,
+          skupina: { typ: "NAJEMCE", nazev: n.nazev },
           popis: `Nájemné ${mesic.slice(5)}/${r} · ${n.nazev}${castecny ? ` (${dnu} z ${dniVMesici} dní)` : ""}`,
           castka: Math.round(n.rentMonthly * podil * 100) / 100,
         });
@@ -123,6 +126,7 @@ export function navrhniPlatby(a: {
       if (zaloha > 0) {
         pridej({
           klic: `zaloha:${n.id}:${mesic}`, druh: "ZALOHA", mesic, datum, kategorie: "UTILITIES_ADVANCE", castecny,
+          skupina: { typ: "NAJEMCE", nazev: n.nazev },
           popis: `Zálohy na služby ${mesic.slice(5)}/${r} · ${n.nazev}${castecny ? ` (${dnu} z ${dniVMesici} dní)` : ""}`,
           castka: zaloha,
         });
@@ -136,7 +140,8 @@ export function navrhniPlatby(a: {
       if (cena <= 0) continue;
       pridej({
         klic: `sluzba:${s.id}:${mesic}`, druh: "SLUZBA", mesic, datum: prvni, kategorie: KATEGORIE_SLUZBY[s.type] ?? "UTILITIES",
-        popis: `${s.nazevDruhu} · ${s.provider} ${mesic.slice(5)}/${r}`,
+        skupina: { typ: "DODAVATEL", nazev: s.provider.trim() || "Bez dodavatele" },
+        popis: `${s.nazevDruhu} ${mesic.slice(5)}/${r}`,
         castka: -cena,
       });
     }

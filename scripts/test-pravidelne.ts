@@ -45,5 +45,19 @@ const D: NajemPlatba = { ...A, historieZaloh: [{ validFrom: "2026-01-01", amount
 const pd = navrhniPlatby({ najmy: [D], sluzby: [], pohyby: [], dnes: "2026-03-20" }).filter((x) => x.druh === "ZALOHA");
 over("zmena zaloh", pd.map((x) => x.castka).join() === "3000,3000,3400", pd.map((x) => x.castka));
 over("bez dat nic", navrhniPlatby({ najmy: [], sluzby: [], pohyby: [], dnes: "2026-03-20" }).length === 0);
+// Seskupeni: sluzby podle dodavatele, najem a zalohy podle najemce
+{
+  const dvaSluzby: SluzbaPlatba[] = [
+    { ...sl, id: "e", type: "ELECTRICITY", provider: "ČEZ", nazevDruhu: "Elektřina", contractStart: "2026-03-01" },
+    { ...sl, id: "g", type: "GAS", provider: "ČEZ", nazevDruhu: "Plyn", contractStart: "2026-03-01" },
+    { ...sl, id: "v", provider: "Vodárna", nazevDruhu: "Vodné", contractStart: "2026-03-01" },
+  ];
+  const g = navrhniPlatby({ najmy: [A], sluzby: dvaSluzby, pohyby: [], dnes: "2026-03-20" });
+  const sk = (typ: string) => new Set(g.filter((x) => x.skupina.typ === typ).map((x) => x.skupina.nazev));
+  over("dodavatele", sk("DODAVATEL").size === 2 && sk("DODAVATEL").has("ČEZ") && sk("DODAVATEL").has("Vodárna"), [...sk("DODAVATEL")]);
+  over("najemce", [...sk("NAJEMCE")].join() === "Novák");
+  over("cez ma dve sluzby", g.filter((x) => x.skupina.nazev === "ČEZ" && x.mesic === "2026-03").length === 2);
+}
+
 console.log(chyb ? `${chyb} chyb` : "vše v pořádku");
 process.exit(chyb ? 1 : 0);

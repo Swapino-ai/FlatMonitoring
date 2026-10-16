@@ -55,3 +55,20 @@ export async function zauctujPlatby(propertyId: string, _prev: PlatbyState, form
   const preskoceno = data.length - vysledek.count;
   return { success: `Zaúčtováno ${vysledek.count} plateb.${preskoceno > 0 ? ` ${preskoceno} už bylo zaúčtováno.` : ""}` };
 }
+
+/**
+ * Smaze zauctovane pravidelne platby (jen ty s klicem, rucni pohyby se tu nemazou). Smazana platba
+ * se v navrhu objevi znovu. Maze jen majitel, stejne jako ostatni pohyby.
+ */
+export async function smazPlatby(propertyId: string, _prev: PlatbyState, formData: FormData): Promise<PlatbyState> {
+  const user = await getSession();
+  if (!user) return { error: "Nejsi přihlášen." };
+  if (user.role !== "OWNER") return { error: "Zaúčtované platby může mazat jen majitel." };
+
+  const ids = formData.getAll("id").map(String).filter(Boolean);
+  if (ids.length === 0) return { error: "Nic není vybráno." };
+
+  const vysledek = await prisma.transaction.deleteMany({ where: { id: { in: ids }, propertyId, sourceKey: { not: null } } });
+  for (const cesta of [`/properties/${propertyId}`, "/properties", "/", "/cashflow"]) revalidatePath(cesta);
+  return { success: `Smazáno ${vysledek.count} plateb. V návrhu se objeví znovu.` };
+}

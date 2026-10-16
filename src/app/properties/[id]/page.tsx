@@ -28,7 +28,7 @@ import { VyuctovaniSluzeb, type NajemRadek, type VyuctovaniRadek } from "@/compo
 import { VyuctovaniNajemceKarta, type NajemceNajem, type VydanoRadek } from "@/components/VyuctovaniNajemceKarta";
 import { cisloNajemce } from "@/lib/najemci";
 import { PravidelnePlatby } from "@/components/PravidelnePlatby";
-import { nactiNavrhPlatby } from "@/lib/pravidelnePlatbyData";
+import { nactiNavrhPlatby, nactiZauctovanePlatby } from "@/lib/pravidelnePlatbyData";
 import { pronajimatelNemovitosti, pronajimatelZRef } from "@/lib/provozovatel";
 import { nactiStrany } from "@/lib/strany";
 import type { SnapshotVyuctovani } from "@/lib/vyuctovaniVydane";
@@ -54,7 +54,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const [
     , typy, property, pohled, strany, diskPripojen, katastr, nejnovejsiNajem,
     zmenyNakladu, zmenyZaloh, vyuctovaniDb, dokumentyDb, vydanaDb, dokumentyVydanych,
-    najemciVsi, dokumentySmluv, uzivatele, stavVyuctovani, navrhPlateb,
+    najemciVsi, dokumentySmluv, uzivatele, stavVyuctovani, navrhPlateb, zauctovanePlatby,
   ] = await Promise.all([
     srovnejPlatnost(),
     nactiTypySluzeb(),
@@ -92,6 +92,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     }),
     // Navrh pravidelnych plateb (najem, zalohy, sluzby) k zauctovani
     nactiNavrhPlatby(id),
+    nactiZauctovanePlatby(id),
   ]);
   if (!property) notFound();
 
@@ -589,7 +590,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             shrnuti={navrhPlateb.filter((p) => p.stav !== "zauctovano").length
               ? `${navrhPlateb.filter((p) => p.stav !== "zauctovano").length} k zaúčtování`
               : navrhPlateb.length ? "vše zaúčtováno" : undefined}>
-            <PravidelnePlatby propertyId={property.id} navrh={navrhPlateb} />
+            <PravidelnePlatby propertyId={property.id} navrh={navrhPlateb} zauctovane={zauctovanePlatby} canDelete={user.role === "OWNER"} />
           </SbalitelnaKarta>
           <SbalitelnaKarta klic="pohyby" title="Pohyby">
             <TransactionManager propertyId={property.id} transactions={recentTx} canEdit={user.role === "OWNER"} />

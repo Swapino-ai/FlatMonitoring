@@ -30,3 +30,23 @@ export async function nactiNavrhPlatby(propertyId: string): Promise<NavrzenaPlat
     dnes: new Date().toISOString().slice(0, 10),
   });
 }
+
+export interface ZauctovanaPlatba {
+  id: string;
+  datum: string;
+  popis: string;
+  castka: number;
+  mesic: string;
+}
+
+/** Pravidelne platby, ktere uz jsou zauctovane (maji klic) — k prehledu a pripadnemu smazani. */
+export async function nactiZauctovanePlatby(propertyId: string): Promise<ZauctovanaPlatba[]> {
+  const radky = await prisma.transaction.findMany({
+    where: { propertyId, sourceKey: { not: null } },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    select: { id: true, date: true, description: true, amount: true },
+  });
+  return radky.map((r) => ({
+    id: r.id, datum: denISO(r.date), mesic: denISO(r.date).slice(0, 7), popis: r.description ?? "Pravidelná platba", castka: r.amount,
+  }));
+}
