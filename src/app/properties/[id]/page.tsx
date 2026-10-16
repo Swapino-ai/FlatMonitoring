@@ -549,9 +549,15 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
               <Stat label="IRR od pořízení" term="irr" value={a.irr != null ? pct(a.irr) : "—"}
                 sub={a.estimatedYears.length ? `${a.estimatedYears.length} let odhadnuto z modelu` : "Ze skutečných toků"}
                 tone={(a.irr ?? 0) >= 5 ? "good" : "neutral"} />
-              <Stat label="Cash flow / rok" term="cashFlow" value={czkCompact(a.metrics.cashFlowAnnual)}
-                sub={`${czk(a.metrics.cashFlowAnnual / 12)} měsíčně`}
-                tone={a.metrics.cashFlowAnnual >= 0 ? "good" : "bad"} />
+              {(() => {
+                // Skutecne cash flow z plateb a pohybu; odhad ze smluv jen dokud zadne nejsou
+                const rocne = skutecnyCashflow ? skutecnyCashflow.mesicne * 12 : a.metrics.cashFlowAnnual;
+                return (
+                  <Stat label="Cash flow / rok" term="cashFlow" value={czkCompact(rocne)}
+                    sub={`${czk(rocne / 12)} měsíčně · ${skutecnyCashflow ? "skutečné" : "odhad ze smluv"}`}
+                    tone={rocne >= 0 ? "good" : "bad"} />
+                );
+              })()}
               <Stat label="Vlastní kapitál" value={czkCompact(a.metrics.equity)}
                 sub={a.currentDebt > 0 ? `LTV ${pct(a.metrics.ltv)} · dluh ${czkCompact(a.currentDebt)}` : "Bez dluhu"}
                 tone={a.metrics.ltv > 80 ? "warn" : "good"} />
