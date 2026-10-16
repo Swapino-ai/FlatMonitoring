@@ -11,7 +11,6 @@ import { Hlaska } from "./form";
 import { Ikona } from "./Ikony";
 import { Badge } from "./Stat";
 
-const POCET_MESICU = 6;
 
 /** Sipka pro sbaleni a rozbaleni oddilu. */
 /** Okno pro zadani data zaplaceni (kalendar nebo rucne) a u jedne platby i zaplacene castky. */
@@ -120,10 +119,15 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
     for (const p of navrh) m.set(p.mesic, [...(m.get(p.mesic) ?? []), p]);
     return [...m.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
   }, [navrh]);
-  const [vsechnyMesice, setVsechnyMesice] = useState(false);
-  const zobrazene = vsechnyMesice ? mesice : mesice.slice(0, POCET_MESICU);
+  // Mesice po letech: nejnovejsi rok je rozbaleny, starsi sbalene
+  const roky = useMemo(() => {
+    const m = new Map<string, [string, NavrzenaPlatba[]][]>();
+    for (const e of mesice) m.set(e[0].slice(0, 4), [...(m.get(e[0].slice(0, 4)) ?? []), e]);
+    return [...m.entries()];
+  }, [mesice]);
 
   // Vsechno je vychozi sbalene krome nejnovejsiho mesice; skupiny (najemce, dodavatel) jsou sbalene vzdy
+  const rokyOtevrene = useMnozina(() => (roky[0] ? [roky[0][0]] : []));
   const mesiceOtevrene = useMnozina(() => (mesice[0] ? [mesice[0][0]] : []));
   const skupinyOtevrene = useMnozina(() => []);
   const rozpisOtevreny = useMnozina(() => ["najemci"]);
@@ -212,106 +216,119 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
           U každé platby zapiš, <strong>kdy byla zaplacena</strong>. Bez data je nezaplacená a počítá se do dluhu.
         </p>
         <div className="flex gap-1.5">
-          <button type="button" className="btn text-xs" onClick={() => { mesiceOtevrene.nastav(zobrazene.map(([k]) => k)); }}>Rozbalit měsíce</button>
-          <button type="button" className="btn text-xs" onClick={() => { mesiceOtevrene.nastav([]); skupinyOtevrene.nastav([]); }}>Sbalit vše</button>
+          <button type="button" className="btn text-xs" onClick={() => { rokyOtevrene.nastav(roky.map(([r]) => r)); mesiceOtevrene.nastav(mesice.map(([k]) => k)); }}>Rozbalit vše</button>
+          <button type="button" className="btn text-xs" onClick={() => { rokyOtevrene.nastav([]); mesiceOtevrene.nastav([]); skupinyOtevrene.nastav([]); }}>Sbalit vše</button>
         </div>
       </div>
 
       <div className="space-y-3">
-        {zobrazene.map(([mesic, radky]) => {
-          const [rok, m] = mesic.split("-");
-          const dluhMesice = prehledPlateb(radky);
-          const dluh = dluhMesice.najemciDluzi + dluhMesice.dluzimDodavatelum;
-          const nezapl = radky.filter((p) => !p.zaplaceno).length;
+        {roky.map(([rok, mesiceRoku]) => {
+          const otevrenyRok = rokyOtevrene.m.has(rok);
+          const dl = prehledPlateb(mesiceRoku.flatMap(([, r]) => r));
+          const dluhRoku = dl.najemciDluzi + dl.dluzimDodavatelum;
           return (
-            <section key={mesic} className="overflow-hidden rounded-xl border border-line">
-              <div className="flex items-center gap-2 bg-surface-sunken/60 px-3 py-2 text-sm font-semibold">
-                <Sipka otevreno={mesiceOtevrene.m.has(mesic)} onClick={() => mesiceOtevrene.prepni(mesic)} popisek={`Rozbalit nebo sbalit měsíc ${mesic}`} />
-                <span className="flex-1 capitalize">{nazevMesice(Number(m))} {rok}</span>
-                {dluh > 0
-                  ? <Badge tone="bad">{nezapl > 0 ? `${nezapl} nezaplaceno` : "nedoplaceno"} · {czk(dluh)}</Badge>
-                  : <Badge tone="good">vše zaplaceno</Badge>}
-                {radky.some((p) => !radek(p.klic).datum) && <button type="button" className="btn px-2 py-0.5 text-xs font-normal" onClick={() => otevriHromadne(`Vše zaplaceno: ${nazevMesice(Number(m))} ${rok}`, radky)}>Vše zaplaceno</button>}
+            <section key={rok} className="rounded-xl border border-line p-2">
+              <div className="flex items-center gap-2 px-1 py-1 text-sm font-semibold">
+                <Sipka otevreno={otevrenyRok} onClick={() => rokyOtevrene.prepni(rok)} popisek={`Rozbalit nebo sbalit rok ${rok}`} />
+                <span className="flex-1">{rok}</span>
+                {dluhRoku > 0 ? <Badge tone="bad">{czk(dluhRoku)}</Badge> : <Badge tone="good">vše zaplaceno</Badge>}
               </div>
-              {mesiceOtevrene.m.has(mesic) && skupiny(radky).map((sk) => {
-                const k = klicSkupiny(mesic, sk);
-                const otevrena = skupinyOtevrene.m.has(k);
-                const dl = prehledPlateb(sk.platby);
-                const dluhSk = dl.najemciDluzi + dl.dluzimDodavatelum;
-                return (
-                  <div key={k} className="border-t border-line/60">
-                    <div className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                      <Sipka otevreno={otevrena} onClick={() => skupinyOtevrene.prepni(k)} popisek={`Rozbalit nebo sbalit ${sk.nazev}`} />
-                      <span className="min-w-0 flex-1 truncate">{sk.typ === "DODAVATEL" ? "Dodavatel" : "Nájemce"}: <span className="normal-case tracking-normal text-ink-primary">{sk.nazev}</span></span>
-                      <span className="normal-case tracking-normal">{sk.platby.length}×</span>
-                      <span className={`w-24 text-right normal-case tracking-normal tabular-nums ${dluhSk > 0 ? "text-bad" : "text-good"}`}>{dluhSk > 0 ? czk(dluhSk) : "zaplaceno"}</span>
-                      {sk.platby.some((p) => !radek(p.klic).datum) && <button type="button" className="btn px-2 py-0.5 text-[11px] normal-case tracking-normal font-normal" onClick={() => otevriHromadne(`Zaplaceno: ${sk.nazev}`, sk.platby)}>Zaplaceno</button>}
-                    </div>
-                    {otevrena && (
-                      <ul className="divide-y divide-line/60">
-                        {sk.platby.map((p) => {
-                          const r = radek(p.klic);
-                          const pohyb = p.zaplaceno?.zdroj === "POHYB";
-                          const predpis = Math.abs(p.castka);
-                          const zaplacenoCastka = Number(r.castka.replace(",", ".")) || 0;
-                          const mene = r.datum && zaplacenoCastka > 0 && predpis - zaplacenoCastka > 0.005;
-                          return (
-                            <li key={p.klic} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2 pl-9 pr-3.5">
-                              <div className="min-w-0 flex-1 basis-48">
-                                <div className="text-sm">{p.popis}</div>
-                                <div className="text-xs text-ink-muted">
-                                  splatnost {dateCz(p.datum)} · předpis {czk(predpis)}
-                                  {p.castecny && <span className="ml-2"><Badge tone="warn">částečný měsíc</Badge></span>}
-                                  {!r.datum && dniPo(p.datum) > 0 && <span className="ml-2 text-bad">po splatnosti {dniPo(p.datum)} dní</span>}
-                                  {mene && <span className="ml-2 text-warn">nedoplaceno {czk(predpis - zaplacenoCastka)}</span>}
-                                </div>
-                              </div>
-                              {pohyb ? (
-                                <span className="text-xs text-ink-secondary">
-                                  zaplaceno {dateCz(p.zaplaceno!.datum)} · {czk(p.zaplaceno!.castka)} <Badge tone="neutral">zaúčtováno jako pohyb</Badge>
-                                </span>
-                              ) : (
-                                r.datum ? (
-                                  <div className="flex items-center gap-2">
-                                    <div className="text-right leading-tight">
-                                      <span className="inline-flex items-center gap-1 rounded-full bg-good/10 px-2 py-0.5 text-xs font-medium text-good">
-                                        <Ikona nazev="ok" trida="h-3 w-3" />zaplaceno {dateCz(r.datum)}
-                                      </span>
-                                      <div className={`mt-0.5 text-sm font-semibold tabular-nums ${mene ? "text-warn" : ""}`}>{czk(zaplacenoCastka)}</div>
-                                    </div>
-                                    <button type="button" title="Změnit datum nebo částku" aria-label="Změnit zaplacení"
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted hover:bg-accent-soft hover:text-accent"
-                                      onClick={() => setOkno({ nadpis: p.popis, platby: [p], datum: r.datum!, castka: r.castka })}>
-                                      <Ikona nazev="pero" />
-                                    </button>
-                                    <button type="button" title="Zrušit zaplacení" aria-label="Zrušit zaplacení"
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted hover:bg-bad/10 hover:text-bad"
-                                      onClick={() => nastav(p.klic, { datum: null })}>
-                                      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6L6 18" /></svg>
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button type="button" className="btn px-3 py-1 text-xs" onClick={() => setOkno({ nadpis: p.popis, platby: [p], datum: dnes, castka: r.castka })}>Zaplaceno</button>
-                                )
-                              )}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
+              {otevrenyRok && (
+                <div className="mt-2 space-y-3">
+            {mesiceRoku.map(([mesic, radky]) => {
+              const [rok, m] = mesic.split("-");
+              const dluhMesice = prehledPlateb(radky);
+              const dluh = dluhMesice.najemciDluzi + dluhMesice.dluzimDodavatelum;
+              const nezapl = radky.filter((p) => !p.zaplaceno).length;
+              return (
+                <section key={mesic} className="overflow-hidden rounded-xl border border-line">
+                  <div className="flex items-center gap-2 bg-surface-sunken/60 px-3 py-2 text-sm font-semibold">
+                    <Sipka otevreno={mesiceOtevrene.m.has(mesic)} onClick={() => mesiceOtevrene.prepni(mesic)} popisek={`Rozbalit nebo sbalit měsíc ${mesic}`} />
+                    <span className="flex-1 capitalize">{nazevMesice(Number(m))} {rok}</span>
+                    {dluh > 0
+                      ? <Badge tone="bad">{nezapl > 0 ? `${nezapl} nezaplaceno` : "nedoplaceno"} · {czk(dluh)}</Badge>
+                      : <Badge tone="good">vše zaplaceno</Badge>}
+                    {radky.some((p) => !radek(p.klic).datum) && <button type="button" className="btn px-2 py-0.5 text-xs font-normal" onClick={() => otevriHromadne(`Vše zaplaceno: ${nazevMesice(Number(m))} ${rok}`, radky)}>Vše zaplaceno</button>}
                   </div>
-                );
-              })}
+                  {mesiceOtevrene.m.has(mesic) && skupiny(radky).map((sk) => {
+                    const k = klicSkupiny(mesic, sk);
+                    const otevrena = skupinyOtevrene.m.has(k);
+                    const dl = prehledPlateb(sk.platby);
+                    const dluhSk = dl.najemciDluzi + dl.dluzimDodavatelum;
+                    return (
+                      <div key={k} className="border-t border-line/60">
+                        <div className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                          <Sipka otevreno={otevrena} onClick={() => skupinyOtevrene.prepni(k)} popisek={`Rozbalit nebo sbalit ${sk.nazev}`} />
+                          <span className="min-w-0 flex-1 truncate">{sk.typ === "DODAVATEL" ? "Dodavatel" : "Nájemce"}: <span className="normal-case tracking-normal text-ink-primary">{sk.nazev}</span></span>
+                          <span className="normal-case tracking-normal">{sk.platby.length}×</span>
+                          <span className={`w-24 text-right normal-case tracking-normal tabular-nums ${dluhSk > 0 ? "text-bad" : "text-good"}`}>{dluhSk > 0 ? czk(dluhSk) : "zaplaceno"}</span>
+                          {sk.platby.some((p) => !radek(p.klic).datum) && <button type="button" className="btn px-2 py-0.5 text-[11px] normal-case tracking-normal font-normal" onClick={() => otevriHromadne(`Zaplaceno: ${sk.nazev}`, sk.platby)}>Zaplaceno</button>}
+                        </div>
+                        {otevrena && (
+                          <ul className="divide-y divide-line/60">
+                            {sk.platby.map((p) => {
+                              const r = radek(p.klic);
+                              const pohyb = p.zaplaceno?.zdroj === "POHYB";
+                              const predpis = Math.abs(p.castka);
+                              const zaplacenoCastka = Number(r.castka.replace(",", ".")) || 0;
+                              const mene = r.datum && zaplacenoCastka > 0 && predpis - zaplacenoCastka > 0.005;
+                              return (
+                                <li key={p.klic} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2 pl-9 pr-3.5">
+                                  <div className="min-w-0 flex-1 basis-48">
+                                    <div className="text-sm">{p.popis}</div>
+                                    <div className="text-xs text-ink-muted">
+                                      splatnost {dateCz(p.datum)} · předpis {czk(predpis)}
+                                      {p.castecny && <span className="ml-2"><Badge tone="warn">částečný měsíc</Badge></span>}
+                                      {!r.datum && dniPo(p.datum) > 0 && <span className="ml-2 text-bad">po splatnosti {dniPo(p.datum)} dní</span>}
+                                      {mene && <span className="ml-2 text-warn">nedoplaceno {czk(predpis - zaplacenoCastka)}</span>}
+                                    </div>
+                                  </div>
+                                  {pohyb ? (
+                                    <span className="text-xs text-ink-secondary">
+                                      zaplaceno {dateCz(p.zaplaceno!.datum)} · {czk(p.zaplaceno!.castka)} <Badge tone="neutral">zaúčtováno jako pohyb</Badge>
+                                    </span>
+                                  ) : (
+                                    r.datum ? (
+                                      <div className="flex items-center gap-2">
+                                        <div className="text-right leading-tight">
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-good/10 px-2 py-0.5 text-xs font-medium text-good">
+                                            <Ikona nazev="ok" trida="h-3 w-3" />zaplaceno {dateCz(r.datum)}
+                                          </span>
+                                          <div className={`mt-0.5 text-sm font-semibold tabular-nums ${mene ? "text-warn" : ""}`}>{czk(zaplacenoCastka)}</div>
+                                        </div>
+                                        <button type="button" title="Změnit datum nebo částku" aria-label="Změnit zaplacení"
+                                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted hover:bg-accent-soft hover:text-accent"
+                                          onClick={() => setOkno({ nadpis: p.popis, platby: [p], datum: r.datum!, castka: r.castka })}>
+                                          <Ikona nazev="pero" />
+                                        </button>
+                                        <button type="button" title="Zrušit zaplacení" aria-label="Zrušit zaplacení"
+                                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-muted hover:bg-bad/10 hover:text-bad"
+                                          onClick={() => nastav(p.klic, { datum: null })}>
+                                          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6L6 18" /></svg>
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <button type="button" className="btn px-3 py-1 text-xs" onClick={() => setOkno({ nadpis: p.popis, platby: [p], datum: dnes, castka: r.castka })}>Zaplaceno</button>
+                                    )
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })}
+                </section>
+              );
+            })}
+                </div>
+              )}
             </section>
           );
         })}
       </div>
 
-      {mesice.length > POCET_MESICU && (
-        <button type="button" className="btn mt-3 w-full text-xs" onClick={() => setVsechnyMesice((v) => !v)}>
-          {vsechnyMesice ? "Zobrazit jen nejnovější měsíce" : `Zobrazit starší měsíce (${mesice.length - POCET_MESICU})`}
-        </button>
-      )}
 
       {okno && (
         <ZaplacenoOkno nadpis={okno.nadpis} datum={okno.datum} castka={okno.castka} max={dnes} splatnost={okno.platby.length === 1 ? okno.platby[0].datum : undefined} onZavrit={() => setOkno(null)}
