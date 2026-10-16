@@ -188,7 +188,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       id: String(x.id), propertyId: String(x.propertyId), type: String(x.type),
       provider: String(x.provider), contractNo: s(x.contractNo),
       monthlyCost: c(x.monthlyCost), annualCost: x.annualCost == null ? null : c(x.annualCost),
-      contractStart: d(x.contractStart), contractEnd: d(x.contractEnd), activeTo: d(x.activeTo),
+      contractStart: d(x.contractStart), contractEnd: d(x.contractEnd), activeTo: d(x.activeTo), groupName: s(x.groupName),
       noticePeriodMonths: Math.round(c(x.noticePeriodMonths)),
       isBundleable: x.isBundleable !== false, notes: s(x.notes),
       // Starsi zalohy pole nemaji; chybejici hodnota znamena "nepreuctovava se"
@@ -233,7 +233,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       totalCost: c(x.totalCost), supplierAdvances: c(x.supplierAdvances),
       splitMode: x.splitMode === "READINGS" ? "READINGS" : "DAYS",
       readingUnit: x.readingUnit ?? null, ownerConsumption: x.ownerConsumption == null ? null : c(x.ownerConsumption),
-      invoiceNo: x.invoiceNo ?? null, notes: x.notes ?? null, createdAt: dPovinne(x.createdAt ?? new Date()),
+      invoiceNo: x.invoiceNo ?? null, notes: x.notes ?? null, batchId: x.batchId ?? null, createdAt: dPovinne(x.createdAt ?? new Date()),
     }));
     if (vyuctovani.length) obnoveno.serviceSettlement = (await tx.serviceSettlement.createMany({ data: vyuctovani })).count;
 

@@ -372,6 +372,8 @@ const sluzbaSchema = z.object({
   contractEnd: datumNeboNic,
   /** Posledni den, kdy sluzba platila; prazdne = plati dosud. */
   activeTo: datumNeboNic,
+  /** Nadrazena kategorie (skupina sluzeb vyuctovavanych spolecne). */
+  groupName: textNeboNic,
   /** Od kdy sluzba plati — povinne. */
   contractStart: z.string().min(1, "Zadej, od kdy služba platí."),
   noticePeriodMonths: cislo(),
@@ -410,6 +412,7 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
     contractStart: new Date(d.contractStart),
     contractEnd: d.contractEnd ? new Date(d.contractEnd) : null,
     activeTo: d.activeTo ? new Date(d.activeTo) : null,
+    groupName: d.groupName,
     noticePeriodMonths: Math.round(d.noticePeriodMonths),
     isBundleable: d.isBundleable,
     chargedToTenant: d.chargedToTenant,

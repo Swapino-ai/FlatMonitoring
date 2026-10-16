@@ -1,4 +1,4 @@
-import { nepokryto, prunik, rozuctuj, vyuctovaniNajemce, zalohyZaRozsah, type NajemVstup, type VyuctovaniVstup } from "../src/lib/vyuctovani";
+import { nepokryto, prunik, rozdelPodleVah, rozuctuj, vyuctovaniNajemce, zalohyZaRozsah, type NajemVstup, type VyuctovaniVstup } from "../src/lib/vyuctovani";
 
 let chyby = 0;
 function ok(popis: string, podminka: boolean, detail?: unknown) {
@@ -74,6 +74,16 @@ ok("chybejici vyuctovani je videt", mezera.neuplne && mezera.radky[0].chybi[0][0
 ok("mimo najem chyba", vyuctovaniNajemce(A, [A, B], sluzby, "2026-01-01", "2026-02-01").chyba != null);
 ok("neprectena sluzba se nepocita", vyuctovaniNajemce(A, [A, B], [{ ...sluzby[0], prectena: false }], "2025-01-01", "2025-06-30").radky.length === 0);
 ok("prunik", prunik("2025-01-01", "2025-01-31", "2025-01-15", null)?.[0] === "2025-01-15");
+
+{
+  const r = rozdelPodleVah(100, [1, 1, 1]);
+  ok("rozdel po tretinach, soucet presne", r.length === 3 && Math.round(r.reduce((a, x) => a + x, 0) * 100) === 10000, JSON.stringify(r));
+  const v = rozdelPodleVah(1000, [300, 700]);
+  ok("rozdel podle vah", v[0] === 300 && v[1] === 700, JSON.stringify(v));
+  const n = rozdelPodleVah(90, [0, 0]);
+  ok("nulove vahy rovnym dilem", n[0] === 45 && n[1] === 45, JSON.stringify(n));
+  ok("prazdne", rozdelPodleVah(10, []).length === 0);
+}
 
 console.log(chyby ? `${chyby} chyb` : "vše v pořádku");
 process.exit(chyby ? 1 : 0);

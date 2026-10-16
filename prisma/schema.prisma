@@ -255,6 +255,7 @@ model Service {
   contractStart      DateTime?
   contractEnd        DateTime? // konec zavazku — kdy lze prejit jinam
   activeTo           DateTime? // posledni den, kdy sluzba platila (ukoncena sluzba); prazdne = plati dosud
+  groupName          String? // nadrazena kategorie: sluzby se stejnym nazvem se vyuctovavaji spolecne
   noticePeriodMonths Int       @default(0)
 
   isBundleable Boolean @default(true) // lze zahrnout do hromadne poptavky?
@@ -536,6 +537,8 @@ model ServiceSettlement {
 
   invoiceNo String?
   notes     String?
+  /// Spolecne vyuctovani vice sluzeb: zaznamy se stejnym batchId vznikly z jednoho dokladu
+  batchId   String?
   createdAt DateTime @default(now())
 
   readings SettlementReading[]

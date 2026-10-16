@@ -263,3 +263,20 @@ export function vyuctovaniNajemce(
     neuplne: radky.some((x) => x.chybi.length > 0 || x.zdroje.some((z) => z.chybiOdecet)),
   };
 }
+
+/**
+ * Rozdeli castku mezi polozky podle vah (u spolecneho vyuctovani vice sluzeb podle jejich
+ * mesicnich nakladu). Bez kladnych vah rovnym dilem. Soucet vyjde presne na halere.
+ */
+export function rozdelPodleVah(castka: number, vahy: number[]): number[] {
+  if (vahy.length === 0) return [];
+  const celkem = vahy.reduce((a, v) => a + Math.max(v, 0), 0);
+  const podily = celkem > 0 ? vahy.map((v) => Math.max(v, 0) / celkem) : vahy.map(() => 1 / vahy.length);
+  const halere = Math.round(castka * 100);
+  const casti = podily.map((p) => Math.floor(halere * p));
+  let zbytek = halere - casti.reduce((a, c) => a + c, 0);
+  // Zbytek po zaokrouhleni dostanou polozky od nejvetsiho podilu
+  const poradi = podily.map((p, i) => [p, i] as const).sort((a, b) => b[0] - a[0]);
+  for (let k = 0; zbytek > 0; k = (k + 1) % poradi.length, zbytek--) casti[poradi[k][1]] += 1;
+  return casti.map((c) => c / 100);
+}

@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import {
-  deleteSettlement, saveSettlement, type VyuctovaniFormState,
+  deleteSettlement, saveSettlement, saveSettlementSkupina, type VyuctovaniFormState,
 } from "@/lib/vyuctovaniActions";
 import {
   pridejDny, prunik, rozuctuj, vyuctovaniNajemce,
@@ -16,7 +16,7 @@ import { Ikona, type NazevIkony } from "./Ikony";
 import { Badge } from "./Stat";
 import { Dokumenty, type DokumentRadek } from "./Dokumenty";
 
-export interface SluzbaRadek { id: string; type: string; provider: string; chargedToTenant: boolean }
+export interface SluzbaRadek { id: string; type: string; provider: string; chargedToTenant: boolean; groupName?: string | null }
 
 export interface NajemRadek extends NajemVstup {
   tenantStreet: string | null; tenantCity: string | null; tenantZip: string | null;
@@ -27,6 +27,9 @@ export interface VyuctovaniRadek extends VyuctovaniVstup {
   serviceId: string;
   cisloFaktury: string | null;
   poznamka: string | null;
+  /** Spolecne vyuctovani vice sluzeb: stejny batchId a pocet sluzeb v nem. */
+  batchId?: string | null;
+  batchPocet?: number;
 }
 
 const dnesISO = () => new Date().toISOString().slice(0, 10);
@@ -44,6 +47,7 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
 }) {
   const [addState, addAction, adding] = useActionState<VyuctovaniFormState, FormData>(saveSettlement.bind(null, null), {});
   const [delState, delAction] = useActionState<VyuctovaniFormState, FormData>(deleteSettlement, {});
+  const [skupinaState, skupinaAction, skupinaBezi] = useActionState<VyuctovaniFormState, FormData>(saveSettlementSkupina, {});
   const [upravaId, setUpravaId] = useState<string | null>(null);
   const [upravaState, upravaAction, upravuji] = useActionState<VyuctovaniFormState, FormData>(
     saveSettlement.bind(null, upravaId), {});
@@ -57,6 +61,7 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
 
   const stav = upravaState.error || upravaState.success ? upravaState
     : addState.error || addState.success ? addState
+    : skupinaState.error || skupinaState.success ? skupinaState
     : delState.error || delState.success ? delState : {};
 
   const sSluzbami = services.filter((s) => vyuctovani.some((v) => v.serviceId === s.id));
@@ -98,6 +103,7 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
                               </div>
                             )}
                             <div className="text-xs text-ink-muted">
+                              {v.batchId && <span className="mr-1.5"><Badge tone="neutral">společný doklad · {v.batchPocet} služeb</Badge></span>}
                               {v.cisloFaktury ? `č. ${v.cisloFaktury} · ` : ""}
                               {v.rezim === "READINGS" ? `podle odečtů${v.jednotka ? ` (${v.jednotka})` : ""}` : "podle dnů"}
                             </div>
@@ -134,7 +140,7 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
                                 <UpravitTlacitko aktivni={upravaId === v.id}
                                   onClick={() => setUpravaId(upravaId === v.id ? null : v.id)} />
                                 <SmazatTlacitko action={delAction} id={v.id}
-                                  potvrzeni={`Smazat vyúčtování ${obdobi(v.od, v.do)}?`} />
+                                  potvrzeni={v.batchId ? `Smazat společné vyúčtování ${obdobi(v.od, v.do)} u všech ${v.batchPocet} služeb?` : `Smazat vyúčtování ${obdobi(v.od, v.do)}?`} />
                               </>
                             )}
                           </div>
@@ -220,7 +226,58 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
             action={addAction} pending={adding} popisekTlacitka="Uložit vyúčtování" />
         </Rozbalovaci>
       )}
+      {canEdit && !upravovane && services.length >= 2 && (
+        <Rozbalovaci popisek="Společné vyúčtování více služeb" zavritPo={skupinaState.success}>
+          <SkupinaFormular services={services} typy={typy} action={skupinaAction} pending={skupinaBezi} />
+        </Rozbalovaci>
+      )}
     </div>
+  );
+}
+
+function SkupinaFormular({ services, typy, action, pending }: {
+  services: SluzbaRadek[]; typy: TypySluzeb;
+  action: (payload: FormData) => void; pending: boolean;
+}) {
+  const [vybrane, setVybrane] = useState<Set<string>>(new Set());
+  const skupiny = [...new Set(services.map((s) => s.groupName).filter((g): g is string => !!g))].sort();
+  const prepni = (id: string) => setVybrane((v) => { const n = new Set(v); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const vyberSkupinu = (g: string) => setVybrane(new Set(services.filter((s) => s.groupName === g).map((s) => s.id)));
+  return (
+    <form action={action} className="grid gap-3 sm:grid-cols-2">
+      <div className="sm:col-span-2">
+        <div className="label mb-1.5">Služby na jednom dokladu</div>
+        {skupiny.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {skupiny.map((g) => (
+              <button key={g} type="button" className="btn px-2.5 py-1 text-xs" onClick={() => vyberSkupinu(g)}>Celá skupina: {g}</button>
+            ))}
+          </div>
+        )}
+        <div className="grid gap-1.5 sm:grid-cols-2">
+          {services.map((s) => (
+            <label key={s.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm">
+              <input type="checkbox" checked={vybrane.has(s.id)} onChange={() => prepni(s.id)} className="h-4 w-4 accent-accent" />
+              <span className="min-w-0 flex-1 truncate">{nazevDruhu(typy, s.type)} · {s.provider}</span>
+              {s.groupName && <span className="text-xs text-ink-muted">{s.groupName}</span>}
+            </label>
+          ))}
+        </div>
+        {[...vybrane].map((id) => <input key={id} type="hidden" name="serviceId" value={id} />)}
+        <p className="mt-1 text-xs text-ink-muted">Doklad se rozdělí mezi vybrané služby podle jejich měsíčních nákladů a uloží se jako vyúčtování každé z nich.</p>
+      </div>
+      <Pole label="Období od" name="periodFrom" type="date" required />
+      <Pole label="Období do" name="periodTo" type="date" required />
+      <Pole label="Skutečný náklad celkem (Kč)" name="totalCost" type="number" step="0.01" required />
+      <Pole label="Zálohy zaplacené dodavateli celkem (Kč)" name="supplierAdvances" type="number" step="0.01" defaultValue={0} />
+      <Pole label="Číslo dokladu" name="invoiceNo" placeholder="nepovinné" />
+      <TextPole label="Poznámka" name="notes" />
+      <div className="sm:col-span-2">
+        <button type="submit" disabled={pending || vybrane.size < 2} className="btn btn-primary">
+          {pending ? "Ukládám…" : `Uložit společné vyúčtování (${vybrane.size} služeb)`}
+        </button>
+      </div>
+    </form>
   );
 }
 

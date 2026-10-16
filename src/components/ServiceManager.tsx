@@ -15,7 +15,7 @@ import { Badge } from "./Stat";
 
 interface Row {
   id: string; type: string; provider: string; contractNo: string | null; monthlyCost: number;
-  annualCost: number | null; contractStart: Date | null; contractEnd: Date | null; activeTo: Date | null; noticePeriodMonths: number; isBundleable: boolean;
+  annualCost: number | null; contractStart: Date | null; contractEnd: Date | null; activeTo: Date | null; groupName: string | null; noticePeriodMonths: number; isBundleable: boolean;
   notes: string | null; chargedToTenant: boolean;
 }
 
@@ -51,6 +51,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   const poplatkova = services.find((s) => s.id === poplatekId) ?? null;
 
   const upravovana = services.find((s) => s.id === upravaId) ?? null;
+  const skupiny = [...new Set(services.map((s) => s.groupName).filter((g): g is string => !!g))].sort();
   // Soucet z vyse, ktere jsou v radcich videt (posledni zapsana, i budouci)
   const celkem = services.reduce((a, s) => {
     const posledni = [...(historie[s.id] ?? [])]
@@ -115,6 +116,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                         {s.activeTo && s.activeTo.getTime() < Date.now() && (
                           <div className="mt-0.5"><Badge tone="neutral">ukončená</Badge></div>
                         )}
+                        {s.groupName && <div className="mt-0.5 text-xs text-ink-muted">skupina: {s.groupName}</div>}
                         {s.chargedToTenant && (
                           <div className="mt-0.5 flex items-center gap-1 text-xs font-medium text-accent">
                             <Ikona nazev="najemce" trida="h-3.5 w-3.5" />hradí nájemce zálohou
@@ -239,14 +241,14 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
       {canEdit && upravovana && (
         <UpravaPanel nadpis={`Upravit ${nazevDruhu(typy, upravovana.type)}`}
           onZavrit={() => setUpravaId(null)}>
-          <Formular key={upravovana.id} typy={typy} propertyId={propertyId} r={upravovana}
+          <Formular key={upravovana.id} skupiny={skupiny} typy={typy} propertyId={propertyId} r={upravovana}
             action={upravaAction} pending={upravuji} popisekTlacitka="Uložit změny" />
         </UpravaPanel>
       )}
 
       {canEdit && !upravovana && !poplatkova && (
         <Rozbalovaci popisek="Přidat službu nebo dodavatele" zavritPo={addState.success}>
-          <Formular typy={typy} propertyId={propertyId} r={null} action={addAction} pending={adding}
+          <Formular skupiny={skupiny} typy={typy} propertyId={propertyId} r={null} action={addAction} pending={adding}
             popisekTlacitka="Uložit službu" />
         </Rozbalovaci>
       )}
@@ -254,8 +256,10 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   );
 }
 
-function Formular({ propertyId, r, action, pending, popisekTlacitka, typy }: {
+function Formular({ propertyId, r, action, pending, popisekTlacitka, typy, skupiny }: {
   typy: TypySluzeb;
+  /** Existujici nazvy skupin, at se nepisou dvakrat jinak. */
+  skupiny: string[];
   propertyId: string; r: Row | null;
   action: (payload: FormData) => void; pending: boolean; popisekTlacitka: string;
 }) {
@@ -294,6 +298,13 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka, typy }: {
         hint="Od tohoto dne se služba počítá do nákladů a záloh; dřívější období se s ní neporovnává." />
       <Pole label="Služba platila do" name="activeTo" type="date" defaultValue={isoDatum(r?.activeTo)}
         hint="Vyplň, když jsi službu ukončil. Po tomto dni se do nákladů a záloh nepočítá; prázdné = platí dosud." />
+      <div>
+        <label className="label mb-1.5 block" htmlFor="groupName">Skupina (nadřazená kategorie)</label>
+        <input id="groupName" name="groupName" list="skupiny-sluzeb" className="input" placeholder="nepovinné, např. Voda"
+          defaultValue={r?.groupName ?? ""} />
+        <datalist id="skupiny-sluzeb">{skupiny.map((g) => <option key={g} value={g} />)}</datalist>
+        <p className="mt-1 text-xs text-ink-muted">Služby se stejnou skupinou jde vyúčtovat jedním dokladem.</p>
+      </div>
       <Pole label="Číslo smlouvy" name="contractNo" placeholder="nepovinné" defaultValue={r?.contractNo ?? ""} />
       <Pole label="Smlouva vázána do" name="contractEnd" type="date" defaultValue={isoDatum(r?.contractEnd)}
         hint="Do kdy nelze přejít jinam" />

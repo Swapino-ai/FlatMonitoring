@@ -135,6 +135,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     jednotka: v.readingUnit, spotrebaVlastnik: v.ownerConsumption,
     odecty: Object.fromEntries(v.readings.map((o) => [o.leaseId, o.consumption])),
     cisloFaktury: v.invoiceNo, poznamka: v.notes,
+    batchId: v.batchId, batchPocet: v.batchId ? vyuctovaniDb.filter((x) => x.batchId === v.batchId).length : undefined,
   }));
   const dokumentyVyuctovani: Record<string, { id: string; name: string; mime: string; size: number; kategorie: string; rok: number | null; note: string | null; createdAt: Date }[]> = {};
   for (const d of dokumentyDb) (dokumentyVyuctovani[d.settlementId!] ??= []).push(d);
@@ -636,7 +637,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             pocet: vyuctovani.length || undefined,
             obsah: (<>
             <SbalitelnaKarta klic="vyuctovani-sluzeb" title="Vyúčtování služeb od dodavatelů">
-              <VyuctovaniSluzeb typy={typy} dokumenty={dokumentyVyuctovani} diskPripojen={diskPripojen} services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant }))}
+              <VyuctovaniSluzeb typy={typy} dokumenty={dokumentyVyuctovani} diskPripojen={diskPripojen} services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant, groupName: sl.groupName }))}
                 leases={najmyVyuctovani} vyuctovani={vyuctovani} canEdit={user.role === "OWNER"} />
             </SbalitelnaKarta>
             {jeMajitel && (
