@@ -173,25 +173,25 @@ export function VyvojChart({ data, nazev, reference, kompaktni = false }: {
 }) {
   const f = kompaktni ? czkCompact : czk;
   return (
-    <ResponsiveContainer width="100%" height={220}>
-      <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={300}>
+      <ComposedChart data={data} margin={{ top: 24, right: 24, left: 8, bottom: 12 }}>
         <defs>
           <linearGradient id={`gVyvoj-${nazev}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={SERIES[0]} stopOpacity={0.22} />
-            <stop offset="100%" stopColor={SERIES[0]} stopOpacity={0.02} />
+            <stop offset="0%" stopColor={SERIES[0]} stopOpacity={0.12} />
+            <stop offset="100%" stopColor={SERIES[0]} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid stroke={GRID} strokeDasharray="2 4" vertical={false} />
-        <XAxis dataKey="datum" tick={AXIS} tickLine={false} axisLine={{ stroke: GRID }} minTickGap={32} />
-        <YAxis tick={AXIS} tickLine={false} axisLine={false} width={64} tickFormatter={f}
+        <CartesianGrid stroke={GRID} strokeOpacity={0.5} strokeDasharray="1 6" vertical={false} />
+        <XAxis dataKey="datum" tick={AXIS} tickLine={false} axisLine={false} minTickGap={56} tickMargin={12} />
+        <YAxis tick={AXIS} tickLine={false} axisLine={false} width={64} tickMargin={8} tickCount={4} tickFormatter={f}
           domain={[(min: number) => Math.floor((reference ? Math.min(min, reference.hodnota) : min) * 0.95), (max: number) => Math.ceil((reference ? Math.max(max, reference.hodnota) : max) * 1.05)]} />
         <Tooltip content={<ChartTooltip formatter={(v: number) => czk(v)} />} cursor={{ stroke: GRID }} />
         {reference && (
           <ReferenceLine y={reference.hodnota} stroke={SERIES[2]} strokeDasharray="5 4"
             label={{ value: reference.popisek, position: "insideTopRight", fontSize: 11, fill: "rgb(var(--text-secondary))" }} />
         )}
-        <Area type="monotone" dataKey="hodnota" name={nazev} stroke={SERIES[0]} strokeWidth={2} fill={`url(#gVyvoj-${nazev})`}
-          dot={data.length <= 24} activeDot={{ r: 4 }} />
+        <Area type="monotone" dataKey="hodnota" name={nazev} stroke={SERIES[0]} strokeWidth={1.75} fill={`url(#gVyvoj-${nazev})`}
+          dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: "rgb(var(--surface-card))" }} />
       </ComposedChart>
     </ResponsiveContainer>
   );
