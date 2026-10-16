@@ -111,7 +111,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                   const soucet = pol.sluzby.reduce((a, x) => a + vyseSluzby(x), 0);
                   const ikona = navrhniIkonu(pol.nazev) ?? typy[pol.sluzby[0].type]?.icon ?? "tri";
                   return (
-                    <tr key={`g:${pol.nazev}`} className="bg-surface-sunken/60">
+                    <tr key={`g:${pol.nazev}`} className="border-y-2 border-accent/20 bg-accent-soft/40">
                       <td colSpan={2} className="!py-2">
                         <button type="button" onClick={() => prepniSkupinu(pol.nazev)} aria-expanded={pol.otevrena}
                           className="flex w-full items-center gap-3 text-left">
@@ -245,12 +245,12 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
               })}
             </tbody>
             <tfoot>
-              <tr className="bg-surface-sunken/60">
-                <td className="rounded-bl-xl px-3 py-3 font-semibold">Celkem měsíčně</td>
+              <tr className="border-t-4 border-double border-line bg-surface-card">
+                <td className="px-3 py-4 font-semibold uppercase tracking-wide text-ink-secondary">Celkem měsíčně</td>
                 <td className="hidden sm:table-cell" />
-                <td className="num px-3 py-3 text-base font-bold">{czk(celkem)}</td>
+                <td className="num px-3 py-4 text-lg font-bold">{czk(celkem)}</td>
                 <td className="hidden sm:table-cell" />
-                {canEdit && <td className="rounded-br-xl" />}
+                {canEdit && <td />}
               </tr>
             </tfoot>
           </table>
