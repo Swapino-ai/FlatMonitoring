@@ -116,21 +116,36 @@ export interface OdhadZarazenych {
   rada: { datum: string; hodnota: number; perM2: number; pocet: number }[];
 }
 
+/** Datum (rrrr-mm-dd) posunute o dny. */
+function minusDni(datum: string, dni: number): string {
+  return new Date(Date.parse(`${datum}T00:00:00Z`) - dni * 86400000).toISOString().slice(0, 10);
+}
+
 /**
- * Odhad z poslednich `okno` zarazenych inzeratu (podle data, kdy se objevily na trhu).
- * Medián ceny za m² krat plocha nemovitosti. Rada ukazuje, jak se odhad vyvijel,
- * jak pribyvaly nove nabidky.
+ * Odhad ze zarazenych inzeratu, ktere se objevily na trhu za poslednich `oknoDni` dni
+ * (pred datem posledniho z nich). Median ceny za m² krat plocha nemovitosti. Rada ukazuje,
+ * jak se odhad vyvijel: v kazdem bode z nabidek za predchozich `oknoDni` dni.
  */
-export function odhadZeZarazenych(body: ZarazenyBod[], areaM2: number, okno = 10): OdhadZarazenych | null {
+export function odhadZeZarazenych(body: ZarazenyBod[], areaM2: number, oknoDni = 61): OdhadZarazenych | null {
   const platne = body.filter((b) => b.pricePerM2 > 0).sort((a, b) => (a.datum < b.datum ? -1 : a.datum > b.datum ? 1 : 0));
   if (platne.length === 0) return null;
   const poDnech = new Map<string, { hodnota: number; perM2: number; pocet: number }>();
-  for (let k = 0; k < platne.length; k++) {
-    const vzorek = platne.slice(Math.max(0, k + 1 - okno), k + 1);
-    const perM2 = median(vzorek.map((b) => b.pricePerM2));
-    poDnech.set(platne[k].datum, { perM2, hodnota: Math.round(perM2 * areaM2), pocet: vzorek.length });
+  for (const b of platne) {
+    const od = minusDni(b.datum, oknoDni);
+    const vzorek = platne.filter((x) => x.datum > od && x.datum <= b.datum);
+    const perM2 = median(vzorek.map((x) => x.pricePerM2));
+    poDnech.set(b.datum, { perM2, hodnota: Math.round(perM2 * areaM2), pocet: vzorek.length });
   }
   const rada = [...poDnech.entries()].map(([datum, v]) => ({ datum, ...v }));
   const posledni = rada[rada.length - 1];
   return { hodnota: posledni.hodnota, perM2: posledni.perM2, pocet: posledni.pocet, rada };
+}
+
+/** Inzeraty, ze kterych vznikl aktualni odhad (okno pred poslednim zarazenym). */
+export function vOkneOdhadu<T extends ZarazenyBod>(body: T[], oknoDni = 61): T[] {
+  const platne = body.filter((b) => b.pricePerM2 > 0);
+  if (!platne.length) return [];
+  const posledni = platne.reduce((m, b) => (b.datum > m ? b.datum : m), platne[0].datum);
+  const od = minusDni(posledni, oknoDni);
+  return platne.filter((b) => b.datum > od);
 }

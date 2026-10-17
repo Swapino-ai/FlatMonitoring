@@ -53,7 +53,7 @@ function km(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
 
 /**
  * Sledovani trhu u jedne nemovitosti: zapnuti, navrhy ke kontrole, zarazene a vyrazene
- * nabidky, odhad z poslednich 10 zarazenych a jeho vyvoj v case.
+ * nabidky, odhad ze zarazenych za posledni 2 mesice a jeho vyvoj v case.
  */
 export function TrhNemovitosti({ propertyId, trhId, propojeni, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
   diag?: StatistikaNavrhu;
@@ -85,6 +85,9 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, canEdit, sledovat
     .sort((a, b) => Number(b.doporuceno) - Number(a.doporuceno) || (b.skore ?? 0) - (a.skore ?? 0));
   const zarazene = proTyp.filter((r) => r.stav === "ZARAZENO").sort((a, b) => (a.firstSeen < b.firstSeen ? 1 : -1));
   const vyrazene = proTyp.filter((r) => r.stav === "VYRAZENO");
+  // Do odhadu vstupuji nabidky za 2 mesice pred nejnovejsi zarazenou
+  const nejnovejsi = zarazene.reduce((m, r) => (r.firstSeen > m ? r.firstSeen : m), "");
+  const hraniceOkna = nejnovejsi ? new Date(Date.parse(`${nejnovejsi}T00:00:00Z`) - 61 * 86400000).toISOString().slice(0, 10) : "";
   const odhad = odhady[typ];
   const najem = typ === "RENT";
   const cena = (n: number) => (najem ? `${czk(n)}/měs.` : czk(n));
@@ -244,7 +247,7 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, canEdit, sledovat
           <div className="mt-1 text-3xl font-semibold tabular-nums tracking-tight">{odhad ? cena(odhad.hodnota) : "—"}</div>
           <p className="mt-1 text-sm text-ink-secondary">
             {odhad
-              ? `Medián ${czk(odhad.perM2)}/m² z posledních ${odhad.pocet} zařazených nabídek (podle data, kdy se objevily).`
+              ? `Medián ${czk(odhad.perM2)}/m² z ${odhad.pocet} zařazených nabídek, které se objevily za poslední 2 měsíce (před nejnovější z nich).`
               : "Odhad vznikne, jakmile zařadíš první nabídku."}
           </p>
         </div>
@@ -322,10 +325,10 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, canEdit, sledovat
           <p className="py-3 text-center text-sm text-ink-muted">Zatím nic. Zařaď nabídky z návrhů a vznikne odhad.</p>
         ) : (
           <ul className="divide-y divide-line/70 rounded-xl border border-line">
-            {zarazene.map((r, k) => (
+            {zarazene.map((r) => { const k = r.firstSeen > hraniceOkna ? 0 : 99; return (
               <li key={r.id} className={`flex flex-wrap items-center gap-3 px-3 py-2.5 ${r.zmizel ? "opacity-70" : ""}`}>
                 <span className={`w-10 shrink-0 text-center text-xs ${k < 10 ? "font-semibold text-accent" : "text-ink-muted"}`}
-                  title={k < 10 ? "Je mezi posledními 10, ze kterých se počítá odhad" : "Starší, do odhadu už nevstupuje"}>{k < 10 ? "v odhadu" : "starší"}</span>
+                  title={k < 10 ? "Objevila se v posledních 2 měsících, počítá se do odhadu" : "Starší než 2 měsíce, do odhadu už nevstupuje"}>{k < 10 ? "v odhadu" : "starší"}</span>
                 {zakladRadku(r)}
                 {odkazy(r)}
                 {canEdit && (
@@ -337,7 +340,7 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, canEdit, sledovat
                   </span>
                 )}
               </li>
-            ))}
+            ); })}
           </ul>
         )}
       </section>

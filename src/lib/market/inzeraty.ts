@@ -2,15 +2,16 @@
  * Databaze trhu: inzeraty, jejich historie cen a zarazeni k nemovitostem.
  *
  * Sken jen sbira a navrhuje. Do odhadu vstupuji jen inzeraty, ktere uzivatel
- * zaradil; odhad je median ceny za m² z poslednich 10 zarazenych krat plocha.
+ * zaradil; odhad je median ceny za m² ze zarazenych za posledni 2 mesice krat plocha.
  */
 import { prisma } from "../db";
 import { okruhyProTyp } from "../geo";
 import { denISO } from "../format";
 import type { ScrapedListing } from "./types";
-import { odhadZeZarazenych, ohodnot, median } from "./zarazeni";
+import { odhadZeZarazenych, ohodnot, median, vOkneOdhadu } from "./zarazeni";
 
-export const OKNO_ODHADU = 10;
+/** Odhad z nabidek, ktere se objevily za posledni 2 mesice (ve dnech). */
+export const OKNO_ODHADU = 61;
 
 /** Nemovitost, jejiz zarazene nabidky se pouzivaji (propojene oceneni), jinak ona sama. */
 export async function korenOceneni(propertyId: string): Promise<string> {
@@ -148,7 +149,7 @@ function snimekNabidek(inzeraty: { source: string; externalId: string; dispositi
 }
 
 /**
- * Prepocita odhad z poslednich 10 zarazenych a zapise ho do historie (oceneni nebo
+ * Prepocita odhad ze zarazenych za posledni 2 mesice a zapise ho do historie (oceneni nebo
  * odhad najmu), kdyz se zmenil. Vraci novy odhad, nebo null, kdyz nic zarazeneho neni.
  */
 export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RENT") {
@@ -162,7 +163,7 @@ export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RE
   const body = zarazene.map((z) => ({ datum: denISO(z.inzerat.firstSeenAt), pricePerM2: z.inzerat.pricePerM2 ?? 0, i: z.inzerat }));
   const odhad = odhadZeZarazenych(body, p.areaM2, OKNO_ODHADU);
   if (!odhad) return null;
-  const pouzite = body.filter((b) => b.pricePerM2 > 0).sort((a, b) => (a.datum < b.datum ? -1 : 1)).slice(-OKNO_ODHADU).map((b) => b.i);
+  const pouzite = vOkneOdhadu(body, OKNO_ODHADU).map((b) => b.i);
   const perM2 = pouzite.map((i) => i.pricePerM2 ?? 0).sort((a, b) => a - b);
   const kvantil = (q: number) => perM2[Math.min(perM2.length - 1, Math.floor((perM2.length - 1) * q))];
 
@@ -174,7 +175,7 @@ export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RE
         propertyId, value: odhad.hodnota, pricePerM2: odhad.perM2, source: "VYBER",
         confidence: odhad.pocet >= 5 ? "HIGH" : odhad.pocet >= 3 ? "MEDIUM" : "LOW",
         sampleSize: odhad.pocet, comparables: snimekNabidek(pouzite),
-        notes: `Medián z posledních ${odhad.pocet} zařazených nabídek`,
+        notes: `Medián z ${odhad.pocet} zařazených nabídek za poslední 2 měsíce`,
       },
     });
   } else {
@@ -185,7 +186,7 @@ export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RE
         propertyId, monthlyRent: odhad.hodnota, rentPerM2: odhad.perM2, p25: kvantil(0.25), p75: kvantil(0.75),
         source: "VYBER", confidence: odhad.pocet >= 5 ? "HIGH" : odhad.pocet >= 3 ? "MEDIUM" : "LOW",
         sampleSize: odhad.pocet, comparables: snimekNabidek(pouzite),
-        notes: `Medián z posledních ${odhad.pocet} zařazených nabídek`,
+        notes: `Medián z ${odhad.pocet} zařazených nabídek za poslední 2 měsíce`,
       },
     });
   }

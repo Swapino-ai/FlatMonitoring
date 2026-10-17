@@ -71,7 +71,7 @@ export default async function MarketPage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Porovnání s trhem</h1>
             <p className="mt-1 text-sm text-ink-secondary">
-              Odhady z nabídek ze Sreality, které jsi u nemovitosti zařadil (medián z posledních 10). Jde o <strong>nabídkové</strong> ceny —
+              Odhady z nabídek ze Sreality, které jsi u nemovitosti zařadil (medián z nabídek za poslední 2 měsíce). Jde o <strong>nabídkové</strong> ceny —
               realizované bývají o 5–10 % nižší. Kliknutím na nemovitost otevřeš její ocenění a trh.
             </p>
           </div>
@@ -156,7 +156,7 @@ export default async function MarketPage() {
             </table>
           </div>
           <p className="mt-3 text-xs text-ink-muted">
-            Trh = medián ceny za m² z posledních 10 nabídek, které jsi u nemovitosti zařadil. Vzorek ukazuje, z kolika zařazených
+            Trh = medián ceny za m² z nabídek zařazených u nemovitosti, které se objevily za poslední 2 měsíce. Vzorek ukazuje, z kolika zařazených
             nabídek číslo vzniklo.
           </p>
         </Card>

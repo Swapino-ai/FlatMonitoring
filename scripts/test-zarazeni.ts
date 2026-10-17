@@ -17,10 +17,11 @@ const drahy = ohodnot(n, { areaM2: 60, disposition: "2+kk", latitude: 50.0, long
 over("drahy nedoporucen", !drahy.doporuceno && drahy.duvod.includes("cena"), drahy);
 
 over("prazdny odhad", odhadZeZarazenych([], 50) === null);
-const body = Array.from({ length: 12 }, (_, i) => ({ datum: `2026-01-${String(i + 1).padStart(2, "0")}`, pricePerM2: 1000 * (i + 1) }));
+// Body po 10 dnech (leden-duben); okno 61 dni pred poslednim
+const body = Array.from({ length: 12 }, (_, i) => ({ datum: new Date(Date.UTC(2026, 0, 1 + i * 10)).toISOString().slice(0, 10), pricePerM2: 1000 * (i + 1) }));
 const o = odhadZeZarazenych(body, 10)!;
-// posledni okno: 3..12 tisic -> median 7.5 tis
-over("okno 10", o.pocet === 10 && o.perM2 === 7500 && o.hodnota === 75000, o);
+// posledni 2026-04-21; okno > 2026-02-19: body 2026-02-20 .. 04-21 = indexy 5..11 -> 6..12 tis -> median 9 tis
+over("okno 2 mesice", o.pocet === 7 && o.perM2 === 9000 && o.hodnota === 90000, o);
 over("rada po bodech", o.rada.length === 12 && o.rada[0].hodnota === 10000 && o.rada[1].perM2 === 1500, o.rada.slice(0, 2));
 
 console.log(chyb ? `${chyb} chyb` : "vše v pořádku");
