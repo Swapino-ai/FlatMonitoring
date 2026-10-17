@@ -130,13 +130,13 @@ async function main() {
   let ok = 0;
   for (const p of sledovane) {
     if (!p.region || p.latitude == null) await doplnPolohu(p.id);
-    const { vysledky, navrhu } = await skenujNemovitost(p.id, "CRON_NOCNI");
+    const { vysledky, navrhu, statistika: st } = await skenujNemovitost(p.id, "CRON_NOCNI");
     for (const v of vysledky) {
       const typ = v.dealType === "SALE" ? "prodej " : "pronájem";
       console.log(`  ${p.name.padEnd(30)} ${typ} ${v.chyba ? `SELHALO — ${v.chyba}` : `${v.nalezeno} nabídek, ${v.novych} nových, ${v.zmenCeny} změn ceny`}`);
       if (v.chyba) selhalo++; else ok++;
     }
-    console.log(`  ${"".padEnd(30)} ${navrhu} nových návrhů k zařazení`);
+    console.log(`  ${"".padEnd(30)} ${navrhu} nových návrhů k zařazení (posouzeno ${st.kandidatu}: už známých ${st.uzZname}, daleko ${st.daleko}, jiná velikost ${st.velikost}, vyloučená obec ${st.vylouceneObce}, zmizelé ${st.zmizelych})`);
   }
 
   await zarazeneInzeraty();

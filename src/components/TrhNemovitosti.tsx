@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { nastavPolohuInzeratu, nastavSledovani, rozhodniInzeraty, type TrhState } from "@/lib/trhActions";
+import { nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, type TrhState } from "@/lib/trhActions";
+import type { StatistikaNavrhu } from "@/lib/market/inzeraty";
 import { czk, dateCz } from "@/lib/format";
 import { Hlaska } from "./form";
 import { Badge } from "./Stat";
@@ -53,7 +54,8 @@ function km(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
  * Sledovani trhu u jedne nemovitosti: zapnuti, navrhy ke kontrole, zarazene a vyrazene
  * nabidky, odhad z poslednich 10 zarazenych a jeho vyvoj v case.
  */
-export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [] }: {
+export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
+  diag?: StatistikaNavrhu;
   propertyId: string;
   canEdit: boolean;
   sledovat: boolean;
@@ -246,7 +248,22 @@ export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, o
           )}
         </div>
         {navrhy.length === 0 ? (
-          <p className="py-3 text-center text-sm text-ink-muted">{sledovat ? "Nic nového ke kontrole." : "Návrhy přicházejí, jen když se trh sleduje."}</p>
+          <div className="py-3 text-center text-sm text-ink-muted">
+            <p>{sledovat ? "Nic nového ke kontrole." : "Návrhy přicházejí, jen když se trh sleduje."}</p>
+            {diag && diag.kandidatu > 0 && (
+              <p className="mt-1 text-xs">
+                V databázi trhu je pro tuhle nemovitost {diag.kandidatu} nabídek (prodej i nájem): už posouzených {diag.uzZname}
+                {diag.novych > 0 && <>, <strong className="text-accent">{diag.novych} čeká na navržení</strong></>}
+                {diag.daleko > 0 && `, příliš daleko ${diag.daleko}`}
+                {diag.velikost > 0 && `, výrazně jiná plocha ${diag.velikost}`}
+                {diag.vylouceneObce > 0 && `, z vyloučených obcí ${diag.vylouceneObce}`}
+                {diag.zmizelych > 0 && `, zmizelé z trhu ${diag.zmizelych}`}.
+              </p>
+            )}
+            {canEdit && sledovat && diag && diag.novych > 0 && (
+              <button type="button" className="btn btn-primary mt-2 text-xs" disabled={bezi} onClick={() => akce(() => obnovNavrhy(propertyId))}>Navrhnout teď</button>
+            )}
+          </div>
         ) : (
           <ul className="divide-y divide-line/70 rounded-xl border border-line">
             {navrhy.map((r) => (

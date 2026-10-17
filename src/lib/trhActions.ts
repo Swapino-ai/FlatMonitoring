@@ -24,7 +24,7 @@ export async function nastavSledovani(propertyId: string, zapnout: boolean): Pro
   const auth = await majitel();
   if ("error" in auth) return auth;
   await prisma.property.update({ where: { id: propertyId }, data: { sledovatTrh: zapnout } });
-  const navrhu = zapnout ? await navrhniProNemovitost(propertyId) : 0;
+  const navrhu = zapnout ? (await navrhniProNemovitost(propertyId)).novych : 0;
   obnov(propertyId);
   return { success: zapnout ? `Sledování zapnuto${navrhu ? `, ${navrhu} nabídek z databáze čeká na kontrolu` : ""}. Nové nabídky přinese noční sken nebo „Skenovat teď“.` : "Sledování vypnuto. Zařazené nabídky i ocenění zůstávají." };
 }
@@ -55,4 +55,13 @@ export async function nastavPolohuInzeratu(propertyId: string, inzeratId: string
   await prisma.inzerat.update({ where: { id: inzeratId }, data: { latitude: lat, longitude: lon, polohaRucne: true } });
   obnov(propertyId);
   return { success: "Poloha uložena." };
+}
+
+/** Projde databazi trhu znovu a doplni navrhy (bez skenu portalu). */
+export async function obnovNavrhy(propertyId: string): Promise<TrhState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+  const st = await navrhniProNemovitost(propertyId);
+  obnov(propertyId);
+  return { success: st.novych ? `Přibylo ${st.novych} návrhů ke kontrole.` : "Nic nového k navržení." };
 }

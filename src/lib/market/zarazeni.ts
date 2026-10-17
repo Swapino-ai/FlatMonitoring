@@ -60,7 +60,8 @@ export function ohodnot(n: NemovitostProSrovnani, i: InzeratProSrovnani, medianZ
   let km: number | null = null;
   if (n.latitude != null && n.longitude != null && i.latitude != null && i.longitude != null) {
     km = vzdalenost({ lat: n.latitude, lon: n.longitude }, { lat: i.latitude, lon: i.longitude });
-    if (km > n.okruhKm * 3) return { skore: 0, doporuceno: false, duvod: `${km.toFixed(1)} km daleko`, mimo: true, vzdalenostKm: km };
+    // Male obce se skenuji pres kraj: nabidky z okolnich mest jeste davaji smysl
+    if (km > Math.max(n.okruhKm * 5, 20)) return { skore: 0, doporuceno: false, duvod: `${km.toFixed(1)} km daleko`, mimo: true, vzdalenostKm: km };
     if (km > n.okruhKm) { skore -= 30; duvody.push(`${km.toFixed(1)} km, mimo okruh`); }
     else skore -= (km / n.okruhKm) * 15;
   } else if (i.city.trim().toLowerCase() !== n.city.trim().toLowerCase()) {

@@ -11,7 +11,7 @@ import { loadProperty } from "@/lib/portfolio";
 import { NEMOVITOST_MAP, nazevNemovitosti } from "@/lib/catalogs";
 import { denISO } from "@/lib/format";
 import { odhadZeZarazenych } from "@/lib/market/zarazeni";
-import { OKNO_ODHADU } from "@/lib/market/inzeraty";
+import { OKNO_ODHADU, navrhniProNemovitost } from "@/lib/market/inzeraty";
 import { presunSnimkyNaDisk } from "@/lib/market/snimky";
 import { prevedVyrazene } from "@/lib/market/prevod";
 
@@ -32,6 +32,8 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
 
   // Drive vyrazene nabidky musi byt videt i v nove databazi trhu
   const stareVyrazene = await prevedVyrazene(id);
+  // Proc co (ne)prislo do navrhu — bez zapisu
+  const diag = await navrhniProNemovitost(id, { zapsat: false });
 
   const zaznamy = await prisma.zarazeniInzeratu.findMany({
     where: { propertyId: id },
@@ -84,7 +86,7 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
 
         <TrhNemovitosti propertyId={id} canEdit={canEdit} sledovat={property.sledovatTrh} skenovatelne={skenovatelne}
           poloha={property.latitude != null && property.longitude != null ? { lat: property.latitude, lon: property.longitude } : null}
-          radky={radky} stareVyrazene={stareVyrazene.map((v) => ({ id: v.id, popis: v.popis, duvod: v.reason, kdy: v.createdAt.toISOString() }))} odhady={{ SALE: odhad("SALE"), RENT: odhad("RENT") }} />
+          radky={radky} diag={diag} stareVyrazene={stareVyrazene.map((v) => ({ id: v.id, popis: v.popis, duvod: v.reason, kdy: v.createdAt.toISOString() }))} odhady={{ SALE: odhad("SALE"), RENT: odhad("RENT") }} />
 
         <Card title="Historie ocenění">
           <ValuationManager propertyId={id} valuations={property.valuations} areaM2={property.areaM2} canEdit={canEdit} vyrazene={[]} />

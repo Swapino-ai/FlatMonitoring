@@ -13,7 +13,8 @@ import { odhadZeZarazenych, ohodnot, median } from "./zarazeni";
 export const OKNO_ODHADU = 10;
 
 /** Ulozi vysledky skenu: novy inzerat zalozi, znamy aktualizuje (cena jen pri zmene). Vraci pocet novych. */
-export async function ulozInzeraty(listings: ScrapedListing[], region?: string | null): Promise<{ novych: number; zmenCeny: number }> {
+export async function ulozInzeraty(listings: ScrapedListing[], region?: string | null): Promise<{ novych: number; zmenCeny: number; ids: string[] }> {
+  const ids: string[] = [];
   let novych = 0;
   let zmenCeny = 0;
   const ted = new Date();
@@ -21,7 +22,7 @@ export async function ulozInzeraty(listings: ScrapedListing[], region?: string |
     if (!l.externalId) continue;
     const existujici = await prisma.inzerat.findUnique({ where: { source_externalId: { source: l.source, externalId: l.externalId } } });
     if (!existujici) {
-      await prisma.inzerat.create({
+      const novy = await prisma.inzerat.create({
         data: {
           source: l.source, externalId: l.externalId, dealType: l.dealType, category: l.category,
           city: l.city, region: region ?? null, district: l.district ?? null, disposition: l.disposition ?? null,
@@ -30,6 +31,7 @@ export async function ulozInzeraty(listings: ScrapedListing[], region?: string |
           ceny: { create: { price: l.price, pricePerM2: l.pricePerM2 ?? null } },
         },
       });
+      ids.push(novy.id);
       novych++;
       continue;
     }
@@ -45,53 +47,75 @@ export async function ulozInzeraty(listings: ScrapedListing[], region?: string |
       },
     });
     if (zmena) zmenCeny++;
+    ids.push(existujici.id);
   }
-  return { novych, zmenCeny };
+  return { novych, zmenCeny, ids };
 }
 
 function rozdelMesta(seznam: string | null | undefined): string[] {
   return (seznam ?? "").split(",").map((m) => m.trim().toLowerCase()).filter(Boolean);
 }
 
+export interface StatistikaNavrhu {
+  /** Kolik inzeratu prislo v uvahu (stejny druh, obec, kraj nebo nalezeno skenem teto nemovitosti) */
+  kandidatu: number;
+  /** O kterych uz je rozhodnuto (navrh, zarazeno, vyrazeno) */
+  uzZname: number;
+  novych: number;
+  daleko: number;
+  velikost: number;
+  vylouceneObce: number;
+  zmizelych: number;
+}
+
 /**
  * Navrhne nemovitosti inzeraty z databaze, o kterych jeste nerozhodla.
- * Jen stejny druh, aktivni inzeraty a ne z vyloucenych obci. Vraci pocet novych navrhu.
+ * Kandidati: vse, co nasel sken teto nemovitosti (ids), plus stejny druh z obce nebo kraje.
+ * S `zapsat: false` jen spocita, proc co (ne)prislo do navrhu — pro vysvetleni na strance.
  */
-export async function navrhniProNemovitost(propertyId: string): Promise<number> {
+export async function navrhniProNemovitost(propertyId: string, o: { ids?: string[]; zapsat?: boolean } = {}): Promise<StatistikaNavrhu> {
+  const st: StatistikaNavrhu = { kandidatu: 0, uzZname: 0, novych: 0, daleko: 0, velikost: 0, vylouceneObce: 0, zmizelych: 0 };
+  const zapsat = o.zapsat !== false;
   const p = await prisma.property.findUnique({ where: { id: propertyId } });
-  if (!p || !p.sledovatTrh) return 0;
+  if (!p || (zapsat && !p.sledovatTrh)) return st;
   const okruhKm = p.scanRadiusKm ?? okruhyProTyp(p.type)[0];
   const vyloucene = rozdelMesta(p.excludedCities);
 
   const znamych = new Set((await prisma.zarazeniInzeratu.findMany({ where: { propertyId }, select: { inzeratId: true } })).map((z) => z.inzeratId));
-  // Hruby predvyber: obec nebo kraj nemovitosti; presne rozhodne vzdalenost
   const kandidati = await prisma.inzerat.findMany({
     where: {
-      category: p.type, zmizelAt: null,
-      OR: [{ city: p.city }, ...(p.region ? [{ region: p.region }] : [])],
+      OR: [
+        ...(o.ids?.length ? [{ id: { in: o.ids } }] : []),
+        { category: p.type, city: { equals: p.city, mode: "insensitive" as const } },
+        ...(p.region ? [{ category: p.type, region: p.region }] : []),
+      ],
     },
   });
+  st.kandidatu = kandidati.length;
 
-  let novych = 0;
   for (const dealType of ["SALE", "RENT"] as const) {
     const zarazene = await prisma.zarazeniInzeratu.findMany({
       where: { propertyId, stav: "ZARAZENO", inzerat: { dealType } }, include: { inzerat: true },
     });
     const medianZar = zarazene.length ? median(zarazene.map((z) => z.inzerat.pricePerM2 ?? 0).filter((x) => x > 0)) : null;
-    for (const i of kandidati.filter((k) => k.dealType === dealType && !znamych.has(k.id))) {
-      if (vyloucene.some((m) => i.city.toLowerCase().includes(m))) continue;
+    for (const i of kandidati.filter((k) => k.dealType === dealType)) {
+      if (znamych.has(i.id)) { st.uzZname++; continue; }
+      if (i.zmizelAt) { st.zmizelych++; continue; }
+      if (vyloucene.some((m) => i.city.toLowerCase().includes(m))) { st.vylouceneObce++; continue; }
       const h = ohodnot(
         { areaM2: p.areaM2, disposition: p.disposition, latitude: p.latitude, longitude: p.longitude, city: p.city, okruhKm },
         i, medianZar || null,
       );
-      if (h.mimo) continue;
-      await prisma.zarazeniInzeratu.create({
-        data: { propertyId, inzeratId: i.id, stav: "NAVRH", skore: h.skore, doporuceno: h.doporuceno, duvod: h.duvod },
-      });
-      novych++;
+      if (h.mimo) { if (h.duvod.startsWith("plocha")) st.velikost++; else st.daleko++; continue; }
+      if (zapsat) {
+        await prisma.zarazeniInzeratu.create({
+          data: { propertyId, inzeratId: i.id, stav: "NAVRH", skore: h.skore, doporuceno: h.doporuceno, duvod: h.duvod },
+        });
+      }
+      st.novych++;
     }
   }
-  return novych;
+  return st;
 }
 
 /** Snimek nabidek pro zaznam oceneni (stejny tvar jako u starsich oceneni, at je zobrazi i mapa). */
