@@ -48,7 +48,7 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
       inzerat: {
         include: {
           ceny: { orderBy: { at: "asc" } },
-          snimky: { orderBy: { createdAt: "desc" }, select: { id: true, createdAt: true } },
+          snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true } },
         },
       },
     },
@@ -63,7 +63,8 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
       lat: i.latitude, lon: i.longitude, polohaRucne: i.polohaRucne, inzeratId: i.id,
       firstSeen: denISO(i.firstSeenAt), lastSeen: denISO(i.lastSeenAt), zmizel: i.zmizelAt ? denISO(i.zmizelAt) : null,
       ceny: i.ceny.map((c) => ({ at: denISO(c.at), price: c.price })),
-      snimky: i.snimky.map((s) => ({ id: s.id, createdAt: s.createdAt.toISOString() })),
+      snimky: i.snimky.filter((s) => s.druh !== "FOTO").map((s) => ({ id: s.id, createdAt: s.createdAt.toISOString() })),
+      fotky: i.snimky.filter((s) => s.druh === "FOTO").map((s) => s.id),
     };
   });
 

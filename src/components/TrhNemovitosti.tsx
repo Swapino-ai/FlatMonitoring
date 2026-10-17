@@ -35,6 +35,8 @@ export interface RadekTrhu {
   /** Historie ceny od nejstarsi */
   ceny: { at: string; price: number }[];
   snimky: { id: string; createdAt: string }[];
+  /** Fotografie z inzeratu (ulozene u zarazenych) */
+  fotky?: string[];
 }
 
 export interface OdhadPanel {
@@ -79,6 +81,7 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, canEdit, sledovat
   const [polohaPro, setPolohaPro] = useState<RadekTrhu | null>(null);
   const [sken, setSken] = useState("");
   const [swipe, setSwipe] = useState(false);
+  const [galerie, setGalerie] = useState<string[] | null>(null);
 
   const proTyp = radky.filter((r) => r.dealType === typ);
   const navrhy = proTyp.filter((r) => r.stav === "NAVRH")
@@ -168,6 +171,9 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, canEdit, sledovat
   const odkazy = (r: RadekTrhu) => (
     <span className="flex shrink-0 items-center gap-2 text-xs">
       {r.url && !r.url.includes("/x/x/") && <a href={r.url} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">Inzerát ↗</a>}
+      {(r.fotky?.length ?? 0) > 0 && (
+        <button type="button" onClick={() => setGalerie(r.fotky!)} className="text-accent hover:underline">Fotky ({r.fotky!.length})</button>
+      )}
       {r.snimky.map((s, k) => (
         <a key={s.id} href={`/api/snimek/${s.id}`} target="_blank" rel="noreferrer" className="text-accent hover:underline" title={`Screenshot z ${dateCz(s.createdAt)}`}>
           {k === 0 ? "Snímek" : `Snímek ${dateCz(s.createdAt)}`}
@@ -377,6 +383,20 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, canEdit, sledovat
       {swipe && (
         <SwipeNavrhy propertyId={propertyId} navrhy={navrhy} najem={najem} vzdalenost={vzdalenost}
           onKonec={(zmeneno) => { setSwipe(false); if (zmeneno) router.refresh(); }} />
+      )}
+
+      {galerie && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 p-4" onClick={() => setGalerie(null)}>
+          <div className="mx-auto grid max-w-5xl gap-3 sm:grid-cols-2" onClick={(e) => e.stopPropagation()}>
+            {galerie.map((id) => (
+              <a key={id} href={`/api/snimek/${id}`} target="_blank" rel="noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/api/snimek/${id}`} alt="Fotografie z inzerátu" loading="lazy" className="w-full rounded-xl" />
+              </a>
+            ))}
+          </div>
+          <button type="button" className="fixed right-4 top-4 rounded-full bg-white px-3 py-1 text-sm" onClick={() => setGalerie(null)}>Zavřít</button>
+        </div>
       )}
 
       {/* Rucni poloha */}

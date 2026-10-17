@@ -10,6 +10,10 @@ on:
       potvrzeni:
         description: "Pro potvrzení napiš SMAZAT"
         required: true
+      akce:
+        description: "vse = smazat všechna data skenů; den = jen sloučit historii ocenění po dnech"
+        required: false
+        default: "vse"
 
 jobs:
   smazat:
@@ -34,7 +38,14 @@ jobs:
           path: zalohy/*.json
           retention-days: 90
       - name: Smazat data skenů
+        if: ${{ github.event.inputs.akce != 'den' }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npx tsx scripts/smazat-skeny.ts
+      - name: Sloučit historii ocenění po dnech
+        if: ${{ github.event.inputs.akce == 'den' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx tsx scripts/uklid-oceneni.ts

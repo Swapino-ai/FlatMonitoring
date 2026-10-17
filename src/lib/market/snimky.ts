@@ -21,9 +21,12 @@ export async function presunSnimkyNaDisk(limit = 5): Promise<number> {
       const slozka = await zajistiCestu([
         { klic: "TRH", nazev: "Trh" },
         { klic: `TRH:${s.inzerat.category}:${s.inzerat.city}`, nazev: bezpecneJmeno(`${s.inzerat.city}`) },
+        { klic: `TRH:I:${s.inzerat.id}`, nazev: bezpecneJmeno(`${s.inzerat.dealType === "SALE" ? "prodej" : "nájem"} ${s.inzerat.disposition ?? ""} ${s.inzerat.areaM2 ?? ""} m2 ${s.inzerat.externalId}`) },
       ]);
-      const i = s.inzerat;
-      const nazev = bezpecneJmeno(`${s.createdAt.toISOString().slice(0, 10)} ${i.dealType === "SALE" ? "prodej" : "nájem"} ${i.disposition ?? ""} ${i.areaM2 ?? ""} m2 ${i.externalId}`) + ".jpg";
+      const pripona = s.mime === "image/png" ? ".png" : s.mime === "image/webp" ? ".webp" : ".jpg";
+      const nazev = s.druh === "FOTO"
+        ? `foto ${String((s.poradi ?? 0) + 1).padStart(2, "0")}${pripona}`
+        : bezpecneJmeno(`stránka ${s.createdAt.toISOString().slice(0, 10)}`) + pripona;
       const driveId = await nahrajPrimo({ rodicId: slozka, nazev, mime: s.mime, data: s.data! });
       await prisma.inzeratSnimek.update({ where: { id: s.id }, data: { driveId, data: null } });
       presunuto++;

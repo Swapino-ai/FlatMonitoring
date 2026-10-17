@@ -779,6 +779,9 @@ model InzeratSnimek {
   price     Float?
   data      Bytes?
   mime      String   @default("image/jpeg")
+  /// SNIMEK = screenshot stranky, FOTO = fotografie z inzeratu
+  druh      String   @default("SNIMEK")
+  poradi    Int?
   driveId   String?
   createdAt DateTime @default(now())
 

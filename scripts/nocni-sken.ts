@@ -27,7 +27,7 @@ const prisma = new PrismaClient();
 async function zarazeneInzeraty() {
   const inzeraty = await prisma.inzerat.findMany({
     where: { zarazeni: { some: { stav: "ZARAZENO" } }, url: { not: null }, zmizelAt: null },
-    include: { snimky: { orderBy: { createdAt: "desc" }, take: 1 } },
+    include: { snimky: { where: { druh: "SNIMEK" }, orderBy: { createdAt: "desc" }, take: 1 }, _count: { select: { snimky: { where: { druh: "FOTO" } } } } },
   });
   if (inzeraty.length === 0) return;
 
@@ -43,9 +43,11 @@ async function zarazeneInzeraty() {
   }) : null;
 
   let snimku = 0;
+  let fotek = 0;
   let zmizelo = 0;
   for (const i of inzeraty) {
-    const potrebaSnimek = !i.snimky[0] || (i.snimky[0].price != null && Math.abs(i.snimky[0].price - i.price) >= 1);
+    const potrebaFotky = i._count.snimky === 0;
+    const potrebaSnimek = potrebaFotky || !i.snimky[0] || (i.snimky[0].price != null && Math.abs(i.snimky[0].price - i.price) >= 1);
     try {
       if (kontext && potrebaSnimek) {
         const stranka = await kontext.newPage();
@@ -61,6 +63,25 @@ async function zarazeneInzeraty() {
           const data = await stranka.screenshot({ type: "jpeg", quality: 65 });
           await prisma.inzeratSnimek.create({ data: { inzeratId: i.id, price: i.price, data: new Uint8Array(data) } });
           snimku++;
+          // Fotografie z galerie inzeratu (jednou) — ulozi se a presunou na Google Disk
+          if (potrebaFotky) {
+            const adresy: string[] = await stranka.evaluate(() => Array.from(document.querySelectorAll("img"))
+              .map((im) => (im as HTMLImageElement).currentSrc || (im as HTMLImageElement).src)
+              .filter((u) => /sdn\.cz/.test(u) && !/logo|avatar|icon/i.test(u)));
+            const unikatni = [...new Map(adresy.map((u) => [u.split("?")[0], u])).values()].slice(0, 30);
+            let poradi = 0;
+            for (const u of unikatni) {
+              try {
+                const odp = await stranka.request.get(u);
+                const typ = odp.headers()["content-type"] ?? "image/jpeg";
+                if (!odp.ok() || !typ.startsWith("image/")) continue;
+                const telo = await odp.body();
+                if (telo.length < 15_000) continue; // nahledy a ikonky
+                await prisma.inzeratSnimek.create({ data: { inzeratId: i.id, druh: "FOTO", poradi: poradi++, mime: typ.split(";")[0], data: new Uint8Array(telo) } });
+              } catch { /* jedna fotka nesmi shodit zbytek */ }
+            }
+            fotek += poradi;
+          }
         }
         await stranka.close();
       } else {
@@ -77,7 +98,7 @@ async function zarazeneInzeraty() {
     await sleep(1500);
   }
   await prohlizec?.close();
-  console.log(`Zařazené inzeráty: ${inzeraty.length}, nových screenshotů ${snimku}, zmizelo z trhu ${zmizelo}.`);
+  console.log(`Zařazené inzeráty: ${inzeraty.length}, nových screenshotů ${snimku}, fotografií ${fotek}, zmizelo z trhu ${zmizelo}.`);
 }
 
 async function main() {
@@ -106,7 +127,7 @@ async function main() {
   for (const p of sledovane) {
     await aktualizujSkupinu(p.id);
   }
-  const presunuto = await presunSnimkyNaDisk(50).catch(() => 0);
+  const presunuto = await presunSnimkyNaDisk(500).catch(() => 0);
   if (presunuto) console.log(`Na Google Disk přesunuto ${presunuto} snímků.`);
 
   const smazano = await uklidDenik();
