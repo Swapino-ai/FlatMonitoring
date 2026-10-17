@@ -4,7 +4,6 @@ import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty } from "@/components/Stat";
 import { nactiPortfolio } from "@/lib/pohled";
-import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { nactiNavrhyPortfolia } from "@/lib/pravidelnePlatbyData";
 import { prumernyMesicniTok, tokyNemovitosti } from "@/lib/series";
 import { czk, czkCompact, dateCz, pct, STATUS_LABELS } from "@/lib/format";
@@ -31,7 +30,6 @@ export default async function PropertiesPage() {
             <p className="mt-1 text-sm text-ink-secondary">Pořizovací ceny, dluhy a výnosnost jednotlivých bytů.</p>
           </div>
           <div className="flex items-center gap-2">
-            {maSpoluvlastnictvi && <PohledPrepinac pohled={pohled} />}
             {user.role === "OWNER" && (
               <Link href="/properties/new" className="btn btn-primary no-print">Přidat nemovitost</Link>
             )}

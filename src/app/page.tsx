@@ -7,7 +7,6 @@ import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { CashFlowChart, EquityChart, YieldBarChart } from "@/components/charts";
 import { summarize } from "@/lib/portfolio";
 import { nactiPortfolio } from "@/lib/pohled";
-import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { MapaPortfolia, type BodMapy } from "@/components/MapaPortfolia";
 import { nactiNavrhyPortfolia } from "@/lib/pravidelnePlatbyData";
 import { cashFlowSeries, equitySeries } from "@/lib/series";
@@ -68,7 +67,6 @@ export default async function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {maSpoluvlastnictvi && <PohledPrepinac pohled={pohled} />}
             <Link href="/reports" className="btn no-print">Vygenerovat PDF report</Link>
           </div>
         </div>

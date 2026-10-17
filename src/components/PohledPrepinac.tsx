@@ -17,9 +17,9 @@ export function PohledPrepinac({ pohled }: { pohled: Pohled }) {
     <form action="/api/pohled" method="post" className="no-print flex rounded-lg border border-line p-0.5">
       <input type="hidden" name="kam" value={kam} />
       {([
-        ["moje", "Můj podíl"],
-        ["vse", "Celé portfolio"],
-      ] as [Pohled, string][]).map(([hodnota, popisek]) => (
+        ["moje", "Můj podíl", "Můj"],
+        ["vse", "Celé portfolio", "Vše"],
+      ] as [Pohled, string, string][]).map(([hodnota, popisek, kratce]) => (
         <button
           key={hodnota}
           type="submit"
@@ -30,7 +30,8 @@ export function PohledPrepinac({ pohled }: { pohled: Pohled }) {
             pohled === hodnota ? "bg-accent font-medium text-white" : "text-ink-secondary hover:text-ink-primary"
           }`}
         >
-          {popisek}
+          <span className="hidden sm:inline">{popisek}</span>
+          <span className="sm:hidden">{kratce}</span>
         </button>
       ))}
     </form>

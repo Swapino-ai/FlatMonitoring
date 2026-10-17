@@ -38,7 +38,6 @@ import { pronajimatelNemovitosti, pronajimatelZRef } from "@/lib/provozovatel";
 import { nactiStrany } from "@/lib/strany";
 import type { SnapshotVyuctovani } from "@/lib/vyuctovaniVydane";
 import type { SluzbaVyuctovani } from "@/lib/vyuctovani";
-import { PohledPrepinac } from "@/components/PohledPrepinac";
 import { amortizationSchedule, loanYearBreakdown } from "@/lib/finance";
 import { depreciationInputPrice, depreciationSchedule } from "@/lib/tax";
 import { categoryLabel, nazevDruhu } from "@/lib/categories";
@@ -358,7 +357,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             {property.operator && ` · provozovatel ${property.operator.name}`}
           </p>
           <div className="flex shrink-0 items-center gap-2">
-            {property.owners.some((o) => o.share < 100) && <PohledPrepinac pohled={pohled} />}
             {user.role === "OWNER" && (
               <Link href={`/properties/${property.id}/edit`} className="btn no-print">Upravit</Link>
             )}
