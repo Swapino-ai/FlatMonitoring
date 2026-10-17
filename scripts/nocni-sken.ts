@@ -23,10 +23,28 @@ import { HLAVICKY_PROHLIZECE, sleep } from "../src/lib/market/util";
 
 const prisma = new PrismaClient();
 
+/**
+ * Existuje inzerat? true = ano, false = urcite ne (404/410 nebo presmerovani na Sreality jinam nez na
+ * detail tohoto inzeratu), null = nevime (sit, souhlas s cookies) — pak se nic nemeni.
+ */
+async function inzeratExistuje(url: string, externalId: string): Promise<boolean | null> {
+  try {
+    const r = await fetch(url, { headers: HLAVICKY_PROHLIZECE, redirect: "follow" });
+    if (r.status === 404 || r.status === 410) return false;
+    if (!r.ok) return null;
+    const cil = new URL(r.url);
+    if (!cil.hostname.endsWith("sreality.cz")) return null;
+    return cil.pathname.includes(externalId);
+  } catch {
+    return null;
+  }
+}
+
 /** Overi existenci zarazenych inzeratu a porizuje jejich screenshoty. */
 async function zarazeneInzeraty() {
   const inzeraty = await prisma.inzerat.findMany({
-    where: { zarazeni: { some: { stav: "ZARAZENO" } }, url: { not: null }, zmizelAt: null },
+    // I drive "zmizele" se overi znovu: drivejsi kontrola je chybne oznacovala (presmerovani na souhlas s cookies)
+    where: { zarazeni: { some: { stav: "ZARAZENO" } }, url: { not: null } },
     include: { snimky: { where: { druh: "SNIMEK" }, orderBy: { createdAt: "desc" }, take: 1 }, _count: { select: { snimky: { where: { druh: "FOTO" } } } } },
   });
   if (inzeraty.length === 0) return;
@@ -45,18 +63,24 @@ async function zarazeneInzeraty() {
   let snimku = 0;
   let fotek = 0;
   let zmizelo = 0;
+  let vraceno = 0;
   for (const i of inzeraty) {
     const potrebaFotky = i._count.snimky === 0;
     const potrebaSnimek = potrebaFotky || !i.snimky[0] || (i.snimky[0].price != null && Math.abs(i.snimky[0].price - i.price) >= 1);
     try {
-      if (kontext && potrebaSnimek) {
+      const existuje = await inzeratExistuje(i.url!, i.externalId);
+      if (existuje === false) {
+        if (!i.zmizelAt) { await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: new Date() } }); zmizelo++; }
+        continue;
+      }
+      if (existuje === true && i.zmizelAt) {
+        await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: null } });
+        vraceno++;
+      }
+      if (kontext && potrebaSnimek && existuje) {
         const stranka = await kontext.newPage();
-        const odpoved = await stranka.goto(i.url!, { waitUntil: "domcontentloaded", timeout: 45_000 });
-        const stav = odpoved?.status() ?? 0;
-        if (stav === 404 || stav === 410 || !stranka.url().includes("/detail/")) {
-          await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: new Date() } });
-          zmizelo++;
-        } else {
+        await stranka.goto(i.url!, { waitUntil: "domcontentloaded", timeout: 45_000 });
+        {
           // Souhlas s cookies (Seznam CMP) by jinak prekryl celou stranku
           await stranka.getByRole("button", { name: /souhlasím|přijmout vše|rozumím/i }).first().click({ timeout: 4000 }).catch(() => undefined);
           await stranka.waitForTimeout(2500);
@@ -84,13 +108,6 @@ async function zarazeneInzeraty() {
           }
         }
         await stranka.close();
-      } else {
-        // Bez prohlizece aspon overime, ze inzerat existuje
-        const r = await fetch(i.url!, { headers: HLAVICKY_PROHLIZECE, redirect: "follow" });
-        if (r.status === 404 || r.status === 410 || !r.url.includes("/detail/")) {
-          await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: new Date() } });
-          zmizelo++;
-        }
       }
     } catch (e) {
       console.log(`  ${i.externalId}: ${e instanceof Error ? e.message : e}`);
@@ -98,7 +115,7 @@ async function zarazeneInzeraty() {
     await sleep(1500);
   }
   await prohlizec?.close();
-  console.log(`Zařazené inzeráty: ${inzeraty.length}, nových screenshotů ${snimku}, fotografií ${fotek}, zmizelo z trhu ${zmizelo}.`);
+  console.log(`Zařazené inzeráty: ${inzeraty.length}, nových screenshotů ${snimku}, fotografií ${fotek}, zmizelo z trhu ${zmizelo}, chybně označených vráceno ${vraceno}.`);
 }
 
 async function main() {
