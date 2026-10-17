@@ -255,7 +255,16 @@ function SkupinaFormular({ services, typy, action, pending }: {
 
   const skupiny = [...new Set(services.map((s) => s.groupName).filter((g): g is string => !!g))].sort();
   const prepni = (id: string) => setVybrane((v) => { const n = new Set(v); if (n.has(id)) n.delete(id); else n.add(id); return n; });
-  const vyberSkupinu = (g: string) => setVybrane(new Set(services.filter((s) => s.groupName === g).map((s) => s.id)));
+  // Skupina se prepina: klik prida vsechny jeji sluzby, dalsi klik je odebere; skupin jde vybrat vic
+  const clenove = (g: string) => services.filter((s) => s.groupName === g).map((s) => s.id);
+  const celaVybrana = (g: string) => clenove(g).every((id) => vybrane.has(id));
+  const vyberSkupinu = (g: string) => setVybrane((v) => {
+    const n = new Set(v);
+    const ids = clenove(g);
+    if (ids.every((id) => n.has(id))) ids.forEach((id) => n.delete(id));
+    else ids.forEach((id) => n.add(id));
+    return n;
+  });
   const nazev = (id: string) => { const s = services.find((x) => x.id === id); return s ? `${nazevDruhu(typy, s.type)} · ${s.provider}` : id; };
 
   async function dalKCastkam() {
@@ -293,7 +302,11 @@ function SkupinaFormular({ services, typy, action, pending }: {
           {skupiny.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-1.5">
               {skupiny.map((g) => (
-                <button key={g} type="button" className="btn px-2.5 py-1 text-xs" onClick={() => vyberSkupinu(g)}>Celá skupina: {g}</button>
+                <button key={g} type="button" aria-pressed={celaVybrana(g)} onClick={() => vyberSkupinu(g)}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${celaVybrana(g)
+                    ? "border-accent bg-accent text-white" : "border-line text-ink-secondary hover:border-accent hover:text-accent"}`}>
+                  {celaVybrana(g) ? "✓ " : "+ "}{g} ({clenove(g).length})
+                </button>
               ))}
             </div>
           )}
