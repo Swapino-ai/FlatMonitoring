@@ -53,13 +53,15 @@ function km(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
  * Sledovani trhu u jedne nemovitosti: zapnuti, navrhy ke kontrole, zarazene a vyrazene
  * nabidky, odhad z poslednich 10 zarazenych a jeho vyvoj v case.
  */
-export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, odhady, skenovatelne }: {
+export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [] }: {
   propertyId: string;
   canEdit: boolean;
   sledovat: boolean;
   skenovatelne: boolean;
   poloha: { lat: number; lon: number } | null;
   radky: RadekTrhu[];
+  /** Drive vyrazene nabidky, ke kterym se nedochovala data (jen popis). */
+  stareVyrazene?: { id: string; popis: string; duvod: string | null; kdy: string }[];
   odhady: { SALE: OdhadPanel | null; RENT: OdhadPanel | null };
 }) {
   const router = useRouter();
@@ -293,14 +295,17 @@ export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, o
         )}
       </section>
 
-      {/* Vyrazene */}
-      {vyrazene.length > 0 && (
-        <div>
-          <button type="button" onClick={() => setVyrazeneOtevrene((x) => !x)} className="text-xs text-ink-muted hover:text-ink-secondary">
-            {vyrazeneOtevrene ? "▾" : "▸"} Vyřazené nabídky ({vyrazene.length})
+      {/* Vyrazene: nemizi, drzi se tady a jdou vratit */}
+      {(vyrazene.length > 0 || stareVyrazene.length > 0) && (
+        <section className="card">
+          <button type="button" onClick={() => setVyrazeneOtevrene((x) => !x)} aria-expanded={vyrazeneOtevrene}
+            className="flex w-full items-center justify-between gap-2 text-left">
+            <h2 className="font-semibold">Vyřazené nabídky <span className="text-ink-muted">({vyrazene.length + stareVyrazene.length})</span></h2>
+            <span className="text-xs text-accent">{vyrazeneOtevrene ? "Skrýt" : "Zobrazit"}</span>
           </button>
+          <p className="mt-0.5 text-xs text-ink-muted">Do odhadu nevstupují a sken je znovu nenavrhne. Kdykoli je vrátíš do návrhů.</p>
           {vyrazeneOtevrene && (
-            <ul className="mt-2 divide-y divide-line/60 rounded-lg border border-dashed border-line text-ink-muted">
+            <ul className="mt-3 divide-y divide-line/60 rounded-lg border border-dashed border-line text-ink-muted">
               {vyrazene.map((r) => (
                 <li key={r.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
                   {zakladRadku(r)}
@@ -308,9 +313,15 @@ export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, o
                   {canEdit && <button type="button" className="btn px-2 py-0.5 text-xs" disabled={bezi} onClick={() => rozhodni([r.id], "NAVRH")}>Vrátit do návrhů</button>}
                 </li>
               ))}
+              {stareVyrazene.map((v) => (
+                <li key={v.id} className="px-3 py-2 text-sm">
+                  <span>{v.popis}</span>
+                  <span className="block text-xs">vyřazeno {dateCz(v.kdy)}{v.duvod ? ` · ${v.duvod}` : ""} · starší záznam, údaje o nabídce se už nedochovaly</span>
+                </li>
+              ))}
             </ul>
           )}
-        </div>
+        </section>
       )}
 
       {/* Rucni poloha */}
