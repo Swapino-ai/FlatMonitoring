@@ -16,7 +16,7 @@ import { Ikona, type NazevIkony } from "./Ikony";
 import { Badge } from "./Stat";
 import { Dokumenty, type DokumentRadek } from "./Dokumenty";
 
-export interface SluzbaRadek { id: string; type: string; provider: string; chargedToTenant: boolean; groupName?: string | null }
+export interface SluzbaRadek { id: string; type: string; provider: string; chargedToTenant: boolean; groupName?: string | null; notes?: string | null }
 
 export interface NajemRadek extends NajemVstup {
   tenantStreet: string | null; tenantCity: string | null; tenantZip: string | null;
@@ -338,7 +338,10 @@ function SkupinaFormular({ services, typy, action, pending }: {
             {services.map((s) => (
               <label key={s.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm">
                 <input type="checkbox" checked={vybrane.has(s.id)} onChange={() => prepni(s.id)} className="h-4 w-4 accent-accent" />
-                <span className="min-w-0 flex-1 truncate">{nazevDruhu(typy, s.type)} · {s.provider}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{nazevDruhu(typy, s.type)} · {s.provider}</span>
+                  {s.notes && <span className="block truncate text-xs italic text-ink-muted">{s.notes}</span>}
+                </span>
                 {s.groupName && <span className="text-xs text-ink-muted">{s.groupName}</span>}
               </label>
             ))}
@@ -382,6 +385,9 @@ function SkupinaFormular({ services, typy, action, pending }: {
                 <li key={x.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
                   <span className="min-w-0 flex-1">
                     {nazev(x.id)}
+                    {services.find((sl) => sl.id === x.id)?.notes && (
+                      <span className="block text-xs italic text-ink-secondary">{services.find((sl) => sl.id === x.id)!.notes}</span>
+                    )}
                     <span className="block text-xs text-ink-muted">
                       {x.mesicu === 0 ? "v evidenci nejsou měsíční platby za toto období"
                         : `${x.mesicu} měs. · podle předpisu ${czk(x.predpis)}${x.zaplacenychMesicu ? ` · ${x.zaplacenychMesicu} měs. označeno jako zaplaceno` : " · zaplacení neoznačeno, bere se předpis"}`}
