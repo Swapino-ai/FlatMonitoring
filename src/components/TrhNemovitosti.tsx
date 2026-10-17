@@ -143,12 +143,12 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
     }
   }
 
-  // Body do mapy: zarazene barevne, navrhy sede
-  const body = useMemo<BodOkoli[]>(() => [...zarazene, ...navrhy].filter((r) => r.lat != null && r.lon != null).map((r) => ({
+  // Body do mapy: zarazene barevne, navrhy sede, vyrazene cervene (zapinaji se v legende)
+  const body = useMemo<BodOkoli[]>(() => [...zarazene, ...navrhy, ...vyrazene].filter((r) => r.lat != null && r.lon != null).map((r) => ({
     lat: r.lat!, lon: r.lon!, url: r.url,
-    druh: r.stav === "ZARAZENO" ? (r.dealType === "SALE" ? "PRODEJ" : "NAJEM") : "NAVRH",
+    druh: r.stav === "ZARAZENO" ? (r.dealType === "SALE" ? "PRODEJ" : "NAJEM") : r.stav === "VYRAZENO" ? "VYRAZENO" : "NAVRH",
     popis: [
-      `${r.stav === "ZARAZENO" ? "Zařazeno" : "Návrh"}${r.disposition ? ` · ${r.disposition}` : ""}${r.areaM2 ? ` · ${r.areaM2} m²` : ""}`,
+      `${r.stav === "ZARAZENO" ? "Zařazeno" : r.stav === "VYRAZENO" ? "Vyřazeno" : "Návrh"}${r.disposition ? ` · ${r.disposition}` : ""}${r.areaM2 ? ` · ${r.areaM2} m²` : ""}`,
       `${cena(r.price)}${r.pricePerM2 ? ` · ${czk(r.pricePerM2)}/m²` : ""}`,
     ],
   // eslint-disable-next-line react-hooks/exhaustive-deps

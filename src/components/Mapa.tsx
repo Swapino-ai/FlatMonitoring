@@ -13,15 +13,15 @@ import { ikonaDomecek } from "@/lib/mapaIkona";
  */
 export interface BodOkoli {
   lat: number; lon: number;
-  druh: "PRODEJ" | "NAJEM" | "NAVRH";
+  druh: "PRODEJ" | "NAJEM" | "NAVRH" | "VYRAZENO";
   /** Radky popisu v okne po klepnuti. */
   popis: string[];
   url?: string | null;
 }
 
 const ZADNE_OKOLI: BodOkoli[] = [];
-const BARVY_OKOLI = { PRODEJ: "#7c3aed", NAJEM: "#0d9488", NAVRH: "#9ca3af" } as const;
-const NAZVY_OKOLI = { PRODEJ: "Prodej", NAJEM: "Nájem", NAVRH: "Návrhy" } as const;
+const BARVY_OKOLI = { PRODEJ: "#7c3aed", NAJEM: "#0d9488", NAVRH: "#9ca3af", VYRAZENO: "#dc2626" } as const;
+const NAZVY_OKOLI = { PRODEJ: "Prodej", NAJEM: "Nájem", NAVRH: "Návrhy", VYRAZENO: "Vyřazené" } as const;
 
 export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72", zoom = 17, okoli = ZADNE_OKOLI }: {
   latitude: number | null;
@@ -43,6 +43,8 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
   // stranky chytila prst a uzivatel by uvizl uprostred mapy.
   const [aktivni, setAktivni] = useState(false);
   const [dotykove, setDotykove] = useState(false);
+  // Mapa pres celou obrazovku pro lepsi orientaci; Esc ji vrati zpet
+  const [celaObrazovka, setCelaObrazovka] = useState(false);
 
   // Handler drzime v ref, at prekresleni mapy nezavisi na identite funkce
   useEffect(() => { zmenaRef.current = onZmena; }, [onZmena]);
@@ -50,11 +52,13 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
   const ikona = useRef<DivIcon | null>(null);
   const vrstvaOkoli = useRef<LayerGroup | null>(null);
   const [pripravena, setPripravena] = useState(false);
-  const [druhy, setDruhy] = useState({ PRODEJ: true, NAJEM: true, NAVRH: true });
+  // Vyrazene jen na vyzadani, jinak by mapu zahltily
+  const [druhy, setDruhy] = useState({ PRODEJ: true, NAJEM: true, NAVRH: true, VYRAZENO: false });
   const pocty = {
     PRODEJ: okoli.filter((b) => b.druh === "PRODEJ").length,
     NAJEM: okoli.filter((b) => b.druh === "NAJEM").length,
     NAVRH: okoli.filter((b) => b.druh === "NAVRH").length,
+    VYRAZENO: okoli.filter((b) => b.druh === "VYRAZENO").length,
   };
   const oknaVychozi = useRef(true);
 
@@ -207,10 +211,35 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
     mapa.current?.scrollWheelZoom.enable();
   }
 
+  useEffect(() => {
+    if (!celaObrazovka) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setCelaObrazovka(false); };
+    window.addEventListener("keydown", esc);
+    // Stranka pod mapou se nema posouvat
+    const puvodni = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", esc); document.body.style.overflow = puvodni; };
+  }, [celaObrazovka]);
+
+  function prepniCelouObrazovku() {
+    if (!celaObrazovka) aktivuj();
+    setCelaObrazovka((x) => !x);
+  }
+
   return (
-    <div className="no-print">
-      <div className="relative">
-        <div ref={uzel} className={`w-full overflow-hidden rounded-card border border-line ${vyskaTrida}`} />
+    <div className={celaObrazovka ? "fixed inset-0 z-[2000] flex flex-col bg-surface-card p-3 sm:p-4" : "no-print"}>
+      <div className={celaObrazovka ? "relative min-h-0 flex-1" : "relative"}>
+        <div ref={uzel} className={`w-full overflow-hidden rounded-card border border-line ${celaObrazovka ? "h-full" : vyskaTrida}`} />
+
+        <button type="button" onClick={prepniCelouObrazovku}
+          className="absolute right-2 top-2 z-[600] flex h-8 w-8 items-center justify-center rounded-md border border-line bg-surface-card/95 text-ink-secondary shadow hover:text-ink-primary"
+          title={celaObrazovka ? "Zmenšit (Esc)" : "Celá obrazovka"} aria-label={celaObrazovka ? "Zmenšit mapu" : "Mapa přes celou obrazovku"}>
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            {celaObrazovka
+              ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+              : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}
+          </svg>
+        </button>
 
         {/* Dokud uzivatel mapu nezapne, prst nad ni scrolluje stranku */}
         {dotykove && !aktivni && (
@@ -229,7 +258,7 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
       {okoli.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           <span className="text-ink-muted">Nabídky na mapě:</span>
-          {(["PRODEJ", "NAJEM", "NAVRH"] as const).map((d) => pocty[d] > 0 && (
+          {(["PRODEJ", "NAJEM", "NAVRH", "VYRAZENO"] as const).map((d) => pocty[d] > 0 && (
             <label key={d} className="flex cursor-pointer items-center gap-1.5">
               <input type="checkbox" checked={druhy[d]} onChange={(e) => setDruhy((x) => ({ ...x, [d]: e.target.checked }))}
                 className="h-3.5 w-3.5 rounded border-line accent-accent" />
