@@ -5,9 +5,8 @@
  */
 import { prisma } from "../db";
 import { srealitySource } from "./sreality";
-import { ulozInzeraty, navrhniProNemovitost, aktualizujSkupinu, type StatistikaNavrhu } from "./inzeraty";
+import { ulozInzeraty, navrhniProNemovitost, aktualizujSkupinu, okruhNemovitosti, type StatistikaNavrhu } from "./inzeraty";
 import { zacniBeh, ukonciBeh, type Spoust } from "../scanLog";
-import { okruhyProTyp } from "../geo";
 
 export interface VysledekSkenu {
   dealType: "SALE" | "RENT";
@@ -23,6 +22,7 @@ export async function skenujNemovitost(
   const p = await prisma.property.findUnique({ where: { id: propertyId } });
   if (!p) throw new Error("Nemovitost neexistuje.");
   const vysledky: VysledekSkenu[] = [];
+  const okruh = okruhNemovitosti(p);
   const nalezeneIds: string[] = [];
 
   for (const dealType of dealTypes) {
@@ -32,10 +32,12 @@ export async function skenujNemovitost(
       // rozhoduje hodnoceni navrhu a hlavne uzivatel
       const nabidky = await srealitySource.fetchListings({
         city: p.city, district: p.district ?? undefined, region: p.region ?? undefined,
-        category: p.type, dealType, areaM2: p.areaM2, toleranceM2: Math.max(15, p.areaM2 * 0.4),
+        // Stejna dispozice a plocha ±25 % uz pri stahovani; o zbytku rozhodne hodnoceni navrhu
+        category: p.type, dealType, areaM2: p.areaM2, toleranceM2: p.areaM2 * 0.25,
+        disposition: p.disposition ?? undefined,
         targetSample: 40, maxPages: 8,
-        // Okruh kolem obce; pri malo nabidkach se sam rozsiri (az 20 km)
-        okruhKm: p.scanRadiusKm ?? okruhyProTyp(p.type)[0],
+        // Okruh kolem obce; pri malo nabidkach se rozsiri, nejvys na tvrdou hranici
+        okruhKm: okruh.zaklad, okruhMaxKm: okruh.max,
       });
       const { novych, zmenCeny, ids } = await ulozInzeraty(nabidky, p.region);
       nalezeneIds.push(...ids);

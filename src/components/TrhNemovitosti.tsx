@@ -294,7 +294,8 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, canEdit, sledovat
                 V databázi trhu je pro tuhle nemovitost {diag.kandidatu} nabídek (prodej i nájem): už posouzených {diag.uzZname}
                 {diag.novych > 0 && <>, <strong className="text-accent">{diag.novych} čeká na navržení</strong></>}
                 {diag.daleko > 0 && `, příliš daleko ${diag.daleko}`}
-                {diag.velikost > 0 && `, výrazně jiná plocha ${diag.velikost}`}
+                {diag.velikost > 0 && `, jiná plocha (víc než ±25 %) ${diag.velikost}`}
+                {diag.jinaDispozice > 0 && `, jiná dispozice ${diag.jinaDispozice}`}
                 {diag.vylouceneObce > 0 && `, z vyloučených obcí ${diag.vylouceneObce}`}
                 {diag.zmizelych > 0 && `, zmizelé z trhu ${diag.zmizelych}`}.
               </p>

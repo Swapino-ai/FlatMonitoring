@@ -40,6 +40,8 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
     }),
   ]);
   // Proc co (ne)prislo do navrhu — bez zapisu
+  // Pri otevreni: odebrat navrhy, ktere uz pravidlum nevyhovuji, a doplnit nove z databaze trhu
+  if (korenP?.sledovatTrh) await navrhniProNemovitost(koren);
   const diag = await navrhniProNemovitost(koren, { zapsat: false });
 
   const zaznamy = await prisma.zarazeniInzeratu.findMany({

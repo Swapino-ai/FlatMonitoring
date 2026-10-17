@@ -9,10 +9,14 @@ over("median lichy", median([5, 1, 3]) === 3);
 const n = { areaM2: 60, disposition: "2+kk", latitude: 50.0, longitude: 14.0, city: "Praha", okruhKm: 3 };
 const blizko = ohodnot(n, { areaM2: 62, disposition: "2+kk", latitude: 50.005, longitude: 14.0, city: "Praha", pricePerM2: 100000 }, 100000);
 over("blizko doporuceno", blizko.doporuceno && !blizko.mimo, blizko);
-const daleko = ohodnot(n, { areaM2: 60, disposition: "2+kk", latitude: 50.2, longitude: 14.0, city: "X", pricePerM2: 100000 }, null);
+const daleko = ohodnot(n, { areaM2: 60, disposition: "2+kk", latitude: 50.05, longitude: 14.0, city: "X", pricePerM2: 100000 }, null);
 over("daleko mimo", daleko.mimo, daleko);
-const velky = ohodnot(n, { areaM2: 120, disposition: "4+1", latitude: 50.0, longitude: 14.0, city: "Praha", pricePerM2: 1 }, null);
+const velky = ohodnot(n, { areaM2: 80, disposition: "2+kk", latitude: 50.0, longitude: 14.0, city: "Praha", pricePerM2: 1 }, null);
 over("velky mimo", velky.mimo, velky);
+const jinaDisp = ohodnot(n, { areaM2: 60, disposition: "1+1", latitude: 50.0, longitude: 14.0, city: "Praha", pricePerM2: 1 }, null);
+over("jina dispozice mimo", jinaDisp.mimo && jinaDisp.duvod.startsWith("dispozice"), jinaDisp);
+const bezPolohy = ohodnot(n, { areaM2: 60, disposition: "2+kk", latitude: null, longitude: null, city: "Jinde", pricePerM2: 1 }, null);
+over("jina obec bez polohy mimo", bezPolohy.mimo, bezPolohy);
 const drahy = ohodnot(n, { areaM2: 60, disposition: "2+kk", latitude: 50.0, longitude: 14.0, city: "Praha", pricePerM2: 200000 }, 100000);
 over("drahy nedoporucen", !drahy.doporuceno && drahy.duvod.includes("cena"), drahy);
 

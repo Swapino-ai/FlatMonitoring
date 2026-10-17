@@ -10,6 +10,8 @@ export interface NemovitostProSrovnani {
   longitude: number | null;
   city: string;
   okruhKm: number;
+  /** Tvrda hranice vzdalenosti (km); bez ni plati okruhKm */
+  maxKm?: number;
 }
 
 export interface InzeratProSrovnani {
@@ -56,29 +58,30 @@ export interface Hodnoceni {
 export function ohodnot(n: NemovitostProSrovnani, i: InzeratProSrovnani, medianZarazenych: number | null): Hodnoceni {
   const duvody: string[] = [];
   let skore = 100;
+  const mimo = (duvod: string, km: number | null = null): Hodnoceni => ({ skore: 0, doporuceno: false, duvod, mimo: true, vzdalenostKm: km });
 
+  // Dispozice musi byt stejna (pravidlo uzivatele); neznama dispozice jen snizi skore
+  if (n.disposition && i.disposition && n.disposition !== i.disposition) return mimo(`dispozice ${i.disposition}`);
+  if (n.disposition && !i.disposition) { skore -= 10; duvody.push("dispozice neuvedena"); }
+
+  // Vzdalenost: okruh je tvrda hranice; bez polohy jen stejna obec
   let km: number | null = null;
+  const maxKm = n.maxKm ?? n.okruhKm;
   if (n.latitude != null && n.longitude != null && i.latitude != null && i.longitude != null) {
     km = vzdalenost({ lat: n.latitude, lon: n.longitude }, { lat: i.latitude, lon: i.longitude });
-    // Male obce se skenuji pres kraj: nabidky z okolnich mest jeste davaji smysl
-    if (km > Math.max(n.okruhKm * 5, 20)) return { skore: 0, doporuceno: false, duvod: `${km.toFixed(1)} km daleko`, mimo: true, vzdalenostKm: km };
-    if (km > n.okruhKm) { skore -= 30; duvody.push(`${km.toFixed(1)} km, mimo okruh`); }
-    else skore -= (km / n.okruhKm) * 15;
+    if (km > maxKm) return mimo(`${km.toFixed(1).replace(".", ",")} km, mimo okruh ${maxKm} km`, km);
+    skore -= (km / maxKm) * 20;
   } else if (i.city.trim().toLowerCase() !== n.city.trim().toLowerCase()) {
-    skore -= 20; duvody.push("jiná obec, poloha neznámá");
+    return mimo("jiná obec a neznámá poloha");
   }
 
+  // Plocha nejvys ±25 %
   if (i.areaM2 && n.areaM2) {
     const odchylka = Math.abs(i.areaM2 - n.areaM2) / n.areaM2;
-    if (odchylka > 0.5) return { skore: 0, doporuceno: false, duvod: `plocha ${i.areaM2} m²`, mimo: true, vzdalenostKm: km };
-    skore -= odchylka * 60;
-    if (odchylka > 0.25) duvody.push(`plocha ${Math.round(i.areaM2)} m²`);
+    if (odchylka > 0.25) return mimo(`plocha ${Math.round(i.areaM2)} m²`, km);
+    skore -= odchylka * 80;
   } else {
     skore -= 15; duvody.push("plocha neznámá");
-  }
-
-  if (n.disposition && i.disposition && n.disposition !== i.disposition) {
-    skore -= 15; duvody.push(`dispozice ${i.disposition}`);
   }
 
   let extrem = false;
@@ -92,10 +95,11 @@ export function ohodnot(n: NemovitostProSrovnani, i: InzeratProSrovnani, medianZ
   }
 
   skore = Math.max(0, Math.min(100, Math.round(skore)));
+  const popis = [km != null ? `${km.toFixed(1).replace(".", ",")} km` : "stejná obec", i.disposition, i.areaM2 ? `${Math.round(i.areaM2)} m²` : null].filter(Boolean).join(" · ");
   return {
     skore,
     doporuceno: skore >= 70 && !extrem,
-    duvod: duvody.length ? duvody.join(", ") : "podobná nabídka",
+    duvod: duvody.length ? `${popis} · ${duvody.join(", ")}` : `${popis} ✓`,
     mimo: false,
     vzdalenostKm: km,
   };

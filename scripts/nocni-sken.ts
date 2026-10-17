@@ -119,7 +119,7 @@ async function main() {
       console.log(`  ${p.name.padEnd(30)} ${typ} ${v.chyba ? `SELHALO — ${v.chyba}` : `${v.nalezeno} nabídek, ${v.novych} nových, ${v.zmenCeny} změn ceny`}`);
       if (v.chyba) selhalo++; else ok++;
     }
-    console.log(`  ${"".padEnd(30)} ${navrhu} nových návrhů k zařazení (posouzeno ${st.kandidatu}: už známých ${st.uzZname}, daleko ${st.daleko}, jiná velikost ${st.velikost}, vyloučená obec ${st.vylouceneObce}, zmizelé ${st.zmizelych})`);
+    console.log(`  ${"".padEnd(30)} ${navrhu} nových návrhů k zařazení (posouzeno ${st.kandidatu}: už známých ${st.uzZname}, daleko ${st.daleko}, jiná velikost ${st.velikost}, jiná dispozice ${st.jinaDispozice}, vyloučená obec ${st.vylouceneObce}, zmizelé ${st.zmizelych}; odebráno neplatných návrhů ${st.odebrano})`);
   }
 
   await zarazeneInzeraty();

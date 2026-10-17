@@ -65,8 +65,9 @@ async function hledejVOkruhu(query: ScanQuery): Promise<ScrapedListing[] | null>
       if (strana < maxPages) await sleep(1500);
     }
     posledni = filtrujSrovnatelne(out, query);
-    if (posledni.length >= Math.min(cilovyVzorek, 10) || okruh >= 20) return posledni;
-    okruh = Math.min(20, okruh * 2);
+    const strop = query.okruhMaxKm ?? 20;
+    if (posledni.length >= Math.min(cilovyVzorek, 10) || okruh >= strop) return posledni;
+    okruh = Math.min(strop, okruh * 2);
     await sleep(1500);
   }
 }

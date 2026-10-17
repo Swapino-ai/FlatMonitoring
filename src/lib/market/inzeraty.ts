@@ -77,57 +77,83 @@ function rozdelMesta(seznam: string | null | undefined): string[] {
   return (seznam ?? "").split(",").map((m) => m.trim().toLowerCase()).filter(Boolean);
 }
 
+/**
+ * Okruh hledani: zaklad a tvrda hranice. Rucne nastaveny okruh je pevny; automaticky
+ * zacina podle druhu (byt 3 km) a smi se rozsirit nejvys na 4× (max. 15 km).
+ */
+export function okruhNemovitosti(p: { type: string; scanRadiusKm: number | null }): { zaklad: number; max: number; pevny: boolean } {
+  if (p.scanRadiusKm) return { zaklad: p.scanRadiusKm, max: p.scanRadiusKm, pevny: true };
+  const zaklad = okruhyProTyp(p.type)[0];
+  return { zaklad, max: Math.min(15, zaklad * 4), pevny: false };
+}
+
 export interface StatistikaNavrhu {
-  /** Kolik inzeratu prislo v uvahu (stejny druh, obec, kraj nebo nalezeno skenem teto nemovitosti) */
+  /** Kolik inzeratu prislo v uvahu */
   kandidatu: number;
   /** O kterych uz je rozhodnuto (navrh, zarazeno, vyrazeno) */
   uzZname: number;
   novych: number;
   daleko: number;
   velikost: number;
+  jinaDispozice: number;
   vylouceneObce: number;
   zmizelych: number;
+  /** Starsi navrhy, ktere uz pravidlum nevyhovuji, smazane */
+  odebrano: number;
 }
 
 /**
  * Navrhne nemovitosti inzeraty z databaze, o kterych jeste nerozhodla.
- * Kandidati: vse, co nasel sken teto nemovitosti (ids), plus stejny druh z obce nebo kraje.
- * S `zapsat: false` jen spocita, proc co (ne)prislo do navrhu — pro vysvetleni na strance.
+ * Pravidla: stejny druh i dispozice, plocha ±25 %, do okruhu (bez polohy jen stejna obec),
+ * ne z vyloucenych obci. Starsi navrhy, ktere uz nevyhovuji, se pri tom odeberou.
+ * S `zapsat: false` jen spocita, proc co (ne)prislo do navrhu.
  */
 export async function navrhniProNemovitost(propertyId: string, o: { ids?: string[]; zapsat?: boolean } = {}): Promise<StatistikaNavrhu> {
-  const st: StatistikaNavrhu = { kandidatu: 0, uzZname: 0, novych: 0, daleko: 0, velikost: 0, vylouceneObce: 0, zmizelych: 0 };
+  const st: StatistikaNavrhu = { kandidatu: 0, uzZname: 0, novych: 0, daleko: 0, velikost: 0, jinaDispozice: 0, vylouceneObce: 0, zmizelych: 0, odebrano: 0 };
   const zapsat = o.zapsat !== false;
   const p = await prisma.property.findUnique({ where: { id: propertyId } });
   if (!p || (zapsat && !p.sledovatTrh)) return st;
-  const okruhKm = p.scanRadiusKm ?? okruhyProTyp(p.type)[0];
+  const { zaklad, max } = okruhNemovitosti(p);
   const vyloucene = rozdelMesta(p.excludedCities);
+  const nem = { areaM2: p.areaM2, disposition: p.disposition, latitude: p.latitude, longitude: p.longitude, city: p.city, okruhKm: zaklad, maxKm: max };
 
-  const znamych = new Set((await prisma.zarazeniInzeratu.findMany({ where: { propertyId }, select: { inzeratId: true } })).map((z) => z.inzeratId));
+  const zname = await prisma.zarazeniInzeratu.findMany({ where: { propertyId }, include: { inzerat: true } });
+  // Uklid: navrhy, ktere uz pravidlum nevyhovuji (zprisnena pravidla, vyloucena obec), zmizi
+  const neplatne = zname.filter((z) => z.stav === "NAVRH" && (
+    vyloucene.some((m) => z.inzerat.city.toLowerCase().includes(m)) || ohodnot(nem, z.inzerat, null).mimo
+  ));
+  if (zapsat && neplatne.length) {
+    await prisma.zarazeniInzeratu.deleteMany({ where: { id: { in: neplatne.map((z) => z.id) } } });
+    st.odebrano = neplatne.length;
+  }
+  const znamych = new Set(zname.filter((z) => !neplatne.includes(z) || !zapsat).map((z) => z.inzeratId));
+
+  // Kandidati: co nasel sken teto nemovitosti, plus stejny druh z obce nebo s polohou (vzdalenost rozhodne)
   const kandidati = await prisma.inzerat.findMany({
     where: {
       OR: [
         ...(o.ids?.length ? [{ id: { in: o.ids } }] : []),
         { category: p.type, city: { equals: p.city, mode: "insensitive" as const } },
-        ...(p.region ? [{ category: p.type, region: p.region }] : []),
+        ...(p.latitude != null ? [{ category: p.type, latitude: { not: null } }] : []),
       ],
     },
   });
-  st.kandidatu = kandidati.length;
 
+  st.kandidatu = kandidati.length;
   for (const dealType of ["SALE", "RENT"] as const) {
-    const zarazene = await prisma.zarazeniInzeratu.findMany({
-      where: { propertyId, stav: "ZARAZENO", inzerat: { dealType } }, include: { inzerat: true },
-    });
+    const zarazene = zname.filter((z) => z.stav === "ZARAZENO" && z.inzerat.dealType === dealType);
     const medianZar = zarazene.length ? median(zarazene.map((z) => z.inzerat.pricePerM2 ?? 0).filter((x) => x > 0)) : null;
     for (const i of kandidati.filter((k) => k.dealType === dealType)) {
       if (znamych.has(i.id)) { st.uzZname++; continue; }
       if (i.zmizelAt) { st.zmizelych++; continue; }
       if (vyloucene.some((m) => i.city.toLowerCase().includes(m))) { st.vylouceneObce++; continue; }
-      const h = ohodnot(
-        { areaM2: p.areaM2, disposition: p.disposition, latitude: p.latitude, longitude: p.longitude, city: p.city, okruhKm },
-        i, medianZar || null,
-      );
-      if (h.mimo) { if (h.duvod.startsWith("plocha")) st.velikost++; else st.daleko++; continue; }
+      const h = ohodnot(nem, i, medianZar || null);
+      if (h.mimo) {
+        if (h.duvod.startsWith("plocha")) st.velikost++;
+        else if (h.duvod.startsWith("dispozice")) st.jinaDispozice++;
+        else st.daleko++;
+        continue;
+      }
       if (zapsat) {
         await prisma.zarazeniInzeratu.create({
           data: { propertyId, inzeratId: i.id, stav: "NAVRH", skore: h.skore, doporuceno: h.doporuceno, duvod: h.duvod },
