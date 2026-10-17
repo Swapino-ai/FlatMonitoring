@@ -118,9 +118,15 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
   const idNabidek = [...new Set(property.valuations.flatMap((v) => (Array.isArray(v.comparables) ? v.comparables : [])
     .map((n) => String((n as { url?: string }).url ?? "").match(/\/(\d+)\/?$/)?.[1]).filter((x): x is string => !!x)))];
   const fotkyNabidek: Record<string, string> = {};
+  const snimkyNabidek: Record<string, string> = {};
   if (idNabidek.length) {
-    for (const i of await prisma.inzerat.findMany({ where: { externalId: { in: idNabidek } }, select: { source: true, externalId: true, fotkyUrl: true } })) {
-      if (i.fotkyUrl[0]) fotkyNabidek[`${i.source}|${i.externalId}`] = i.fotkyUrl[0];
+    for (const i of await prisma.inzerat.findMany({
+      where: { externalId: { in: idNabidek } },
+      select: { source: true, externalId: true, fotkyUrl: true, snimky: { where: { druh: "SNIMEK" }, orderBy: { createdAt: "desc" }, take: 1, select: { id: true } } },
+    })) {
+      const k = `${i.source}|${i.externalId}`;
+      if (i.fotkyUrl[0]) fotkyNabidek[k] = i.fotkyUrl[0];
+      if (i.snimky[0]) snimkyNabidek[k] = i.snimky[0].id;
     }
   }
   const skenovatelne = !!NEMOVITOST_MAP.get(property.type)?.srealityCesta;
@@ -144,7 +150,7 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
           radky={radky} diag={diag} odhady={{ SALE: odhad("SALE"), RENT: odhad("RENT") }} />
 
         <Card title="Historie ocenění">
-          <ValuationManager propertyId={id} valuations={property.valuations} areaM2={property.areaM2} canEdit={canEdit} vyrazene={[]} fotky={fotkyNabidek} />
+          <ValuationManager propertyId={id} valuations={property.valuations} areaM2={property.areaM2} canEdit={canEdit} vyrazene={[]} fotky={fotkyNabidek} snimky={snimkyNabidek} />
         </Card>
       </main>
     </>

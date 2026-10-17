@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { czk, dateCz } from "@/lib/format";
 import { vazenyMedian } from "@/lib/market/zarazeni";
+import { Galerie } from "./Galerie";
 
 export interface Nabidka {
   disposition: string | null;
@@ -29,14 +30,6 @@ export interface Nabidka {
 }
 
 /**
- * Starsi snimky nesou adresu se zastupnym /x/x/, kterou Sreality nikdy
- * neprepsaly — takovy odkaz vede na 404, radsi ho nenabizime vubec.
- */
-function pouzitelnyOdkaz(url: string | null | undefined): boolean {
-  return !!url && !url.includes("/x/x/");
-}
-
-/**
  * Klic pro vyrazeni nabidky z odhadu. Snimky porizene driv ho v sobe nemaji,
  * ale id inzeratu je na konci adresy — bez toho by u starsich oceneni neslo
  * vyradit nic.
@@ -51,7 +44,7 @@ function klicNabidky(n: Nabidka): string | null {
  * Nabidky, ze kterych medián vznikl. Bez nich je ocenění černá skříňka —
  * tohle ukáže, s čím přesně se byt porovnával.
  */
-export function Comparables({ nabidky, tvojeKcM2, datumOceneni, poznamka, fotky = {} }: {
+export function Comparables({ nabidky, tvojeKcM2, datumOceneni, poznamka, fotky = {}, snimky = {} }: {
   nabidky: Nabidka[];
   /** Odhad za m² (vážený průměr) */
   tvojeKcM2: number;
@@ -61,11 +54,14 @@ export function Comparables({ nabidky, tvojeKcM2, datumOceneni, poznamka, fotky 
   poznamka?: string | null;
   /** Fotky ke starším snímkům, které je v sobě nemají (klíč nabídky → adresa). */
   fotky?: Record<string, string>;
+  /** Nejnovější screenshot stránky nabídky (klíč nabídky → id snímku). */
+  snimky?: Record<string, string>;
   propertyId?: string;
   vyrazene?: string[];
   canEdit?: boolean;
 }) {
   const [vse, setVse] = useState(false);
+  const [otevreny, setOtevreny] = useState<string | null>(null);
 
   if (nabidky.length === 0) {
     return (
@@ -126,43 +122,46 @@ export function Comparables({ nabidky, tvojeKcM2, datumOceneni, poznamka, fotky 
         </p>
       </div>
 
-      {/* Nabídky po řádcích s fotkou */}
-      <ul className="divide-y divide-line/70 overflow-hidden rounded-xl border border-line bg-surface-card">
+      {/* Nabídky jako dlaždice s fotkou; klik na fotku / Screenshot otevře uložený snímek stránky */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {zobrazene.map((n, i) => {
           const rozdil = tvojeKcM2 ? ((n.pricePerM2 - tvojeKcM2) / tvojeKcM2) * 100 : 0;
           const klic = klicNabidky(n);
           const fotka = n.fotka ?? (klic ? fotky[klic] : undefined);
+          const snimek = klic ? snimky[klic] : undefined;
           return (
-            <li key={i} className="flex items-center gap-3 px-3 py-2">
-              <div className="h-14 w-20 shrink-0 overflow-hidden rounded-md bg-surface-sunken">
+            <div key={i} className={`overflow-hidden rounded-card border bg-surface-card ${Math.abs(rozdil) < 2 ? "border-accent/60" : "border-line"}`}>
+              <button type="button" disabled={!snimek} onClick={() => snimek && setOtevreny(snimek)}
+                className="relative block aspect-[4/3] w-full bg-surface-sunken disabled:cursor-default" title={snimek ? "Zobrazit screenshot stránky" : undefined}>
                 {fotka && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={fotka} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
                 )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">{n.disposition ?? "?"} · {n.areaM2 ?? "?"} m²</div>
+                {Math.abs(rozdil) < 2 && <span className="absolute left-2 top-2 rounded bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-white">≈ odhad</span>}
+              </button>
+              <div className="p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-medium">{n.disposition ?? "?"} · {n.areaM2 ?? "?"} m²</span>
+                  <span className={`text-xs tabular-nums ${Math.abs(rozdil) < 2 ? "text-accent" : rozdil > 0 ? "text-good" : "text-warn"}`} title="Proti odhadu (průměru)">
+                    {rozdil > 0 ? "+" : ""}{rozdil.toFixed(0)} %
+                  </span>
+                </div>
                 <div className="truncate text-xs text-ink-muted">
                   {n.district ?? "—"}{n.vzdalenostKm != null && ` · ${n.vzdalenostKm} km`}{n.vaha != null && ` · váha ${String(n.vaha).replace(".", ",")}×`}
                 </div>
+                <div className="mt-2 text-lg font-semibold tabular-nums">{czk(n.pricePerM2)}<span className="text-xs font-normal text-ink-muted">/m²</span></div>
+                <div className="flex items-center justify-between gap-2 text-xs">
+                  <span className="tabular-nums text-ink-secondary">{czk(n.price)} celkem</span>
+                  {snimek
+                    ? <button type="button" onClick={() => setOtevreny(snimek)} className="text-accent hover:underline">screenshot →</button>
+                    : <span className="text-ink-muted">bez screenshotu</span>}
+                </div>
               </div>
-              <div className="text-right">
-                <div className="text-sm font-semibold tabular-nums">{czk(n.pricePerM2)}<span className="text-xs font-normal text-ink-muted">/m²</span></div>
-                <div className="text-xs tabular-nums text-ink-muted">{czk(n.price)}</div>
-              </div>
-              <div className={`hidden w-16 text-right text-xs tabular-nums sm:block ${Math.abs(rozdil) < 2 ? "text-accent" : rozdil > 0 ? "text-good" : "text-warn"}`}
-                title="Proti odhadu (průměru)">
-                {Math.abs(rozdil) < 2 ? "≈ odhad" : `${rozdil > 0 ? "+" : ""}${rozdil.toFixed(0)} %`}
-              </div>
-              <div className="w-16 text-right text-xs">
-                {pouzitelnyOdkaz(n.url)
-                  ? <a href={n.url!} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">inzerát ↗</a>
-                  : <span className="text-ink-muted">—</span>}
-              </div>
-            </li>
+            </div>
           );
         })}
-      </ul>
+      </div>
+      {otevreny && <Galerie polozky={[{ src: `/api/snimek/${otevreny}`, popis: "Screenshot stránky inzerátu", posouvat: true }]} onZavrit={() => setOtevreny(null)} />}
 
       {serazene.length > 8 && (
         <button onClick={() => setVse(!vse)} className="btn w-full border-dashed text-ink-secondary">
