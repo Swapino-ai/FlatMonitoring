@@ -186,7 +186,8 @@ export function MapaPortfolia({ body, vyskaTrida = "h-72 lg:h-[26rem]" }: {
 
   return (
     <div className="no-print">
-      <div ref={uzel} className={`w-full overflow-hidden rounded-xl border border-line ${vyskaTrida}`} />
+      {/* isolate: vrstvy Leafletu zustanou uvnitr mapy a neprekryji hlavicku */}
+      <div ref={uzel} className={`isolate w-full overflow-hidden rounded-xl border border-line ${vyskaTrida}`} />
       {chyba && <p className="mt-1 text-xs text-warn">{chyba}</p>}
     </div>
   );

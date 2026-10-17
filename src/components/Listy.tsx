@@ -63,6 +63,9 @@ export function Listy({ klic, listy }: { klic: string; listy: List[] }) {
                 <Link key={l.id} href={l.odkaz}
                   className="whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-ink-primary">
                   {l.nazev}
+                  {l.pocet != null && l.pocet > 0 && (
+                    <span className="ml-1.5 rounded-md bg-warn/20 px-1.5 py-0.5 text-[11px] font-semibold text-warn" title="Čeká na tvoje rozhodnutí">{l.pocet}</span>
+                  )}
                 </Link>
               );
             }

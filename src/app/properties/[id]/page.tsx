@@ -107,6 +107,16 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   if (!property) notFound();
 
   const podil = nasobitel(pohled, property.owners, user.id);
+  // Na trhu ceka ke schvaleni: navrhy k zarazeni a mozne shody stejneho bytu (u propojeneho oceneni u korene)
+  const korenTrhu = property.oceneniPodle ?? property.id;
+  const [navrhuTrhu, shodTrhu] = await Promise.all([
+    prisma.zarazeniInzeratu.count({ where: { propertyId: korenTrhu, stav: "NAVRH" } }),
+    prisma.shodaInzeratu.count({ where: { stav: "NAVRH", OR: [
+      { inzerat: { zarazeni: { some: { propertyId: korenTrhu, stav: { in: ["NAVRH", "ZARAZENO"] } } } } },
+      { drivejsi: { zarazeni: { some: { propertyId: korenTrhu, stav: { in: ["NAVRH", "ZARAZENO"] } } } } },
+    ] } }),
+  ]);
+  const ceka = { trh: navrhuTrhu + shodTrhu };
   const a = analyzeProperty(property, new Date(), podil);
   const year = new Date().getFullYear();
 
@@ -621,8 +631,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           {
             id: "najem",
             nazev: "Nájem",
-            pocet: property.leases.length,
-            varovani: zalohyNesedi,
             obsah: (<>
             <SbalitelnaKarta klic="najem" title="Nájem a nájemci">
               <LeaseManager typy={typy} najemci={najemciVyber} dokumenty={dokumentyPodleSmlouvy} diskPripojen={diskPripojen} propertyId={property.id} leases={property.leases}
@@ -650,8 +658,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           {
             id: "sluzby",
             nazev: "Služby",
-            pocet: property.services.length,
-            varovani: zalohyNesedi,
             obsah: (<>
             <SbalitelnaKarta klic="sluzby" title="Služby a dodavatelé" action={<Link href="/savings" className="text-xs text-accent">Kde ušetřit →</Link>}>
               <ServiceManager typy={typy} propertyId={property.id} services={property.services} canEdit={user.role === "OWNER"}
@@ -662,7 +668,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           {
             id: "vyuctovani",
             nazev: "Vyúčtování",
-            pocet: vyuctovani.length || undefined,
             obsah: (<>
             <SbalitelnaKarta klic="vyuctovani-sluzeb" title="Vyúčtování služeb od dodavatelů">
               <VyuctovaniSluzeb typy={typy} dokumenty={dokumentyVyuctovani} diskPripojen={diskPripojen} services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant, groupName: sl.groupName, notes: sl.notes }))}
@@ -742,7 +747,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           {
             id: "pohyby",
             nazev: "Stav účtu",
-            pocet: property.transactions.length,
             obsah: (<>
           <div className="mb-3 space-y-3">
             <StatGrid>
@@ -774,7 +778,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             </>),
           },
           // Trh ma vlastni stranku (ocenění, nabídky, mapa) — záložka na ni vede rovnou
-          { id: "trh", nazev: "Trh", odkaz: `/properties/${property.id}/trh` },
+          // Jedina zalozka s upozornenim: na trhu ceka neco ke schvaleni
+          { id: "trh", nazev: "Trh", odkaz: `/properties/${property.id}/trh`, pocet: ceka.trh || undefined, varovani: ceka.trh > 0 },
           {
             id: "dane",
             nazev: "Daně",
