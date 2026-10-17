@@ -17,7 +17,7 @@ import { NEMOVITOST_MAP } from "../src/lib/catalogs";
 import { doplnPolohu } from "../src/lib/geokodovani";
 import { uklidDenik } from "../src/lib/scanLog";
 import { skenujNemovitost } from "../src/lib/market/sken";
-import { aktualizujSkupinu } from "../src/lib/market/inzeraty";
+import { aktualizujSkupinu, najdiShody } from "../src/lib/market/inzeraty";
 import { presunSnimkyNaDisk } from "../src/lib/market/snimky";
 import { jeNastaveno } from "../src/lib/googleDrive";
 import { doplnParametry } from "./ai-parametry";
@@ -162,6 +162,9 @@ async function main() {
   await zarazeneInzeraty();
   // AI precte text stranek novych navrhu a zarazenych (typ domu, stav...) — pred prepoctem vah
   await doplnParametry(prisma, 150).catch((e) => console.log("AI parametry selhaly:", e instanceof Error ? e.message : e));
+  // Stejny byt v jinem (i drivejsim) inzeratu — navrhy ke schvaleni
+  const shody = await najdiShody().catch((e) => { console.log("Hledání stejných bytů selhalo:", e instanceof Error ? e.message : e); return null; });
+  if (shody) console.log(`Stejný byt: porovnáno ${shody.porovnano} dvojic, nových možných shod ${shody.novych}.`);
   // Zmizele inzeraty v odhadu zustavaji (byly to skutecne nabidky), jen se prepocita
   for (const p of sledovane) {
     await aktualizujSkupinu(p.id);

@@ -1,5 +1,6 @@
 import { median, odhadZeZarazenych, ohodnot, vahaNabidky, vahaZarazeni, vazenyMedian, vazenyPrumer, zakladObce } from "../src/lib/market/zarazeni";
 import { PROFILY, platneHodnoty, profilTypu } from "../src/lib/market/profily";
+import { PRAH_SHODY, podlaziZUdaju, podobnostBytu } from "../src/lib/market/shody";
 
 let chyb = 0;
 const over = (n: string, ok: boolean, info?: unknown) => { if (!ok) { chyb++; console.log("CHYBA", n, info ?? ""); } };
@@ -58,6 +59,14 @@ over("vaha rucne", vahaNabidky(B, nn, nab(75, {}, { vahaRucne: 3 })) === 3);
 over("profil garaze", profilTypu("PARKOVACI_STANI").zaKus && !profilTypu("BYT").zaKus && profilTypu("CHATA").klic === "DUM");
 over("dum: jina dispozice neni mimo", !ohodnot({ areaM2: 120, disposition: "4+1", latitude: null, longitude: null, city: "A", okruhKm: 5, stejnaDispozice: false, tolerancePlochy: 0.3 },
   { areaM2: 140, disposition: "5+1", latitude: null, longitude: null, city: "A", pricePerM2: 1 }, null).mimo);
+
+const byt1 = { category: "BYT", disposition: "3+1", areaM2: 74.9, city: "Nový Bor", district: null, latitude: 50.7570, longitude: 14.5550 };
+over("stejny byt jinde inzerovany", (podobnostBytu(byt1, { ...byt1, areaM2: 75, latitude: 50.75702, longitude: 14.55501 })?.skore ?? 0) >= PRAH_SHODY);
+over("jina dispozice neni shoda", podobnostBytu(byt1, { ...byt1, disposition: "2+1" }) === null);
+over("jine patro neni shoda", podobnostBytu({ ...byt1, podlazi: 2 }, { ...byt1, podlazi: 3 }) === null);
+over("daleko neni shoda", podobnostBytu(byt1, { ...byt1, latitude: 50.77 }) === null);
+over("jina plocha neni shoda", podobnostBytu(byt1, { ...byt1, areaM2: 80 }) === null);
+over("podlazi z udaju", podlaziZUdaju(["výtah", "3. patro z 5"]) === 3 && podlaziZUdaju(["přízemí"]) === 0);
 
 console.log(chyb ? `${chyb} chyb` : "vše v pořádku");
 process.exit(chyb ? 1 : 0);

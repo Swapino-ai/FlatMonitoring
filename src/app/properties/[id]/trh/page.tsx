@@ -54,9 +54,17 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
         include: {
           ceny: { orderBy: { at: "asc" } },
           snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true } },
+          // Stejny byt v jinem inzeratu (navrhy i potvrzene, zamitnute ne)
+          shody: { where: { stav: { not: "ZAMITNUTO" } }, include: { drivejsi: { include: { ceny: { orderBy: { at: "asc" } } } } } },
+          shodyDrive: { where: { stav: { not: "ZAMITNUTO" } }, include: { inzerat: { include: { ceny: { orderBy: { at: "asc" } } } } } },
         },
       },
     },
+  });
+  type JinyInzerat = { url: string | null; dealType: string; price: number; firstSeenAt: Date; lastSeenAt: Date; zmizelAt: Date | null; ceny: { at: Date; price: number }[] };
+  const jiny = (j: JinyInzerat) => ({
+    url: j.url, najem: j.dealType === "RENT", price: j.price, od: denISO(j.firstSeenAt), do: denISO(j.zmizelAt ?? j.lastSeenAt), zmizel: !!j.zmizelAt,
+    ceny: j.ceny.map((c) => ({ at: denISO(c.at), price: c.price })),
   });
 
   // Klic: jak se hleda, popsane vetou
@@ -107,6 +115,10 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
       lat: i.latitude, lon: i.longitude, polohaRucne: i.polohaRucne, inzeratId: i.id,
       firstSeen: denISO(i.firstSeenAt), lastSeen: denISO(i.lastSeenAt), zmizel: i.zmizelAt ? denISO(i.zmizelAt) : null,
       ceny: i.ceny.map((c) => ({ at: denISO(c.at), price: c.price })),
+      shody: [
+        ...i.shody.map((s) => ({ id: s.id, stav: s.stav, skore: s.skore, duvod: s.duvod, drivejsi: true, jiny: jiny(s.drivejsi) })),
+        ...i.shodyDrive.map((s) => ({ id: s.id, stav: s.stav, skore: s.skore, duvod: s.duvod, drivejsi: false, jiny: jiny(s.inzerat) })),
+      ],
       snimky: i.snimky.filter((s) => s.druh !== "FOTO").map((s) => ({ id: s.id, createdAt: s.createdAt.toISOString() })),
       fotky: i.snimky.filter((s) => s.druh === "FOTO").map((s) => s.id),
     };

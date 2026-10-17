@@ -148,3 +148,12 @@ export async function nastavOceneniPodle(propertyId: string, cilId: string | nul
   obnov(propertyId);
   return { success: cilId ? "Ocenění propojeno." : "Propojení zrušeno, nemovitost má zase vlastní nabídky." };
 }
+
+/** Potvrdi nebo zamitne navrzenou shodu (stejny byt v jinem inzeratu). */
+export async function rozhodniShodu(propertyId: string, shodaId: string, stejny: boolean): Promise<TrhState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+  await prisma.shodaInzeratu.update({ where: { id: shodaId }, data: { stav: stejny ? "POTVRZENO" : "ZAMITNUTO", rozhodnutoAt: new Date() } });
+  obnov(propertyId);
+  return { success: stejny ? "Propojeno jako stejný byt." : "Označeno jako jiný byt." };
+}

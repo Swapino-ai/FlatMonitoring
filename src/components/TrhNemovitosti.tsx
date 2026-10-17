@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { nastavOceneniPodle, prepniVyloucenouObec, nastavVlastnostBytu, nastavVlastnostNabidky, nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, type TrhState } from "@/lib/trhActions";
+import { nastavOceneniPodle, prepniVyloucenouObec, nastavVlastnostBytu, nastavVlastnostNabidky, nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, rozhodniShodu, type TrhState } from "@/lib/trhActions";
 import type { StatistikaNavrhu } from "@/lib/market/inzeraty";
 import { czk, czkCompact, dateCz } from "@/lib/format";
 import { Hlaska } from "./form";
@@ -11,6 +11,7 @@ import { Mapa, type BodOkoli } from "./Mapa";
 import { VyvojChart } from "./charts";
 import { SwipeNavrhy } from "./SwipeNavrhy";
 import { AiInfo } from "./AiInfo";
+import { CenyAShody, type ShodaRadku } from "./CenyAShody";
 import { Galerie, type PolozkaGalerie } from "./Galerie";
 import type { AiNahled } from "@/lib/market/aiNahled";
 import { profilTypu } from "@/lib/market/profily";
@@ -38,6 +39,8 @@ export interface RadekTrhu {
   zmizel: string | null;
   /** Historie ceny od nejstarsi */
   ceny: { at: string; price: number }[];
+  /** Stejny byt v jinych inzeratech (navrhy a potvrzene) */
+  shody?: ShodaRadku[];
   /** Rucne nastavene vlastnosti nabidky (podle profilu typu) */
   rucne?: Record<string, string>;
   vahaRucne?: number | null;
@@ -153,6 +156,7 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", typNemovitos
       if (v.error) setStav(v);
     });
   };
+  const rozhodniShodu_ = (shodaId: string, stejny: boolean) => akce(() => rozhodniShodu(propertyId, shodaId, stejny));
   const rozhodni = (ids: string[], novy: "ZARAZENO" | "VYRAZENO" | "NAVRH") => {
     akce(() => rozhodniInzeraty(propertyId, ids, novy));
     setVybrane((v) => { const n = new Set(v); ids.forEach((i) => n.delete(i)); return n; });
@@ -197,18 +201,11 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", typNemovitos
 
   const zakladRadku = (r: RadekTrhu) => {
     const d = vzdalenost(r);
-    const prvni = r.ceny[0]?.price;
-    const zmenaCeny = prvni && Math.abs(prvni - r.price) >= 1 ? ((r.price - prvni) / prvni) * 100 : null;
     return (
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
           <span className="font-semibold tabular-nums">{cena(r.price)}</span>
           {r.pricePerM2 != null && <span className="text-xs text-ink-muted tabular-nums">{czk(r.pricePerM2)}/m²</span>}
-          {zmenaCeny != null && (
-            <span className={`text-xs ${zmenaCeny < 0 ? "text-good" : "text-bad"}`} title={r.ceny.map((c) => `${dateCz(c.at)}: ${czk(c.price)}`).join("\n")}>
-              {zmenaCeny < 0 ? "▼" : "▲"} {Math.abs(zmenaCeny).toFixed(1).replace(".", ",")} % od {dateCz(r.ceny[0].at)}
-            </span>
-          )}
           {r.zmizel && <Badge tone="neutral">zmizel z trhu {dateCz(r.zmizel)}</Badge>}
         </div>
         <div className="text-xs text-ink-secondary">
@@ -218,6 +215,7 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", typNemovitos
           {" · "}na trhu od {dateCz(r.firstSeen)}
         </div>
         {r.stav === "NAVRH" && r.duvod && <div className="text-xs text-ink-muted">{r.duvod}</div>}
+        <div className="mt-1"><CenyAShody ceny={r.ceny} najem={r.dealType === "RENT"} shody={r.shody} canEdit={canEdit} onRozhodni={rozhodniShodu_} /></div>
         {r.ai && <div className="mt-1"><AiInfo ai={r.ai} profil={profil} kompaktni={r.stav !== "NAVRH"} /></div>}
       </div>
     );
@@ -482,16 +480,11 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", typNemovitos
                 <div className="min-w-0 flex-1 space-y-1.5">
                   {(() => {
                     const d = vzdalenost(r);
-                    const prvni = r.ceny[0]?.price;
-                    const zmenaCeny = prvni && Math.abs(prvni - r.price) >= 1 ? ((r.price - prvni) / prvni) * 100 : null;
                     return (
                       <div>
                         <div className="flex flex-wrap items-baseline gap-x-2">
                           <span className="font-semibold tabular-nums">{cena(r.price)}</span>
                           {r.pricePerM2 != null && <span className="text-xs text-ink-muted tabular-nums">{czk(r.pricePerM2)}/m²</span>}
-                          {zmenaCeny != null && (
-                            <span className={`text-xs ${zmenaCeny < 0 ? "text-good" : "text-bad"}`}>{zmenaCeny < 0 ? "▼" : "▲"} {Math.abs(zmenaCeny).toFixed(1).replace(".", ",")} %</span>
-                          )}
                           <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${k < 10 ? "bg-accent-soft text-accent" : "bg-surface-sunken text-ink-muted"}`}
                             title={k < 10 ? "Objevila se v posledních 2 měsících, počítá se do odhadu" : "Starší než 2 měsíce, do odhadu už nevstupuje"}>{k < 10 ? "v odhadu" : "starší"}</span>
                           {r.zmizel && <Badge tone="neutral">zmizel {dateCz(r.zmizel)}</Badge>}
@@ -504,6 +497,7 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", typNemovitos
                     );
                   })()}
 
+                  <CenyAShody ceny={r.ceny} najem={r.dealType === "RENT"} shody={r.shody} canEdit={canEdit} onRozhodni={rozhodniShodu_} />
                   {/* Vlastnosti podle profilu typu: tvoje volba, jinak AI */}
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                     {profil.vlastnosti.map((vl) => {

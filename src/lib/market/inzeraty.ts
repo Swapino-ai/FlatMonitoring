@@ -9,6 +9,7 @@ import { okruhyProTyp } from "../geo";
 import { denISO } from "../format";
 import type { ScrapedListing } from "./types";
 import { profilTypu } from "./profily";
+import { PRAH_SHODY, podlaziZUdaju, podobnostBytu, type InzeratProShodu } from "./shody";
 import { cenaVJednotce, jednotkaOdhadu, odhadNaM2, odhadZeZarazenych, ohodnot, median, vOkneOdhadu, vahaZarazeni } from "./zarazeni";
 
 /** Odhad z nabidek, ktere se objevily za posledni 2 mesice (ve dnech). */
@@ -254,4 +255,57 @@ export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RE
     await prisma.rentEstimate.create({ data: { propertyId, source: "VYBER", ...data } });
   }
   return odhad;
+}
+
+/** Udaje inzeratu pro porovnani "stejny byt" (patro a podlazi z AI parametru). */
+function proShodu(i: { category: string; disposition: string | null; areaM2: number | null; city: string; district: string | null; latitude: number | null; longitude: number | null; parametry: unknown }): InzeratProShodu {
+  const p = (i.parametry ?? {}) as { hodnoty?: { patro?: string }; patro?: string; info?: unknown; podlazi?: number };
+  return {
+    category: i.category, disposition: i.disposition, areaM2: i.areaM2, city: i.city, district: i.district,
+    latitude: i.latitude, longitude: i.longitude,
+    patro: p.hodnoty?.patro ?? null,
+    podlazi: typeof p.podlazi === "number" ? p.podlazi : podlaziZUdaju(p.info),
+  };
+}
+
+/**
+ * Hleda, jestli se navrzene nebo zarazene nabidky uz nekdy neobjevily jako jiny inzerat
+ * (stejny byt). Porovnava se vsemi inzeraty v databazi, i zmizelymi. Nove pravdepodobne
+ * shody ulozi jako navrh ke schvaleni; o jednou rozhodnutych parech uz znovu nenavrhuje.
+ */
+export async function najdiShody(): Promise<{ porovnano: number; novych: number }> {
+  const sledovane = await prisma.inzerat.findMany({ where: { zarazeni: { some: { stav: { in: ["NAVRH", "ZARAZENO"] } } }, areaM2: { not: null } } });
+  const znamePary = new Set((await prisma.shodaInzeratu.findMany({ select: { inzeratId: true, drivejsiId: true } }))
+    .flatMap((s) => [`${s.inzeratId}|${s.drivejsiId}`, `${s.drivejsiId}|${s.inzeratId}`]));
+  let porovnano = 0, novych = 0;
+  for (const a of sledovane) {
+    const plocha = a.areaM2!;
+    const kandidati = await prisma.inzerat.findMany({
+      where: {
+        id: { not: a.id }, category: a.category,
+        ...(a.disposition ? { OR: [{ disposition: a.disposition }, { disposition: null }] } : {}),
+        areaM2: { gte: plocha * 0.96, lte: plocha * 1.04 },
+        AND: [{
+          OR: [
+            { city: { equals: a.city, mode: "insensitive" as const } },
+            ...(a.latitude != null && a.longitude != null
+              ? [{ latitude: { gte: a.latitude - 0.005, lte: a.latitude + 0.005 }, longitude: { gte: a.longitude - 0.008, lte: a.longitude + 0.008 } }]
+              : []),
+          ],
+        }],
+      },
+    });
+    for (const b of kandidati) {
+      if (znamePary.has(`${a.id}|${b.id}`)) continue;
+      porovnano++;
+      const s = podobnostBytu(proShodu(a), proShodu(b));
+      if (!s || s.skore < PRAH_SHODY) continue;
+      // "Drivejsi" je ten, ktery se na trhu objevil driv
+      const [novy, drivejsi] = a.firstSeenAt >= b.firstSeenAt ? [a, b] : [b, a];
+      await prisma.shodaInzeratu.create({ data: { inzeratId: novy.id, drivejsiId: drivejsi.id, skore: s.skore, duvod: s.duvod } });
+      znamePary.add(`${a.id}|${b.id}`); znamePary.add(`${b.id}|${a.id}`);
+      novych++;
+    }
+  }
+  return { porovnano, novych };
 }

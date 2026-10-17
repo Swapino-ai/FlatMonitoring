@@ -743,9 +743,12 @@ model Inzerat {
   /// Odkazy na fotky z galerie inzeratu (pro nahled v navrzich, bez stahovani)
   fotkyUrl    String[]  @default([])
 
-  ceny     InzeratCena[]
-  zarazeni ZarazeniInzeratu[]
-  snimky   InzeratSnimek[]
+  ceny       InzeratCena[]
+  zarazeni   ZarazeniInzeratu[]
+  snimky     InzeratSnimek[]
+  /// Mozne shody s jinymi inzeraty stejneho bytu (tento je novejsi / drivejsi)
+  shody      ShodaInzeratu[]    @relation("shodaNovy")
+  shodyDrive ShodaInzeratu[]    @relation("shodaDrivejsi")
 
   @@unique([source, externalId])
   @@index([category, dealType, city])
@@ -805,4 +808,23 @@ model InzeratSnimek {
   createdAt DateTime @default(now())
 
   @@index([inzeratId])
+}
+
+/// Pravdepodobne stejny byt ve dvou inzeratech (znovu inzerovany, jina kancelar, driv
+/// pronajem). Navrhuje sken, potvrzuje uzivatel; potvrzene se zobrazuji jako historie bytu.
+model ShodaInzeratu {
+  id           String    @id @default(cuid())
+  inzeratId    String
+  inzerat      Inzerat   @relation("shodaNovy", fields: [inzeratId], references: [id], onDelete: Cascade)
+  drivejsiId   String
+  drivejsi     Inzerat   @relation("shodaDrivejsi", fields: [drivejsiId], references: [id], onDelete: Cascade)
+  skore        Int
+  duvod        String
+  /// NAVRH | POTVRZENO | ZAMITNUTO
+  stav         String    @default("NAVRH")
+  createdAt    DateTime  @default(now())
+  rozhodnutoAt DateTime?
+
+  @@unique([inzeratId, drivejsiId])
+  @@index([drivejsiId])
 }

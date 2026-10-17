@@ -113,6 +113,11 @@ async function porovnej(prisma: PrismaClient) {
 if (process.argv[1]?.endsWith("ai-parametry.ts")) {
   const prisma = new PrismaClient();
   doplnParametry(prisma, Number(process.argv[2]) || 150)
+    .then(async () => {
+      const { najdiShody } = await import("../src/lib/market/inzeraty");
+      const r = await najdiShody();
+      console.log(`Stejný byt: porovnáno ${r.porovnano} dvojic, nových možných shod ${r.novych}.`);
+    })
     .catch((e) => { console.error("AI parametry selhaly:", e); process.exitCode = 1; })
     .finally(() => prisma.$disconnect());
 }

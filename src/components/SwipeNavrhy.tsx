@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { rozhodniInzeraty } from "@/lib/trhActions";
+import { rozhodniInzeraty, rozhodniShodu } from "@/lib/trhActions";
+import { CenyAShody } from "./CenyAShody";
 import { czk, dateCz } from "@/lib/format";
 import type { RadekTrhu } from "./TrhNemovitosti";
 import { AiInfo } from "./AiInfo";
@@ -123,6 +124,10 @@ export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec, pr
               <div><div className="label">Vzdálenost</div><div className="font-medium">{d != null ? `${d.toFixed(1).replace(".", ",")} km` : "neznámá"}</div></div>
             </div>
             {r.duvod && <p className="mt-3 text-xs text-ink-muted">{r.duvod}</p>}
+            <div className="mt-3" onPointerDown={(e) => e.stopPropagation()}>
+              <CenyAShody ceny={r.ceny} najem={najem} shody={r.shody} canEdit
+                onRozhodni={(id, stejny) => { void rozhodniShodu(propertyId, id, stejny); }} />
+            </div>
             {r.ai && <div className="mt-3"><AiInfo ai={r.ai} profil={profil} /></div>}
             {(r.fotkyUrl?.length ?? 0) > 0 && (
               <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1" onPointerDown={(e) => e.stopPropagation()}>
