@@ -5,6 +5,7 @@ import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Card } from "@/components/Stat";
 import { ValuationManager } from "@/components/ValuationManager";
+import { HlavickaNemovitosti } from "@/components/HlavickaNemovitosti";
 import { TrhNemovitosti, type OdhadPanel, type RadekTrhu } from "@/components/TrhNemovitosti";
 import { prisma } from "@/lib/db";
 import { loadProperty } from "@/lib/portfolio";
@@ -143,15 +144,9 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
   return (
     <>
       <Nav user={user} verze={<Verze />} />
-      <main className="mx-auto max-w-[1400px] space-y-4 px-6 py-6">
-        <div>
-          <Link href={`/properties/${id}`} className="text-xs text-accent">← {property.name}</Link>
-          <h1 className="mt-1 text-xl font-semibold">Ocenění a trh</h1>
-          <p className="mt-1 text-sm text-ink-secondary">
-            {property.city} · {nazevNemovitosti(property.type)}
-            {property.disposition && ` · ${property.disposition}`} · {property.areaM2} m²
-          </p>
-        </div>
+      <main className="mx-auto max-w-[1400px] space-y-5 p-6">
+        {/* Stejna hlavicka a zalozky jako detail nemovitosti — trh je jen dalsi zalozka */}
+        <HlavickaNemovitosti property={property} canEdit={canEdit} aktivni="trh" />
 
         <TrhNemovitosti propertyId={id} pocatecniTyp={typ === "RENT" ? "RENT" : "SALE"} trhId={koren} klic={klic} obce={obce} typNemovitosti={property.type} zaKus={zaKus} vlastnosti={hodnotyZaznamu(profil, property)} canEdit={canEdit} sledovat={korenP?.sledovatTrh ?? false}
           propojeni={{ podle: koren !== id && korenP ? { id: korenP.id, name: korenP.name } : null, navazane, moznosti }} skenovatelne={skenovatelne}

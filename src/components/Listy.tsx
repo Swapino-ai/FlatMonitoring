@@ -31,6 +31,12 @@ export function Listy({ klic, listy }: { klic: string; listy: List[] }) {
   // Posledni otevreny list az po pripojeni — jinak by se serverovy vystup
   // neshodoval s tim, co vykresli prohlizec
   useEffect(() => {
+    // Odkaz z jine stranky (?list=najem) ma prednost pred naposledy otevrenym
+    const zAdresy = new URLSearchParams(window.location.search).get("list");
+    if (zAdresy && listy.some((l) => l.id === zAdresy && !l.odkaz)) {
+      prepni(zAdresy);
+      return;
+    }
     try {
       const ulozeny = localStorage.getItem(`list:${klic}`);
       if (ulozeny && listy.some((l) => l.id === ulozeny && !l.odkaz)) setAktivni(ulozeny);
