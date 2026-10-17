@@ -366,6 +366,14 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           </div>
         </div>
 
+        {pohled === "moje" && podil === 0 && (
+          <div className="rounded-card border border-warn/40 bg-warn/10 px-4 py-3 text-sm">
+            <strong>Tuhle nemovitost nevlastníš</strong> — tvůj podíl je 0 %, takže v pohledu <strong>Můj podíl</strong> jsou
+            všechny částky nulové. Pro skutečná čísla přepni nahoře na <strong>Celé portfolio</strong>
+            {property.owners.length > 0 && <>, případně uprav spoluvlastníky na záložce Přehled</>}.
+          </div>
+        )}
+
         <Listy klic={`nemovitost:${property.id}`} listy={[
           {
             id: "prehled",
@@ -422,7 +430,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                     </div>
                     {zNabidek && odhadProdej && (
                       <div className="text-xs opacity-80" title="Vážený medián: polovina nabídek (podle váhy) je levnější, polovina dražší — méně ho ovlivní jedna extrémní nabídka">
-                        Medián {czkCompact(odhadProdej.median.hodnota)} ({czk(odhadProdej.median.perM2)}/m²)
+                        Medián {czkCompact(odhadProdej.median.hodnota * podil)} ({czk(odhadProdej.median.perM2)}/m²)
                       </div>
                     )}
                     <div className="font-semibold text-ink-primary">
@@ -446,7 +454,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                 {nejnovejsiNajem ? <>{czk(nejnovejsiNajem.monthlyRent)}<span className="text-base font-normal text-ink-muted">/měs.</span></> : "—"}
               </div>
               {nejnovejsiNajem?.source === "VYBER" && odhadNajem && (
-                <div className="mt-1 text-xs text-ink-muted" title="Vážený medián vybraných nabídek nájmu">medián {czk(odhadNajem.median.hodnota)}/měs.</div>
+                <div className="mt-1 text-xs text-ink-muted" title="Vážený medián vybraných nabídek nájmu">medián {czk(odhadNajem.median.hodnota * podil)}/měs.</div>
               )}
               {nejnovejsiNajem ? (
                 <>
