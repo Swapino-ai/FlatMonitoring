@@ -101,6 +101,15 @@ export function prumernyMesicniTok(toky: Tok[], asOf = new Date()): PrumernyTok 
   return { mesicne: soucet / mesicu, mesicu, neuplny: false, rozpad };
 }
 
+/** Cash flow rozbehnuteho mesice (podle data splatnosti), rozpad po zdrojich jako u prumeru. */
+export function tokAktualnihoMesice(toky: Tok[], asOf = new Date()): { mesicne: number; rozpad: Record<string, number>; pocet: number } {
+  const mesic = `${asOf.getFullYear()}-${String(asOf.getMonth() + 1).padStart(2, "0")}`;
+  const vMesici = toky.filter((x) => x.datum.slice(0, 7) === mesic);
+  const rozpad: Record<string, number> = {};
+  for (const x of vMesici) rozpad[x.druh ?? "POHYB"] = (rozpad[x.druh ?? "POHYB"] ?? 0) + x.castka;
+  return { mesicne: vMesici.reduce((a, x) => a + x.castka, 0), rozpad, pocet: vMesici.length };
+}
+
 function tokyPortfolia(properties: PropertyWithRelations[], navrhy: Map<string, NavrzenaPlatba[]>): Tok[] {
   return properties.flatMap((p) => tokyNemovitosti(navrhy.get(p.id) ?? [], p.transactions));
 }
