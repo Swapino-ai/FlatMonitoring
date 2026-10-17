@@ -142,6 +142,9 @@ async function main() {
   const sledovane = (await prisma.property.findMany({ where: { status: { not: "SOLD" }, sledovatTrh: true, oceneniPodle: null } }))
     .filter((p) => NEMOVITOST_MAP.get(p.type)?.srealityCesta);
   console.log(`${sledovane.length} nemovitostí se sleduje.`);
+  // Navrhy u nemovitosti, ktera se oceňuje podle jine, nikdo nevidi (rozhoduje se u korene)
+  const sirotci = await prisma.zarazeniInzeratu.deleteMany({ where: { stav: "NAVRH", property: { oceneniPodle: { not: null } } } });
+  if (sirotci.count) console.log(`Odklizeno ${sirotci.count} návrhů u propojených nemovitostí.`);
 
   let selhalo = 0;
   let ok = 0;

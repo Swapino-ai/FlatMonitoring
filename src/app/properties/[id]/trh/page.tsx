@@ -21,9 +21,10 @@ export const dynamic = "force-dynamic";
  * Ocenění a trh: sledovani trhu u nemovitosti, kontrola navrzenych nabidek,
  * zarazene nabidky a odhad z poslednich 10 zarazenych.
  */
-export default async function TrhPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TrhPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ typ?: string }> }) {
   const user = await page();
   const { id } = await params;
+  const { typ } = await searchParams;
   const property = await loadProperty(id);
   if (!property) notFound();
 
@@ -128,7 +129,7 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
           </p>
         </div>
 
-        <TrhNemovitosti propertyId={id} trhId={koren} klic={klic} obce={obce} vlastnosti={{ typDomu: property.typDomu, stavBytu: property.stavBytu }} canEdit={canEdit} sledovat={korenP?.sledovatTrh ?? false}
+        <TrhNemovitosti propertyId={id} pocatecniTyp={typ === "RENT" ? "RENT" : "SALE"} trhId={koren} klic={klic} obce={obce} vlastnosti={{ typDomu: property.typDomu, stavBytu: property.stavBytu }} canEdit={canEdit} sledovat={korenP?.sledovatTrh ?? false}
           propojeni={{ podle: koren !== id && korenP ? { id: korenP.id, name: korenP.name } : null, navazane, moznosti }} skenovatelne={skenovatelne}
           poloha={property.latitude != null && property.longitude != null ? { lat: property.latitude, lon: property.longitude } : null}
           radky={radky} diag={diag} odhady={{ SALE: odhad("SALE"), RENT: odhad("RENT") }} />

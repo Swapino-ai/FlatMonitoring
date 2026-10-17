@@ -767,30 +767,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           </SbalitelnaKarta>
             </>),
           },
-          {
-            id: "trh",
-            nazev: "Trh",
-            obsah: (<>
-            <SbalitelnaKarta klic="oceneni" title="Ocenění a trh" action={
-              <Link href={`/properties/${property.id}/trh`} className="text-xs text-accent">Otevřít →</Link>
-            }>
-              <table className="table-base">
-                <tbody>
-                  <Row label="Odhad hodnoty" value={property.valuations[0] ? czk(property.valuations[0].value) : "—"}
-                    note={property.valuations[0]
-                      ? `z ${property.valuations[0].sampleSize ?? "?"} nabídek · ${dateCz(property.valuations[0].date)}`
-                      : "zatím nevznikl"} />
-                  <Row label="Odhad nájmu" value={nejnovejsiNajem ? `${czk(nejnovejsiNajem.monthlyRent)}/měs.` : "—"}
-                    note={nejnovejsiNajem ? `z ${nejnovejsiNajem.sampleSize ?? "?"} nabídek` : "zatím nevznikl"} />
-                </tbody>
-              </table>
-              <p className="mt-3 text-xs text-ink-muted">
-                Historie ocenění, srovnatelné nabídky, ruční korekce a postup, jak odhad vzniká —
-                všechno na vlastní stránce, ať tady nestíní výkonnosti.
-              </p>
-            </SbalitelnaKarta>
-            </>),
-          },
+          // Trh ma vlastni stranku (ocenění, nabídky, mapa) — záložka na ni vede rovnou
+          { id: "trh", nazev: "Trh", odkaz: `/properties/${property.id}/trh` },
           {
             id: "dane",
             nazev: "Daně",

@@ -73,8 +73,10 @@ function km(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
  * Sledovani trhu u jedne nemovitosti: zapnuti, navrhy ke kontrole, zarazene a vyrazene
  * nabidky, odhad ze zarazenych za posledni 2 mesice a jeho vyvoj v case.
  */
-export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], vlastnosti, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
+export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", trhId, propojeni, klic, obce = [], vlastnosti, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
   diag?: StatistikaNavrhu;
+  /** Ktera zalozka (prodej / najem) se otevre */
+  pocatecniTyp?: "SALE" | "RENT";
   propertyId: string;
   /** Nemovitost, jejiz nabidky se pouzivaji (pri propojenem oceneni jina nez propertyId) */
   trhId?: string;
@@ -97,7 +99,7 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
   const router = useRouter();
   const [stav, setStav] = useState<TrhState>({});
   const [bezi, spust] = useTransition();
-  const [typ, setTyp] = useState<"SALE" | "RENT">("SALE");
+  const [typ, setTyp] = useState<"SALE" | "RENT">(pocatecniTyp);
   const [vybrane, setVybrane] = useState<Set<string>>(() => new Set(radky.filter((r) => r.stav === "NAVRH" && r.doporuceno).map((r) => r.id)));
   const [vyrazeneOtevrene, setVyrazeneOtevrene] = useState(false);
   const [polohaPro, setPolohaPro] = useState<RadekTrhu | null>(null);

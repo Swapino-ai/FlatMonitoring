@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 
 export interface List {
@@ -9,7 +10,9 @@ export interface List {
   pocet?: number;
   /** Na zalozce je neco, co chce pozornost — ukaze se tecka, i kdyz je otevrena jina. */
   varovani?: boolean;
-  obsah: ReactNode;
+  obsah?: ReactNode;
+  /** Zalozka, ktera vede rovnou na jinou stranku (misto obsahu). */
+  odkaz?: string;
 }
 
 /**
@@ -30,7 +33,7 @@ export function Listy({ klic, listy }: { klic: string; listy: List[] }) {
   useEffect(() => {
     try {
       const ulozeny = localStorage.getItem(`list:${klic}`);
-      if (ulozeny && listy.some((l) => l.id === ulozeny)) setAktivni(ulozeny);
+      if (ulozeny && listy.some((l) => l.id === ulozeny && !l.odkaz)) setAktivni(ulozeny);
     } catch { /* soukrome okno nebo zakazana uloziste — zustane prvni list */ }
   }, [klic, listy]);
 
@@ -49,6 +52,14 @@ export function Listy({ klic, listy }: { klic: string; listy: List[] }) {
         <div role="tablist" className="flex w-fit gap-1 rounded-2xl bg-surface-card p-1 shadow-card">
           {listy.map((l) => {
             const je = l.id === aktivni;
+            if (l.odkaz) {
+              return (
+                <Link key={l.id} href={l.odkaz}
+                  className="whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold text-ink-secondary transition-colors hover:bg-surface-sunken hover:text-ink-primary">
+                  {l.nazev}
+                </Link>
+              );
+            }
             return (
               <button
                 key={l.id}

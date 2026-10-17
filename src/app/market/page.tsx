@@ -44,7 +44,8 @@ export default async function MarketPage() {
       city: p.city,
       areaM2: p.areaM2,
       sledovat: p.sledovatTrh,
-      navrhu: moje.filter((z) => z.stav === "NAVRH").length,
+      navrhuProdej: moje.filter((z) => z.stav === "NAVRH" && z.inzerat.dealType === "SALE").length,
+      navrhuNajem: moje.filter((z) => z.stav === "NAVRH" && z.inzerat.dealType === "RENT").length,
       myPricePerM2: a.totalInvestment / p.areaM2,
       myValuePerM2: a.currentValue / p.areaM2,
       marketPricePerM2: sale?.perM2 ?? null,
@@ -116,11 +117,15 @@ export default async function MarketPage() {
                   return (
                     <tr key={r.id}>
                       <td className="font-medium">
-                        <Link href={`/properties/${r.id}/trh`} className="text-accent hover:underline">{r.name}</Link>
+                        <Link href={`/properties/${r.id}/trh${r.navrhuProdej === 0 && r.navrhuNajem > 0 ? "?typ=RENT" : ""}`} className="text-accent hover:underline">{r.name}</Link>
                         <div className="text-xs text-ink-muted">
                           {r.city} · {r.areaM2} m²
                           {!r.sledovat && " · trh se nesleduje"}
-                          {r.navrhu > 0 && <span className="ml-1 font-medium text-accent">· {r.navrhu} ke kontrole</span>}
+                          {r.navrhuProdej + r.navrhuNajem > 0 && (
+                            <span className="ml-1 font-medium text-accent">
+                              · ke kontrole {[r.navrhuProdej > 0 && `${r.navrhuProdej} prodej`, r.navrhuNajem > 0 && `${r.navrhuNajem} nájem`].filter(Boolean).join(" + ")}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="num">{czk(r.myPricePerM2)}</td>

@@ -115,6 +115,8 @@ export async function nastavOceneniPodle(propertyId: string, cilId: string | nul
     const zavisle = await prisma.property.count({ where: { oceneniPodle: propertyId } });
     if (zavisle > 0) return { error: "Podle této nemovitosti se už oceňují jiné. Propoj je raději opačně." };
     await prisma.property.update({ where: { id: propertyId }, data: { oceneniPodle: koren } });
+    // Vlastni navrhy uz nikdo neuvidi (rozhoduje se u korene) — pryc s nimi
+    await prisma.zarazeniInzeratu.deleteMany({ where: { propertyId, stav: "NAVRH" } });
   } else {
     await prisma.property.update({ where: { id: propertyId }, data: { oceneniPodle: null } });
   }
