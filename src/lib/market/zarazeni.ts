@@ -128,11 +128,13 @@ export function vazenyMedian(body: { hodnota: number; vaha: number }[]): number 
 }
 
 export const TYPY_DOMU = { PANEL: "Panel", CIHLA: "Cihla", NOVOSTAVBA: "Novostavba" } as const;
-export const STAVY_BYTU = { PRED_REKONSTRUKCI: "Před rekonstrukcí", PO_REKONSTRUKCI: "Po rekonstrukci", NOVOSTAVBA: "Novostavba" } as const;
+export const STAVY_BYTU = { PRED_REKONSTRUKCI: "Před rekonstrukcí", CASTECNA_REKONSTRUKCE: "Částečná rekonstrukce", PO_REKONSTRUKCI: "Po rekonstrukci", NOVOSTAVBA: "Novostavba" } as const;
+/** Poradi stavu: sousedni stav (napr. castecna vs. po rekonstrukci) je jeste trochu podobny. */
+const PORADI_STAVU: Record<string, number> = { PRED_REKONSTRUKCI: 0, CASTECNA_REKONSTRUKCE: 1, PO_REKONSTRUKCI: 2, NOVOSTAVBA: 3 };
 
 /**
  * Vaha zarazene nabidky podle podobnosti s nemovitosti: cim podobnejsi byt, tim vic urcuje cenu.
- * Plocha 1–2× (stejna = 2×), typ domu a stav: shoda 2×, neshoda ½×, neznamo 1×. Rucni vaha ma prednost.
+ * Plocha 1–2× (stejna = 2×), typ domu: shoda 2×, neshoda ½×; stav: shoda 2×, sousedni 1×, vzdaleny ½×; neznamo 1×. Rucni vaha ma prednost.
  */
 export function vahaNabidky(
   n: { areaM2: number; typDomu: string | null; stavBytu: string | null },
@@ -141,8 +143,11 @@ export function vahaNabidky(
   if (i.vahaRucne != null) return i.vahaRucne;
   let v = 1;
   if (i.areaM2 && n.areaM2) v *= 1 + Math.max(0, 1 - Math.abs(i.areaM2 - n.areaM2) / (0.25 * n.areaM2));
-  for (const k of ["typDomu", "stavBytu"] as const) {
-    if (n[k] && i[k]) v *= n[k] === i[k] ? 2 : 0.5;
+  if (n.typDomu && i.typDomu) v *= n.typDomu === i.typDomu ? 2 : 0.5;
+  // Stav: shoda 2×, sousedni stav 1×, vzdaleny ½×
+  if (n.stavBytu && i.stavBytu) {
+    const rozdil = Math.abs((PORADI_STAVU[n.stavBytu] ?? 0) - (PORADI_STAVU[i.stavBytu] ?? 0));
+    v *= rozdil === 0 ? 2 : rozdil === 1 ? 1 : 0.5;
   }
   return Math.round(v * 100) / 100;
 }

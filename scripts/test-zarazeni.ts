@@ -33,6 +33,7 @@ over("vazeny median rovne", vazenyMedian([{ hodnota: 1, vaha: 1 }, { hodnota: 3,
 const nn = { areaM2: 60, typDomu: "PANEL", stavBytu: "PRED_REKONSTRUKCI" };
 over("vaha stejny byt", vahaNabidky(nn, { areaM2: 60, typDomu: "PANEL", stavBytu: "PRED_REKONSTRUKCI", vahaRucne: null }) === 8);
 over("vaha jiny", vahaNabidky(nn, { areaM2: 75, typDomu: "CIHLA", stavBytu: "PO_REKONSTRUKCI", vahaRucne: null }) === 0.25);
+over("vaha castecna vs pred", vahaNabidky(nn, { areaM2: 60, typDomu: "PANEL", stavBytu: "CASTECNA_REKONSTRUKCE", vahaRucne: null }) === 4);
 over("vaha rucne", vahaNabidky(nn, { areaM2: 75, typDomu: null, stavBytu: null, vahaRucne: 3 }) === 3);
 
 console.log(chyb ? `${chyb} chyb` : "vše v pořádku");
