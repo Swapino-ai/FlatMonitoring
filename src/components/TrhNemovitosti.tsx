@@ -107,7 +107,7 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
   // Galerie inzeratu: nejnovejsi screenshot stranky jako prvni, pak fotky
   const fotkyRadku = (r: RadekTrhu) => ((r.fotky?.length ?? 0) > 0 ? r.fotky!.map((id) => `/api/snimek/${id}`) : r.fotkyUrl ?? []);
   const polozkyGalerie = (r: RadekTrhu): PolozkaGalerie[] => [
-    ...(r.snimky[0] ? [{ src: `/api/snimek/${r.snimky[0].id}`, popis: `Screenshot stránky ${dateCz(r.snimky[0].createdAt)}` }] : []),
+    ...(r.snimky[0] ? [{ src: `/api/snimek/${r.snimky[0].id}`, popis: `Screenshot stránky ${dateCz(r.snimky[0].createdAt)}`, posouvat: true }] : []),
     ...fotkyRadku(r).map((src) => ({ src })),
   ];
 

@@ -6,6 +6,8 @@ export interface PolozkaGalerie {
   src: string;
   /** Napr. "Screenshot stránky 17. 10. 2026" */
   popis?: string;
+  /** Dlouhy obrazek (screenshot cele stranky): zobrazit na sirku a posouvat svisle */
+  posouvat?: boolean;
 }
 
 /**
@@ -46,7 +48,7 @@ export function Galerie({ polozky, onZavrit }: { polozky: PolozkaGalerie[]; onZa
             <button type="button" className="rounded-full bg-white/15 px-3 py-1 hover:bg-white/25" onClick={onZavrit}>Zavřít ✕</button>
           </span>
         </div>
-        <div className="relative flex min-h-0 flex-1 items-center justify-center px-2 pb-4"
+        <div className={`relative min-h-0 flex-1 px-2 pb-4 ${p.posouvat ? "overflow-y-auto" : "flex items-center justify-center"}`}
           onPointerDown={(e) => { startX.current = e.clientX; }}
           onPointerUp={(e) => {
             if (startX.current == null) return;
@@ -56,13 +58,16 @@ export function Galerie({ polozky, onZavrit }: { polozky: PolozkaGalerie[]; onZa
           }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={p.src} alt={p.popis ?? `Fotka ${index + 1}`} referrerPolicy="no-referrer" draggable={false}
-            className="max-h-full max-w-full select-none rounded-lg object-contain" onClick={(e) => e.stopPropagation()} />
+            className={p.posouvat
+              ? "mx-auto block w-full max-w-[1280px] select-none rounded-lg"
+              : "max-h-full max-w-full select-none rounded-lg object-contain"}
+            onClick={(e) => e.stopPropagation()} />
           {polozky.length > 1 && (
             <>
               <button type="button" aria-label="Předchozí" onClick={(e) => { e.stopPropagation(); posun(-1); }}
-                className={`${tlacitko} absolute left-3 top-1/2 h-12 w-12 -translate-y-1/2 text-2xl`}>‹</button>
+                className={`${tlacitko} fixed left-3 top-1/2 h-12 w-12 -translate-y-1/2 text-2xl`}>‹</button>
               <button type="button" aria-label="Další" onClick={(e) => { e.stopPropagation(); posun(1); }}
-                className={`${tlacitko} absolute right-3 top-1/2 h-12 w-12 -translate-y-1/2 text-2xl`}>›</button>
+                className={`${tlacitko} fixed right-3 top-1/2 h-12 w-12 -translate-y-1/2 text-2xl`}>›</button>
             </>
           )}
         </div>
