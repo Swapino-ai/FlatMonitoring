@@ -241,58 +241,46 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", typNemovitos
     <div className="space-y-4">
       <Hlaska state={stav} />
 
-      {/* Odhad nahore, ve stylu prehledu nemovitosti: velke cislo, pod nim odkud je, vedle vyvoj */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-        <div className="card hero-card flex flex-col">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="label">{najem ? "Odhad tržního nájmu" : "Odhad tržní hodnoty"}</div>
-            <div className="flex rounded-full bg-white/15 p-0.5 text-xs">
-              {(["SALE", "RENT"] as const).map((t) => {
-                const n = radky.filter((r) => r.dealType === t && r.stav === "NAVRH").length;
-                return (
-                  <button key={t} type="button" onClick={() => setTyp(t)}
-                    className={`rounded-full px-3 py-1 font-semibold ${typ === t ? "bg-white text-[rgb(31_79_216)]" : "text-white/85 hover:text-white"}`}>
-                    {t === "SALE" ? "Prodej" : "Nájem"}
-                    {n > 0 && <span className={`ml-1.5 rounded-full px-1.5 ${typ === t ? "bg-[rgb(31_79_216)]/15" : "bg-white/20"}`} title="Návrhů ke kontrole">{n}</span>}
-                  </button>
-                );
-              })}
+      {/* Odhad nahore: prodej i najem vedle sebe, prumer i median hned videt */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {(["SALE", "RENT"] as const).map((t) => {
+          const o = odhady[t];
+          const proNajem = t === "RENT";
+          const cenaT = (n: number) => (proNajem ? `${czk(n)}/měs.` : czkCompact(n));
+          return (
+            <div key={t} className={`card flex flex-col ${proNajem ? "" : "hero-card"}`}>
+              <div className="label">{proNajem ? "Odhad tržního nájmu" : "Odhad tržní hodnoty"}</div>
+              {o ? (
+                <>
+                  <div className="mt-2 grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-xs text-ink-secondary">Vážený průměr</div>
+                      <div className="text-4xl font-semibold leading-tight tracking-tight tabular-nums">{cenaT(o.hodnota)}</div>
+                      <div className="text-xs tabular-nums text-ink-secondary">{czk(o.perM2)}/m²</div>
+                    </div>
+                    <div title="Vážený medián: polovina nabídek (podle váhy) je levnější, polovina dražší — méně ho ovlivní jedna extrémní nabídka">
+                      <div className="text-xs text-ink-secondary">Vážený medián</div>
+                      <div className="text-4xl font-semibold leading-tight tracking-tight tabular-nums opacity-80">{cenaT(o.median.hodnota)}</div>
+                      <div className="text-xs tabular-nums text-ink-secondary">{czk(o.median.perM2)}/m²</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-sm text-ink-secondary">
+                    {zaKus && !proNajem ? "cena za kus · " : ""}z {o.pocet} {o.pocet === 1 ? "zařazené nabídky" : "zařazených nabídek"} za poslední 2 měsíce
+                    {o.hodnota !== 0 && Math.abs(o.median.hodnota - o.hodnota) / o.hodnota > 0.05 && (
+                      <span className="block text-xs font-semibold text-ink-primary">Průměr a medián se liší o víc než 5 % — mezi nabídkami může být nějaká mimo.</span>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mt-2 text-4xl font-semibold leading-tight">—</div>
+                  <p className="mt-2 text-sm text-ink-secondary">Odhad vznikne, jakmile zařadíš první {proNajem ? "nabídku nájmu" : "prodejní nabídku"}.</p>
+                </>
+              )}
             </div>
-          </div>
-          {odhad ? (
-            <>
-              <div className="mt-1 text-[2.75rem] font-semibold leading-none tracking-tight tabular-nums sm:text-5xl">
-                {najem ? <>{czk(odhad.hodnota)}<span className="text-xl font-normal opacity-80">/měs.</span></> : czkCompact(odhad.hodnota)}
-              </div>
-              <div className="mt-3 space-y-1 text-sm text-ink-secondary">
-                <div>
-                  {zaKus ? <>cena za kus ({czk(odhad.perM2)}/m²)</> : <>{czk(odhad.perM2)}/m²</>} · průměr z {odhad.pocet} {odhad.pocet === 1 ? "zařazené nabídky" : "zařazených nabídek"}
-                </div>
-                <div className="text-xs opacity-80" title="Vážený medián: polovina nabídek (podle váhy) je levnější, polovina dražší — méně ho ovlivní jedna extrémní nabídka">
-                  Medián {najem ? `${czk(odhad.median.hodnota)}/měs.` : czkCompact(odhad.median.hodnota)} ({czk(odhad.median.perM2)}/m²)
-                </div>
-                {odhad.hodnota !== 0 && Math.abs(odhad.median.hodnota - odhad.hodnota) / odhad.hodnota > 0.05 && (
-                  <div className="text-xs font-semibold text-ink-primary">Průměr a medián se liší o víc než 5 % — mezi nabídkami může být nějaká mimo.</div>
-                )}
-              </div>
-              <div className="mt-auto pt-3 text-xs opacity-70">Nabídky z posledních 2 měsíců, váha podle podobnosti s touto nemovitostí.</div>
-            </>
-          ) : (
-            <>
-              <div className="mt-1 text-[2.75rem] font-semibold leading-none tracking-tight sm:text-5xl">—</div>
-              <p className="mt-3 text-sm text-ink-secondary">Odhad vznikne, jakmile zařadíš první nabídku.</p>
-            </>
-          )}
-        </div>
-        <div className="card">
-          <div className="label mb-1">Vývoj odhadu, jak přibývají zařazené nabídky</div>
-          {odhad && odhad.rada.length > 1
-            ? <VyvojChart data={odhad.rada.map((b) => ({ datum: dateCz(b.datum), hodnota: b.hodnota, hodnota2: b.median }))}
-                nazev="Vážený průměr" nazev2="Vážený medián" kompaktni={!najem} />
-            : <p className="py-10 text-center text-sm text-ink-muted">Graf vznikne s druhou zařazenou nabídkou.</p>}
-        </div>
+          );
+        })}
       </div>
-
 
       {/* Propojene oceneni: dva byty, jeden odhad */}
       {propojeni && (propojeni.podle || propojeni.navazane.length > 0 || (canEdit && propojeni.moznosti.length > 0)) && (
@@ -384,6 +372,31 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", typNemovitos
           </div>
         )}
       </div>
+
+      {/* Prepinac pro graf, mapu a seznamy nabidek */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-ink-muted">Nabídky:</span>
+        <div className="flex rounded-full bg-surface-card p-1 shadow-card">
+          {(["SALE", "RENT"] as const).map((t) => {
+            const n = radky.filter((r) => r.dealType === t && r.stav === "NAVRH").length;
+            return (
+              <button key={t} type="button" onClick={() => setTyp(t)}
+                className={`rounded-full px-4 py-1.5 text-sm font-semibold ${typ === t ? "bg-accent text-white" : "text-ink-secondary hover:text-ink-primary"}`}>
+                {t === "SALE" ? "Prodej" : "Nájem"}
+                {n > 0 && <span className={`ml-1.5 rounded-full px-1.5 text-xs ${typ === t ? "bg-white/25" : "bg-accent/15 text-accent"}`} title="Návrhů ke kontrole">{n}</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {odhad && odhad.rada.length > 1 && (
+        <div className="card">
+          <div className="label mb-1">Vývoj odhadu {najem ? "nájmu" : "hodnoty"}, jak přibývají zařazené nabídky</div>
+          <VyvojChart data={odhad.rada.map((b) => ({ datum: dateCz(b.datum), hodnota: b.hodnota, hodnota2: b.median }))}
+            nazev="Vážený průměr" nazev2="Vážený medián" kompaktni={!najem} />
+        </div>
+      )}
 
       {/* Mapa */}
       {poloha && body.length > 0 && (
