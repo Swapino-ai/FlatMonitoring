@@ -11,6 +11,7 @@ import { Mapa, type BodOkoli } from "./Mapa";
 import { VyvojChart } from "./charts";
 import { SwipeNavrhy } from "./SwipeNavrhy";
 import { AiInfo } from "./AiInfo";
+import { Galerie, type PolozkaGalerie } from "./Galerie";
 import type { AiNahled } from "@/lib/market/aiNahled";
 import { STAVY_BYTU, TYPY_DOMU } from "@/lib/market/zarazeni";
 
@@ -102,7 +103,13 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
   const [polohaPro, setPolohaPro] = useState<RadekTrhu | null>(null);
   const [sken, setSken] = useState("");
   const [swipe, setSwipe] = useState(false);
-  const [galerie, setGalerie] = useState<string[] | null>(null);
+  const [galerie, setGalerie] = useState<PolozkaGalerie[] | null>(null);
+  // Galerie inzeratu: nejnovejsi screenshot stranky jako prvni, pak fotky
+  const fotkyRadku = (r: RadekTrhu) => ((r.fotky?.length ?? 0) > 0 ? r.fotky!.map((id) => `/api/snimek/${id}`) : r.fotkyUrl ?? []);
+  const polozkyGalerie = (r: RadekTrhu): PolozkaGalerie[] => [
+    ...(r.snimky[0] ? [{ src: `/api/snimek/${r.snimky[0].id}`, popis: `Screenshot stránky ${dateCz(r.snimky[0].createdAt)}` }] : []),
+    ...fotkyRadku(r).map((src) => ({ src })),
+  ];
 
   const proTyp = radky.filter((r) => r.dealType === typ);
   const navrhy = proTyp.filter((r) => r.stav === "NAVRH")
@@ -194,10 +201,8 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
   const odkazy = (r: RadekTrhu) => (
     <span className="flex shrink-0 items-center gap-2 text-xs">
       {r.url && !r.url.includes("/x/x/") && <a href={r.url} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">Inzerát ↗</a>}
-      {(r.fotky?.length ?? 0) > 0 ? (
-        <button type="button" onClick={() => setGalerie(r.fotky!.map((id) => `/api/snimek/${id}`))} className="text-accent hover:underline">Fotky ({r.fotky!.length})</button>
-      ) : (r.fotkyUrl?.length ?? 0) > 0 && (
-        <button type="button" onClick={() => setGalerie(r.fotkyUrl!)} className="text-accent hover:underline">Fotky ({r.fotkyUrl!.length})</button>
+      {fotkyRadku(r).length > 0 && (
+        <button type="button" onClick={() => setGalerie(polozkyGalerie(r))} className="text-accent hover:underline">Fotky ({fotkyRadku(r).length})</button>
       )}
       {r.snimky.map((s, k) => (
         <a key={s.id} href={`/api/snimek/${s.id}`} target="_blank" rel="noreferrer" className="text-accent hover:underline" title={`Screenshot z ${dateCz(s.createdAt)}`}>
@@ -423,12 +428,12 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
               <li key={r.id} className={`flex gap-3 px-3 py-3 ${r.zmizel ? "opacity-70" : ""}`}>
                 {/* Nahled: prvni fotka, klik otevre galerii */}
                 {(() => {
-                  const fotky = (r.fotky?.length ?? 0) > 0 ? r.fotky!.map((id) => `/api/snimek/${id}`) : r.fotkyUrl ?? [];
-                  return fotky.length > 0 ? (
-                    <button type="button" onClick={() => setGalerie(fotky)} className="relative hidden h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:block" title="Fotky inzerátu">
+                  const fotky = fotkyRadku(r);
+                  return fotky.length > 0 || r.snimky[0] ? (
+                    <button type="button" onClick={() => setGalerie(polozkyGalerie(r))} className="relative hidden h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:block" title="Fotky inzerátu">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={fotky[0]} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
-                      <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[10px] text-white">{fotky.length}</span>
+                      <img src={fotky[0] ?? `/api/snimek/${r.snimky[0]!.id}`} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover object-top" />
+                      <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[10px] text-white">{polozkyGalerie(r).length}</span>
                     </button>
                   ) : <div className="hidden h-20 w-28 shrink-0 rounded-lg bg-surface-sunken sm:block" />;
                 })()}
@@ -548,19 +553,7 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
           onKonec={(zmeneno) => { setSwipe(false); if (zmeneno) router.refresh(); }} />
       )}
 
-      {galerie && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 p-4" onClick={() => setGalerie(null)}>
-          <div className="mx-auto grid max-w-5xl gap-3 sm:grid-cols-2" onClick={(e) => e.stopPropagation()}>
-            {galerie.map((src) => (
-              <a key={src} href={src} target="_blank" rel="noreferrer">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={src} alt="Fotografie z inzerátu" loading="lazy" referrerPolicy="no-referrer" className="w-full rounded-xl" />
-              </a>
-            ))}
-          </div>
-          <button type="button" className="fixed right-4 top-4 rounded-full bg-white px-3 py-1 text-sm" onClick={() => setGalerie(null)}>Zavřít</button>
-        </div>
-      )}
+      {galerie && <Galerie polozky={galerie} onZavrit={() => setGalerie(null)} />}
 
       {/* Rucni poloha */}
       {polohaPro && (
