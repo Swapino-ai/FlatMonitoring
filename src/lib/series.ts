@@ -66,7 +66,9 @@ export function tokyNemovitosti(
   const klice = new Set(navrh.map((p) => p.klic));
   return [
     ...navrh.filter((p) => p.kategorie !== "DEPOSIT").map((p) => ({
-      datum: p.zaplaceno ? p.zaplaceno.datum : p.datum,
+      // Mesic platby podle splatnosti, ne podle data zapsani zaplaceni: hromadne "zaplaceno dnes"
+      // by jinak presunulo cely rok najmu do aktualniho (nedokonceneho) mesice
+      datum: p.datum,
       druh: p.druh as string,
       castka: p.zaplaceno ? (p.castka >= 0 ? 1 : -1) * p.zaplaceno.castka : p.castka,
       kategorie: p.kategorie,
