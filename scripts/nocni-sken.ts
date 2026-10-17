@@ -21,6 +21,7 @@ import { aktualizujSkupinu } from "../src/lib/market/inzeraty";
 import { presunSnimkyNaDisk } from "../src/lib/market/snimky";
 import { jeNastaveno } from "../src/lib/googleDrive";
 import { doplnParametry } from "./ai-parametry";
+import { nactiDetail } from "./sreality-detail";
 import { HLAVICKY_PROHLIZECE, sleep } from "../src/lib/market/util";
 
 const prisma = new PrismaClient();
@@ -81,46 +82,45 @@ async function zarazeneInzeraty() {
         await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: null } });
         vraceno++;
       }
-      // "Nevim" (null, napr. presmerovani na souhlas s cookies) screenshot neblokuje:
-      // prohlizec souhlas odklikne a az pak se overi, ze je na detailu inzeratu
-      if (kontext && potrebaSnimek) {
+      // Prohlizec: souhlas s cookies odklikne, pozna "inzerat neexistuje" a vezme celou galerii
+      if (kontext) {
         const stranka = await kontext.newPage();
-        await stranka.goto(i.url!, { waitUntil: "domcontentloaded", timeout: 45_000 });
-        // Souhlas s cookies (Seznam CMP) by jinak prekryl celou stranku
-        await stranka.getByRole("button", { name: /souhlasím|přijmout vše|rozumím/i }).first().click({ timeout: 4000 }).catch(() => undefined);
-        await stranka.waitForTimeout(2500);
-        if (!stranka.url().includes(i.externalId)) {
-          console.log(`  ${i.externalId}: prohlížeč skončil jinde (${new URL(stranka.url()).hostname}${new URL(stranka.url()).pathname.slice(0, 40)}), snímek přeskočen`);
-        } else {
-          // Prohlizec potvrdil, ze inzerat zije: pripadne chybne "zmizel" se vrati
-          if (existuje === null && i.zmizelAt) {
-            await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: null } });
-            vraceno++;
-          }
-          const data = await stranka.screenshot({ type: "jpeg", quality: 65 });
-          await prisma.inzeratSnimek.create({ data: { inzeratId: i.id, price: i.price, data: new Uint8Array(data) } });
-          snimku++;
-          // Fotografie z galerie inzeratu (jednou) — ulozi se a presunou na Google Disk
-          if (potrebaFotky) {
-            const adresy: string[] = await stranka.evaluate(() => Array.from(document.querySelectorAll("img"))
-              .map((im) => (im as HTMLImageElement).currentSrc || (im as HTMLImageElement).src)
-              .filter((u) => /sdn\.cz/.test(u) && !/logo|avatar|icon/i.test(u)));
-            const unikatni = [...new Map(adresy.map((u) => [u.split("?")[0], u])).values()].slice(0, 30);
-            let poradi = 0;
-            for (const u of unikatni) {
-              try {
-                const odp = await stranka.request.get(u);
-                const typ = odp.headers()["content-type"] ?? "image/jpeg";
-                if (!odp.ok() || !typ.startsWith("image/")) continue;
-                const telo = await odp.body();
-                if (telo.length < 15_000) continue; // nahledy a ikonky
-                await prisma.inzeratSnimek.create({ data: { inzeratId: i.id, druh: "FOTO", poradi: poradi++, mime: typ.split(";")[0], data: new Uint8Array(telo) } });
-              } catch { /* jedna fotka nesmi shodit zbytek */ }
+        try {
+          const d = await nactiDetail(stranka, i.url!, i.externalId);
+          if (d.stav === "NENI") {
+            if (!i.zmizelAt) { await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: new Date() } }); zmizelo++; }
+            console.log(`  ${i.externalId}: Sreality hlásí, že inzerát neexistuje`);
+          } else if (d.stav === "NEVIM") {
+            console.log(`  ${i.externalId}: prohlížeč skončil jinde (${new URL(stranka.url()).hostname}${new URL(stranka.url()).pathname.slice(0, 40)}), přeskočeno`);
+          } else {
+            // Prohlizec potvrdil, ze inzerat zije: pripadne chybne "zmizel" se vrati
+            if (i.zmizelAt && existuje !== true) {
+              await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: null } });
+              vraceno++;
             }
-            fotek += poradi;
+            if (d.fotky.length) await prisma.inzerat.update({ where: { id: i.id }, data: { fotkyUrl: d.fotky } });
+            if (potrebaSnimek) {
+              const data = await stranka.screenshot({ type: "jpeg", quality: 65 });
+              await prisma.inzeratSnimek.create({ data: { inzeratId: i.id, price: i.price, data: new Uint8Array(data) } });
+              snimku++;
+            }
+            // Fotografie z galerie inzeratu (jednou) — ulozi se a presunou na Google Disk
+            if (potrebaFotky) {
+              let poradi = 0;
+              for (const u of d.fotky.slice(0, 40)) {
+                try {
+                  const odp = await stranka.request.get(u);
+                  const typ = odp.headers()["content-type"] ?? "image/jpeg";
+                  if (!odp.ok() || !typ.startsWith("image/")) continue;
+                  await prisma.inzeratSnimek.create({ data: { inzeratId: i.id, druh: "FOTO", poradi: poradi++, mime: typ.split(";")[0], data: new Uint8Array(await odp.body()) } });
+                } catch { /* jedna fotka nesmi shodit zbytek */ }
+              }
+              fotek += poradi;
+            }
           }
+        } finally {
+          await stranka.close();
         }
-        await stranka.close();
       }
     } catch (e) {
       console.log(`  ${i.externalId}: ${e instanceof Error ? e.message : e}`);

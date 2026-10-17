@@ -13,6 +13,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { BrowserContext } from "playwright";
 import { AI_MODEL, CENIK, vytahniParametry } from "../src/lib/market/aiParametry";
 import { HLAVICKY_PROHLIZECE, sleep } from "../src/lib/market/util";
+import { nactiDetail } from "./sreality-detail";
 
 export async function doplnParametry(prisma: PrismaClient, limit = 150, kontextZvenku?: BrowserContext | null): Promise<void> {
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -20,7 +21,8 @@ export async function doplnParametry(prisma: PrismaClient, limit = 150, kontextZ
     return;
   }
   const cekajici = await prisma.inzerat.findMany({
-    where: { parametryAt: null, url: { not: null }, zmizelAt: null, zarazeni: { some: { stav: { in: ["NAVRH", "ZARAZENO"] } } } },
+    // Bez parametru, nebo bez fotek galerie (ty se pak jen doplni, AI se znovu nevola)
+    where: { OR: [{ parametryAt: null }, { fotkyUrl: { isEmpty: true } }], url: { not: null }, zmizelAt: null, zarazeni: { some: { stav: { in: ["NAVRH", "ZARAZENO"] } } } },
     include: { zarazeni: { select: { stav: true } } },
   });
   // Zarazene napred (z nich se pocita odhad), pak navrhy
@@ -42,26 +44,26 @@ export async function doplnParametry(prisma: PrismaClient, limit = 150, kontextZ
   for (const i of davka) {
     const stranka = await kontext.newPage();
     try {
-      await stranka.goto(i.url!, { waitUntil: "domcontentloaded", timeout: 45_000 });
-      await stranka.getByRole("button", { name: /souhlasím|přijmout vše|rozumím/i }).first().click({ timeout: 4000 }).catch(() => undefined);
-      await stranka.waitForTimeout(2500);
-      if (!stranka.url().includes(i.externalId)) {
+      const d = await nactiDetail(stranka, i.url!, i.externalId);
+      if (d.stav === "NENI") {
+        await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: new Date() } });
+        console.log(`  ${i.externalId}: Sreality hlásí, že inzerát neexistuje — označen jako zmizelý`);
+        continue;
+      }
+      if (d.stav === "NEVIM") {
         console.log(`  ${i.externalId}: stránka není detail inzerátu (${new URL(stranka.url()).pathname.slice(0, 40)}), přeskočeno`);
         continue;
       }
-      // "Zobrazit vic" u popisu, at AI vidi cely text
-      await stranka.getByRole("button", { name: /zobrazit (celý|více) popis|více/i }).first().click({ timeout: 1500 }).catch(() => undefined);
-      const text: string = await stranka.evaluate(() => document.body.innerText);
-      const fotky: string[] = await stranka.evaluate(() => Array.from(document.querySelectorAll("img"))
-        .map((im) => (im as HTMLImageElement).currentSrc || (im as HTMLImageElement).src)
-        .filter((u) => /sdn\.cz/.test(u) && !/logo|avatar|icon/i.test(u)));
-      const fotkyUrl = [...new Map(fotky.map((u) => [u.split("?")[0], u])).values()].slice(0, 30);
-
-      const r = await vytahniParametry(text, client);
+      if (i.parametryAt) {
+        // Parametry uz jsou, chybely jen fotky
+        await prisma.inzerat.update({ where: { id: i.id }, data: { fotkyUrl: d.fotky } });
+        continue;
+      }
+      const r = await vytahniParametry(d.text, client);
       vstup += r.vstup; vystup += r.vystup;
       await prisma.inzerat.update({
         where: { id: i.id },
-        data: { parametry: { ...r.parametry, model: AI_MODEL } as Prisma.InputJsonValue, parametryAt: new Date(), fotkyUrl },
+        data: { parametry: { ...r.parametry, model: AI_MODEL } as Prisma.InputJsonValue, parametryAt: new Date(), fotkyUrl: d.fotky },
       });
       hotovo++;
     } catch (e) {
