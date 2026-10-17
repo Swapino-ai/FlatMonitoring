@@ -11,7 +11,7 @@ on:
         description: "Pro potvrzení napiš SMAZAT"
         required: true
       akce:
-        description: "vse = smazat všechna data skenů; den = jen sloučit historii ocenění po dnech; fotky = smazat stažené fotky inzerátů (stáhnou se znovu)"
+        description: "vse = smazat všechna data skenů; den = jen sloučit historii ocenění po dnech; fotky = smazat stažené fotky inzerátů (stáhnou se znovu); snimky = fotky i screenshoty"
         required: false
         default: "vse"
 
@@ -50,10 +50,10 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npx tsx scripts/uklid-oceneni.ts
       - name: Smazat stažené fotky inzerátů
-        if: ${{ github.event.inputs.akce == 'fotky' }}
+        if: ${{ github.event.inputs.akce == 'fotky' || github.event.inputs.akce == 'snimky' }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-        run: npx tsx scripts/uklid-fotek.ts
+        run: npx tsx scripts/uklid-fotek.ts ${{ github.event.inputs.akce }}

@@ -32,6 +32,7 @@ export async function nactiDetail(stranka: Page, url: string, externalId: string
   // Souhlas s cookies (Seznam CMP) by jinak prekryl celou stranku
   await stranka.getByRole("button", { name: /souhlasím|přijmout vše|rozumím/i }).first().click({ timeout: 4000 }).catch(() => undefined);
   await stranka.waitForTimeout(2500);
+  await uklidStranku(stranka);
 
   const text: string = await stranka.evaluate(() => document.body?.innerText ?? "").catch(() => "");
   const data = await stranka.evaluate(() => document.getElementById("__NEXT_DATA__")?.textContent ?? "").catch(() => "");
@@ -68,4 +69,36 @@ export async function nactiDetail(stranka: Page, url: string, externalId: string
   const format = formaty[0] && formaty[0].res >= 800 ? formaty[0].f : ZALOZNI_FORMAT;
   const fotky = galerie.map((u) => u + format);
   return { stav: "OK", text, fotky: [...new Set(fotky)] };
+}
+
+/**
+ * Zavre vyskakovaci okna (nabidka Premium, aplikace, newsletter) a skryje prekryvy,
+ * aby screenshot ukazoval inzerat. Reklamni ramecky Seznamu taky schova.
+ */
+export async function uklidStranku(stranka: Page): Promise<void> {
+  for (let k = 0; k < 3; k++) {
+    const tlacitko = stranka.getByRole("button", { name: /^(pokračovat|zavřít|ne,? děkuji|teď ne|později|rozumím)$/i }).first();
+    if (!(await tlacitko.isVisible({ timeout: 800 }).catch(() => false))) break;
+    await tlacitko.click({ timeout: 1500 }).catch(() => undefined);
+    await stranka.waitForTimeout(400);
+  }
+  await stranka.keyboard.press("Escape").catch(() => undefined);
+  await stranka.evaluate(() => {
+    const plocha = window.innerWidth * window.innerHeight;
+    for (const el of Array.from(document.querySelectorAll<HTMLElement>("body *"))) {
+      const st = getComputedStyle(el);
+      const dialog = el.getAttribute("role") === "dialog" || el.getAttribute("aria-modal") === "true";
+      const r = el.getBoundingClientRect();
+      // Prekryv pres velkou cast obrazovky (okno + ztmaveni), nebo dialog
+      const prekryv = (st.position === "fixed" || st.position === "sticky") && r.width * r.height > plocha * 0.3 && Number(st.zIndex || 0) > 0;
+      if (dialog || prekryv) el.style.setProperty("display", "none", "important");
+    }
+    // Reklamni ramecky a bannery
+    for (const el of Array.from(document.querySelectorAll<HTMLElement>('iframe[src*="ssp.seznam"], iframe[src*="sklik"], [id^="ssp-"], [class*="adFull"], [class*="advert"]'))) {
+      el.style.setProperty("display", "none", "important");
+    }
+    document.documentElement.style.overflow = "auto";
+    document.body.style.overflow = "auto";
+  }).catch(() => undefined);
+  await stranka.waitForTimeout(300);
 }
