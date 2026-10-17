@@ -19,6 +19,7 @@ import { analyzeProperty, loadProperty } from "@/lib/portfolio";
 import { nasobitel, podilUzivatele } from "@/lib/ownership";
 import { aktualniPohled } from "@/lib/ownership.server";
 import { prisma } from "@/lib/db";
+import { odhadNemovitosti } from "@/lib/market/inzeraty";
 import { OwnerManager } from "@/components/OwnerManager";
 import { Listy } from "@/components/Listy";
 import { SbalitelnaKarta } from "@/components/SbalitelnaKarta";
@@ -59,6 +60,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     , typy, property, pohled, strany, diskPripojen, katastr, nejnovejsiNajem,
     zmenyNakladu, zmenyZaloh, vyuctovaniDb, dokumentyDb, vydanaDb, dokumentyVydanych,
     najemciVsi, dokumentySmluv, uzivatele, stavVyuctovani, navrhPlateb, zauctovanePlatby, historieNajmu,
+    odhadProdej, odhadNajem,
   ] = await Promise.all([
     srovnejPlatnost(),
     nactiTypySluzeb(),
@@ -99,6 +101,9 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     nactiZauctovanePlatby(id),
     // Historie odhadu najmu pro graf vyvoje
     prisma.rentEstimate.findMany({ where: { propertyId: id }, orderBy: { date: "asc" }, select: { date: true, monthlyRent: true } }),
+    // Zive ze zarazenych nabidek: vazeny prumer (ulozeny) i vazeny median
+    odhadNemovitosti(id, "SALE"),
+    odhadNemovitosti(id, "RENT"),
   ]);
   if (!property) notFound();
 
@@ -407,6 +412,9 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                 const vzorek = v?.sampleSize ?? null;
                 return (<>
                   {czk(a.currentValue / property.areaM2)}/m² · zdroj {valuationSourceLabel(a.valuationSource)}
+                  {v?.source === "VYBER" && odhadProdej && (
+                    <span className="block">vážený průměr · vážený medián {czkCompact(odhadProdej.median.hodnota)} ({czk(odhadProdej.median.perM2)}/m²)</span>
+                  )}
                   {vzorek != null && (
                     <> · z {vzorek} {vzorek === 1 ? "nabídky" : vzorek < 5 ? "nabídek" : "nabídek"}
                       {v?.confidence === "RUCNI" && (
@@ -441,6 +449,9 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
               <div className="mt-1 text-3xl font-semibold leading-none tracking-tight tabular-nums">
                 {nejnovejsiNajem ? <>{czk(nejnovejsiNajem.monthlyRent)}<span className="text-base font-normal text-ink-muted">/měs.</span></> : "—"}
               </div>
+              {nejnovejsiNajem?.source === "VYBER" && odhadNajem && (
+                <div className="mt-1 text-xs text-ink-muted">vážený průměr · vážený medián {czk(odhadNajem.median.hodnota)}/měs.</div>
+              )}
               {nejnovejsiNajem ? (
                 <>
                   {smluvniNajem > 0 && (() => {

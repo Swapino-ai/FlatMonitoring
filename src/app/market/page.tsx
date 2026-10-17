@@ -48,10 +48,12 @@ export default async function MarketPage() {
       myPricePerM2: a.totalInvestment / p.areaM2,
       myValuePerM2: a.currentValue / p.areaM2,
       marketPricePerM2: sale?.perM2 ?? null,
+      marketMedianPerM2: sale?.median.perM2 ?? null,
       marketSample: sale?.pocet ?? 0,
       myRent: a.monthlyRent,
       myRentPerM2: a.monthlyRent / p.areaM2,
       marketRentPerM2: rent?.perM2 ?? null,
+      rentMedianPerM2: rent?.median.perM2 ?? null,
       rentSample: rent?.pocet ?? 0,
     };
   });
@@ -71,7 +73,7 @@ export default async function MarketPage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Porovnání s trhem</h1>
             <p className="mt-1 text-sm text-ink-secondary">
-              Odhady z nabídek ze Sreality, které jsi u nemovitosti zařadil (medián z nabídek za poslední 2 měsíce). Jde o <strong>nabídkové</strong> ceny —
+              Odhady z nabídek ze Sreality, které jsi u nemovitosti zařadil (vážený průměr z nabídek za poslední 2 měsíce). Jde o <strong>nabídkové</strong> ceny —
               realizované bývají o 5–10 % nižší. Kliknutím na nemovitost otevřeš její ocenění a trh.
             </p>
           </div>
@@ -89,7 +91,7 @@ export default async function MarketPage() {
         </StatGrid>
 
         {chartData.length > 0 && (
-          <Card title="Tvoje pořizovací cena proti mediánu trhu (Kč/m²)">
+          <Card title="Tvoje pořizovací cena proti trhu (Kč/m²)">
             <MarketComparisonChart data={chartData} />
           </Card>
         )}
@@ -102,7 +104,7 @@ export default async function MarketPage() {
                   <th>Nemovitost</th>
                   <th className="num">Pořízeno Kč/m²</th>
                   <th className="num">Aktuální odhad Kč/m²</th>
-                  <th className="num"><Napoveda term="medianTrhu">Medián trhu Kč/m²</Napoveda></th>
+                  <th className="num"><Napoveda term="medianTrhu">Trh Kč/m²</Napoveda></th>
                   <th className="num">Nájem Kč/m²</th>
                   <th className="num">Nájem trh Kč/m²</th>
                   <th><Napoveda term="vzorekNabidek">Vzorek</Napoveda></th>
@@ -123,12 +125,20 @@ export default async function MarketPage() {
                       </td>
                       <td className="num">{czk(r.myPricePerM2)}</td>
                       <td className="num">{czk(r.myValuePerM2)}</td>
-                      <td className="num">{r.marketPricePerM2 ? czk(r.marketPricePerM2) : <span className="text-ink-muted">—</span>}</td>
+                      <td className="num">
+                        {r.marketPricePerM2 ? (
+                          <>
+                            {czk(r.marketPricePerM2)}
+                            {r.marketMedianPerM2 != null && <div className="text-xs text-ink-muted">medián {czk(r.marketMedianPerM2)}</div>}
+                          </>
+                        ) : <span className="text-ink-muted">—</span>}
+                      </td>
                       <td className="num">{r.myRent ? czk(r.myRentPerM2) : <span className="text-ink-muted">—</span>}</td>
                       <td className="num">
                         {r.marketRentPerM2 ? (
                           <>
                             {czk(r.marketRentPerM2)}
+                            {r.rentMedianPerM2 != null && <div className="text-xs text-ink-muted">medián {czk(r.rentMedianPerM2)}</div>}
                             {rentGap != null && Math.abs(rentGap) > 5 && (
                               <div className={`text-xs ${rentGap < 0 ? "text-warn" : "text-good"}`}>
                                 {rentGap < 0 ? `podnajímáš o ${pct(Math.abs(rentGap), 0)}` : `nad trhem o ${pct(rentGap, 0)}`}
@@ -156,7 +166,7 @@ export default async function MarketPage() {
             </table>
           </div>
           <p className="mt-3 text-xs text-ink-muted">
-            Trh = medián ceny za m² z nabídek zařazených u nemovitosti, které se objevily za poslední 2 měsíce. Vzorek ukazuje, z kolika zařazených
+            Trh = vážený průměr (pod ním vážený medián) ceny za m² z nabídek zařazených u nemovitosti, které se objevily za poslední 2 měsíce. Vzorek ukazuje, z kolika zařazených
             nabídek číslo vzniklo.
           </p>
         </Card>

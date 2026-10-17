@@ -113,6 +113,13 @@ export interface ZarazenyBod {
   vaha?: number;
 }
 
+/** Vazeny prumer: kazda nabidka prispeje podle sve vahy (podobnosti s nemovitosti). */
+export function vazenyPrumer(body: { hodnota: number; vaha: number }[]): number {
+  const s = body.filter((b) => b.vaha > 0);
+  const celkem = s.reduce((a, b) => a + b.vaha, 0);
+  return celkem > 0 ? s.reduce((a, b) => a + b.hodnota * b.vaha, 0) / celkem : 0;
+}
+
 /** Vazeny median: hodnota, u ktere kumulativni vaha prekroci polovinu. */
 export function vazenyMedian(body: { hodnota: number; vaha: number }[]): number {
   const s = body.filter((b) => b.vaha > 0).sort((a, b) => a.hodnota - b.hodnota);
@@ -157,8 +164,10 @@ export interface OdhadZarazenych {
   hodnota: number;
   perM2: number;
   pocet: number;
+  /** Totez jako vazeny median (odolny vuci extremum) */
+  median: { hodnota: number; perM2: number };
   /** Rada pro graf: odhad po kazdem dalsim zarazenem inzeratu */
-  rada: { datum: string; hodnota: number; perM2: number; pocet: number }[];
+  rada: { datum: string; hodnota: number; perM2: number; pocet: number; medianHodnota: number; medianPerM2: number }[];
 }
 
 /** Datum (rrrr-mm-dd) posunute o dny. */
@@ -168,22 +177,31 @@ function minusDni(datum: string, dni: number): string {
 
 /**
  * Odhad ze zarazenych inzeratu, ktere se objevily na trhu za poslednich `oknoDni` dni
- * (pred datem posledniho z nich). Median ceny za m² krat plocha nemovitosti. Rada ukazuje,
+ * (pred datem posledniho z nich). Vazeny prumer (a vedle nej vazeny median) ceny za m²
+ * krat plocha nemovitosti. Rada ukazuje,
  * jak se odhad vyvijel: v kazdem bode z nabidek za predchozich `oknoDni` dni.
  */
 export function odhadZeZarazenych(body: ZarazenyBod[], areaM2: number, oknoDni = 61): OdhadZarazenych | null {
   const platne = body.filter((b) => b.pricePerM2 > 0).sort((a, b) => (a.datum < b.datum ? -1 : a.datum > b.datum ? 1 : 0));
   if (platne.length === 0) return null;
-  const poDnech = new Map<string, { hodnota: number; perM2: number; pocet: number }>();
+  const poDnech = new Map<string, Omit<OdhadZarazenych["rada"][number], "datum">>();
   for (const b of platne) {
     const od = minusDni(b.datum, oknoDni);
     const vzorek = platne.filter((x) => x.datum > od && x.datum <= b.datum);
-    const perM2 = vazenyMedian(vzorek.map((x) => ({ hodnota: x.pricePerM2, vaha: x.vaha ?? 1 })));
-    poDnech.set(b.datum, { perM2, hodnota: Math.round(perM2 * areaM2), pocet: vzorek.length });
+    const vazene = vzorek.map((x) => ({ hodnota: x.pricePerM2, vaha: x.vaha ?? 1 }));
+    const perM2 = vazenyPrumer(vazene);
+    const medianPerM2 = vazenyMedian(vazene);
+    poDnech.set(b.datum, {
+      perM2, hodnota: Math.round(perM2 * areaM2), pocet: vzorek.length,
+      medianPerM2, medianHodnota: Math.round(medianPerM2 * areaM2),
+    });
   }
   const rada = [...poDnech.entries()].map(([datum, v]) => ({ datum, ...v }));
   const posledni = rada[rada.length - 1];
-  return { hodnota: posledni.hodnota, perM2: posledni.perM2, pocet: posledni.pocet, rada };
+  return {
+    hodnota: posledni.hodnota, perM2: posledni.perM2, pocet: posledni.pocet,
+    median: { hodnota: posledni.medianHodnota, perM2: posledni.medianPerM2 }, rada,
+  };
 }
 
 /** Inzeraty, ze kterych vznikl aktualni odhad (okno pred poslednim zarazenym). */

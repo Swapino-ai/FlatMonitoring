@@ -1,4 +1,4 @@
-import { median, odhadZeZarazenych, ohodnot, vahaNabidky, vazenyMedian } from "../src/lib/market/zarazeni";
+import { median, odhadZeZarazenych, ohodnot, vahaNabidky, vazenyMedian, vazenyPrumer } from "../src/lib/market/zarazeni";
 
 let chyb = 0;
 const over = (n: string, ok: boolean, info?: unknown) => { if (!ok) { chyb++; console.log("CHYBA", n, info ?? ""); } };
@@ -24,8 +24,10 @@ over("prazdny odhad", odhadZeZarazenych([], 50) === null);
 // Body po 10 dnech (leden-duben); okno 61 dni pred poslednim
 const body = Array.from({ length: 12 }, (_, i) => ({ datum: new Date(Date.UTC(2026, 0, 1 + i * 10)).toISOString().slice(0, 10), pricePerM2: 1000 * (i + 1) }));
 const o = odhadZeZarazenych(body, 10)!;
-// posledni 2026-04-21; okno > 2026-02-19: body 2026-02-20 .. 04-21 = indexy 5..11 -> 6..12 tis -> median 9 tis
+// posledni 2026-04-21; okno > 2026-02-19: body indexy 5..11 -> 6..12 tis -> prumer 9 tis
 over("okno 2 mesice", o.pocet === 7 && o.perM2 === 9000 && o.hodnota === 90000, o);
+over("i vazeny median", o.median.perM2 === 9000 && o.rada[11].medianHodnota === 90000, o.median);
+over("vazeny prumer", vazenyPrumer([{ hodnota: 100, vaha: 1 }, { hodnota: 200, vaha: 3 }]) === 175);
 over("rada po bodech", o.rada.length === 12 && o.rada[0].hodnota === 10000 && o.rada[1].perM2 === 1500, o.rada.slice(0, 2));
 
 over("vazeny median", vazenyMedian([{ hodnota: 1, vaha: 1 }, { hodnota: 2, vaha: 1 }, { hodnota: 10, vaha: 5 }]) === 10);

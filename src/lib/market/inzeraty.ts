@@ -178,7 +178,8 @@ function snimekNabidek(inzeraty: { source: string; externalId: string; dispositi
  * Prepocita odhad ze zarazenych za posledni 2 mesice a zapise ho do historie (oceneni nebo
  * odhad najmu), kdyz se zmenil. Vraci novy odhad, nebo null, kdyz nic zarazeneho neni.
  */
-export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RENT") {
+/** Zarazene nabidky nemovitosti (u propojeneho oceneni od korene) s vahami pro odhad. */
+async function bodyOdhadu(propertyId: string, dealType: "SALE" | "RENT") {
   const p = await prisma.property.findUnique({ where: { id: propertyId }, select: { areaM2: true, typDomu: true, stavBytu: true } });
   if (!p) return null;
   // Propojene oceneni: nabidky se berou od korene, plocha je vlastni
@@ -190,6 +191,19 @@ export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RE
     datum: denISO(z.inzerat.firstSeenAt), pricePerM2: z.inzerat.pricePerM2 ?? 0, i: z.inzerat,
     vaha: vahaNabidky(p, { areaM2: z.inzerat.areaM2, typDomu: z.typDomu, stavBytu: z.stavBytu, vahaRucne: z.vahaRucne }),
   }));
+  return { p, body };
+}
+
+/** Aktualni odhad ze zarazenych nabidek (vazeny prumer i median), bez ukladani. */
+export async function odhadNemovitosti(propertyId: string, dealType: "SALE" | "RENT") {
+  const b = await bodyOdhadu(propertyId, dealType);
+  return b ? odhadZeZarazenych(b.body, b.p.areaM2, OKNO_ODHADU) : null;
+}
+
+export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RENT") {
+  const b = await bodyOdhadu(propertyId, dealType);
+  if (!b) return null;
+  const { p, body } = b;
   const odhad = odhadZeZarazenych(body, p.areaM2, OKNO_ODHADU);
   if (!odhad) return null;
   const pouzite = vOkneOdhadu(body, OKNO_ODHADU).map((b) => b.i);
@@ -201,7 +215,7 @@ export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RE
   const spolecne = {
     confidence: odhad.pocet >= 5 ? "HIGH" : odhad.pocet >= 3 ? "MEDIUM" : "LOW",
     sampleSize: odhad.pocet, comparables: snimekNabidek(pouzite),
-    notes: `Medián z ${odhad.pocet} zařazených nabídek za poslední 2 měsíce`,
+    notes: `Vážený průměr z ${odhad.pocet} zařazených nabídek za poslední 2 měsíce; vážený medián ${Math.round(odhad.median.hodnota).toLocaleString("cs-CZ")} Kč (${Math.round(odhad.median.perM2).toLocaleString("cs-CZ")} Kč/m²)`,
   };
 
   if (dealType === "SALE") {

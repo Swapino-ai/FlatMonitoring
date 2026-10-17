@@ -163,9 +163,11 @@ export function AmortizationChart({ data }: { data: { rok: number; jistina: numb
 }
 
 /** Vyvoj jedne hodnoty v case (trzni najem, odhadni hodnota) s volitelnou vodorovnou referenci. */
-export function VyvojChart({ data, nazev, reference, kompaktni = false }: {
-  data: { datum: string; hodnota: number }[];
+export function VyvojChart({ data, nazev, nazev2, reference, kompaktni = false }: {
+  data: { datum: string; hodnota: number; hodnota2?: number }[];
   nazev: string;
+  /** Druha rada (hodnota2) jako carkovana cara, napr. vazeny median vedle prumeru. */
+  nazev2?: string;
   /** Napr. smluvni najem: vodorovna carkovana cara s popiskem. */
   reference?: { hodnota: number; popisek: string };
   /** Osa v tisicich/milionech (u cen nemovitosti). */
@@ -175,7 +177,7 @@ export function VyvojChart({ data, nazev, reference, kompaktni = false }: {
   // Id gradientu bez diakritiky a mezer; jinak url(#...) neplati a vypln je cerna
   const gid = `gVyvoj-${nazev.normalize("NFD").replace(/[^a-zA-Z0-9]/g, "")}`;
   // "Hezke" osy: zaokrouhlene hranice a 4-5 rovnomernych popisku
-  const hodnoty = [...data.map((d) => d.hodnota), ...(reference ? [reference.hodnota] : [])];
+  const hodnoty = [...data.flatMap((d) => (d.hodnota2 != null ? [d.hodnota, d.hodnota2] : [d.hodnota])), ...(reference ? [reference.hodnota] : [])];
   const min = Math.min(...hodnoty), max = Math.max(...hodnoty);
   const hruby = Math.max((max - min) * 1.2, max * 0.02, 1) / 4;
   const mocnina = Math.pow(10, Math.floor(Math.log10(hruby)));
@@ -204,6 +206,11 @@ export function VyvojChart({ data, nazev, reference, kompaktni = false }: {
         )}
         <Area type="monotone" dataKey="hodnota" name={nazev} stroke={SERIES[0]} strokeWidth={1.75} fill={`url(#${gid})`}
           dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: "rgb(var(--surface-card))" }} />
+        {nazev2 && (
+          <Line type="monotone" dataKey="hodnota2" name={nazev2} stroke={SERIES[1]} strokeWidth={1.5} strokeDasharray="5 4"
+            dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "rgb(var(--surface-card))" }} />
+        )}
+        {nazev2 && <Legend verticalAlign="top" align="right" height={24} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />}
       </ComposedChart>
     </ResponsiveContainer>
   );

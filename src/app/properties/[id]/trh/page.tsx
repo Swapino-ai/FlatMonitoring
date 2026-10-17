@@ -66,7 +66,7 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
     `Prodej i nájem: ${nazevNemovitosti(zdroj.type).toLowerCase()}${zdroj.disposition ? ` ${zdroj.disposition} (jen stejná dispozice)` : ""}, ${plochaOd}–${plochaDo} m²`,
     `do ${okruh.zaklad} km od obce ${zdroj.city}${okruh.pevny ? " (pevný okruh)" : `, při málo nabídkách až ${okruh.max} km`}; nabídka bez polohy jen ze stejné obce.`,
     vyloucene.length ? `Nezahrnuje se: ${vyloucene.join(", ")}.` : "",
-    `Odhad = medián Kč/m² ze zařazených nabídek, které se objevily za poslední 2 měsíce, × ${property.areaM2} m²${koren !== id && korenP ? ` (nabídky sdílené s ${korenP.name})` : ""}.`,
+    `Odhad = vážený průměr a vážený medián Kč/m² (váha podle podobnosti) ze zařazených nabídek, které se objevily za poslední 2 měsíce, × ${property.areaM2} m²${koren !== id && korenP ? ` (nabídky sdílené s ${korenP.name})` : ""}.`,
   ].filter(Boolean).join(" ");
 
   // Obce, ze kterych nabidky prisly: klikem je jde vyloucit
@@ -105,7 +105,10 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
       radky.filter((r) => r.dealType === d && r.stav === "ZARAZENO").map((r) => ({ datum: r.firstSeen, pricePerM2: r.pricePerM2 ?? 0, vaha: r.vaha })),
       property.areaM2, OKNO_ODHADU,
     );
-    return o ? { hodnota: o.hodnota, perM2: o.perM2, pocet: o.pocet, rada: o.rada.map((b) => ({ datum: b.datum, hodnota: b.hodnota })) } : null;
+    return o ? {
+      hodnota: o.hodnota, perM2: o.perM2, pocet: o.pocet, median: o.median,
+      rada: o.rada.map((b) => ({ datum: b.datum, hodnota: b.hodnota, median: b.medianHodnota })),
+    } : null;
   };
 
   const canEdit = user.role === "OWNER";
