@@ -12,7 +12,7 @@ function projdi(x: unknown, cesta: string, ven: string[]) {
   if (Array.isArray(x)) {
     const sdn = x.filter((e) => JSON.stringify(e ?? "").includes("sdn.cz"));
     if (sdn.length >= 2) ven.push(`${cesta} [${x.length}] ${JSON.stringify(x[0]).slice(0, 300)}`);
-    x.slice(0, 3).forEach((e, k) => projdi(e, `${cesta}[${k}]`, ven));
+    x.slice(0, 2).forEach((e, k) => projdi(e, `${cesta}[${k}]`, ven));
   } else if (x && typeof x === "object") {
     for (const [k, v] of Object.entries(x)) projdi(v, `${cesta}.${k}`, ven);
   }
@@ -35,7 +35,9 @@ async function main() {
       const qs = data?.props?.pageProps?.dehydratedState?.queries ?? [];
       for (const [k, q] of (qs as any[]).entries()) console.log(`query[${k}] key=${JSON.stringify(q.queryKey).slice(0, 150)}`);
       const ven: string[] = [];
-      projdi(data, "root", ven);
+      const est = (qs as any[]).find((q) => q.queryKey?.[0] === "estate")?.state?.data;
+      console.log("estate klíče:", est ? Object.keys(est).join(", ") : "—");
+      projdi(est, "estate", ven);
       ven.slice(0, 25).forEach((r) => console.log("  ", r));
     }
     const img = await p.evaluate(() => Array.from(document.querySelectorAll("img")).map((im) => `${(im as HTMLImageElement).naturalWidth}x${(im as HTMLImageElement).naturalHeight} alt="${im.alt.slice(0, 40)}" ${(im.currentSrc || im.src).slice(0, 120)}`));
