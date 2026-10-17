@@ -51,7 +51,14 @@ export function Nav({ user, verze }: { user: { name: string; role: string }; ver
   useEffect(() => setVice(false), [pathname]);
 
   const vsechny = [...LINKS, ...(user.role === "OWNER" ? OWNER_LINKS : [])];
-  const jeAktivni = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  // Na strance nemovitosti vede "Trh" rovnou na jeji oceneni a trh
+  const nemovitost = /^\/properties\/([^/]+)/.exec(pathname)?.[1];
+  const trhNemovitosti = nemovitost && nemovitost !== "new" ? `/properties/${nemovitost}/trh` : null;
+  const cil = (href: string) => (href === "/market" && trhNemovitosti ? trhNemovitosti : href);
+  const jeAktivni = (href: string) => (href === "/" ? pathname === "/"
+    : href === "/market" ? pathname.startsWith("/market") || pathname.endsWith("/trh")
+    : href === "/properties" ? pathname.startsWith(href) && !pathname.endsWith("/trh")
+    : pathname.startsWith(href));
   const spodni = vsechny.filter((l) => SPODNI.includes(l.href));
   const dalsi = vsechny.filter((l) => !SPODNI.includes(l.href));
   const dalsiAktivni = dalsi.some((l) => jeAktivni(l.href));
@@ -74,7 +81,7 @@ export function Nav({ user, verze }: { user: { name: string; role: string }; ver
               return (
                 <Link
                   key={l.href}
-                  href={l.href}
+                  href={cil(l.href)}
                   aria-current={active ? "page" : undefined}
                   className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm transition-colors ${
                     active
@@ -119,7 +126,7 @@ export function Nav({ user, verze }: { user: { name: string; role: string }; ver
             return (
               <li key={l.href} className="flex-1">
                 <Link
-                  href={l.href}
+                  href={cil(l.href)}
                   aria-current={active ? "page" : undefined}
                   className={`flex flex-col items-center gap-0.5 rounded-xl py-1.5 text-[11px] font-semibold transition-colors ${
                     active ? "text-accent" : "text-ink-muted"
@@ -158,7 +165,7 @@ export function Nav({ user, verze }: { user: { name: string; role: string }; ver
             {dalsi.map((l) => (
               <Link
                 key={l.href}
-                href={l.href}
+                href={cil(l.href)}
                 className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium ${
                   jeAktivni(l.href) ? "bg-accent-soft text-accent" : "text-ink-primary"
                 }`}
