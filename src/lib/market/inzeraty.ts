@@ -167,28 +167,35 @@ export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RE
   const perM2 = pouzite.map((i) => i.pricePerM2 ?? 0).sort((a, b) => a - b);
   const kvantil = (q: number) => perM2[Math.min(perM2.length - 1, Math.floor((perM2.length - 1) * q))];
 
+  // Jeden zaznam za den: behem dne (vic swipnuti) se dnesni zaznam jen prepisuje
+  const zacatekDne = new Date(`${denISO(new Date())}T00:00:00Z`);
+  const spolecne = {
+    confidence: odhad.pocet >= 5 ? "HIGH" : odhad.pocet >= 3 ? "MEDIUM" : "LOW",
+    sampleSize: odhad.pocet, comparables: snimekNabidek(pouzite),
+    notes: `Medián z ${odhad.pocet} zařazených nabídek za poslední 2 měsíce`,
+  };
+
   if (dealType === "SALE") {
+    const dnesni = await prisma.valuation.findMany({ where: { propertyId, source: "VYBER", date: { gte: zacatekDne } }, orderBy: { date: "desc" } });
+    if (dnesni.length) {
+      await prisma.valuation.update({ where: { id: dnesni[0].id }, data: { value: odhad.hodnota, pricePerM2: odhad.perM2, date: new Date(), ...spolecne } });
+      if (dnesni.length > 1) await prisma.valuation.deleteMany({ where: { id: { in: dnesni.slice(1).map((v) => v.id) } } });
+      return odhad;
+    }
     const posledni = await prisma.valuation.findFirst({ where: { propertyId }, orderBy: { date: "desc" } });
     if (posledni?.source === "VYBER" && Math.abs(posledni.value - odhad.hodnota) < 1 && posledni.sampleSize === odhad.pocet) return odhad;
-    await prisma.valuation.create({
-      data: {
-        propertyId, value: odhad.hodnota, pricePerM2: odhad.perM2, source: "VYBER",
-        confidence: odhad.pocet >= 5 ? "HIGH" : odhad.pocet >= 3 ? "MEDIUM" : "LOW",
-        sampleSize: odhad.pocet, comparables: snimekNabidek(pouzite),
-        notes: `Medián z ${odhad.pocet} zařazených nabídek za poslední 2 měsíce`,
-      },
-    });
+    await prisma.valuation.create({ data: { propertyId, value: odhad.hodnota, pricePerM2: odhad.perM2, source: "VYBER", ...spolecne } });
   } else {
+    const data = { monthlyRent: odhad.hodnota, rentPerM2: odhad.perM2, p25: kvantil(0.25), p75: kvantil(0.75), ...spolecne };
+    const dnesni = await prisma.rentEstimate.findMany({ where: { propertyId, source: "VYBER", date: { gte: zacatekDne } }, orderBy: { date: "desc" } });
+    if (dnesni.length) {
+      await prisma.rentEstimate.update({ where: { id: dnesni[0].id }, data: { ...data, date: new Date() } });
+      if (dnesni.length > 1) await prisma.rentEstimate.deleteMany({ where: { id: { in: dnesni.slice(1).map((v) => v.id) } } });
+      return odhad;
+    }
     const posledni = await prisma.rentEstimate.findFirst({ where: { propertyId }, orderBy: { date: "desc" } });
     if (posledni?.source === "VYBER" && Math.abs(posledni.monthlyRent - odhad.hodnota) < 1 && posledni.sampleSize === odhad.pocet) return odhad;
-    await prisma.rentEstimate.create({
-      data: {
-        propertyId, monthlyRent: odhad.hodnota, rentPerM2: odhad.perM2, p25: kvantil(0.25), p75: kvantil(0.75),
-        source: "VYBER", confidence: odhad.pocet >= 5 ? "HIGH" : odhad.pocet >= 3 ? "MEDIUM" : "LOW",
-        sampleSize: odhad.pocet, comparables: snimekNabidek(pouzite),
-        notes: `Medián z ${odhad.pocet} zařazených nabídek za poslední 2 měsíce`,
-      },
-    });
+    await prisma.rentEstimate.create({ data: { propertyId, source: "VYBER", ...data } });
   }
   return odhad;
 }
