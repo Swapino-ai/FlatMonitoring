@@ -1,0 +1,40 @@
+# Jednorázové smazání všech dosavadních dat skenu trhu (nabídky, inzeráty,
+# zařazení, snímky, ocenění a odhady nájmu ze skenu). Ruční ocenění zůstávají.
+# Před smazáním se uloží záloha jako artefakt.
+
+name: Smazat data skenů trhu
+
+on:
+  workflow_dispatch:
+    inputs:
+      potvrzeni:
+        description: "Pro potvrzení napiš SMAZAT"
+        required: true
+
+jobs:
+  smazat:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.potvrzeni == 'SMAZAT' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Záloha před smazáním
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npm run backup
+      - name: Ulož zálohu jako artefakt
+        uses: actions/upload-artifact@v4
+        with:
+          name: zaloha-pred-smazanim-skenu-${{ github.run_number }}
+          path: zalohy/*.json
+          retention-days: 90
+      - name: Smazat data skenů
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx tsx scripts/smazat-skeny.ts

@@ -23,42 +23,6 @@ import { HLAVICKY_PROHLIZECE, sleep } from "../src/lib/market/util";
 
 const prisma = new PrismaClient();
 
-/** Jednorazove: prevede dosavadni nabidky a vyrazene do nove databaze trhu. */
-async function prevedStareNabidky() {
-  if (await prisma.inzerat.count() > 0) return;
-  const stare = await prisma.marketListing.findMany({ where: { externalId: { not: null } }, orderBy: { scrapedAt: "asc" } });
-  if (stare.length === 0) return;
-  const posledni = new Map<string, typeof stare[number]>();
-  const prvni = new Map<string, Date>();
-  for (const s of stare) {
-    const k = `${s.source}|${s.externalId}`;
-    if (!prvni.has(k)) prvni.set(k, s.scrapedAt);
-    posledni.set(k, s);
-  }
-  for (const [k, s] of posledni) {
-    await prisma.inzerat.create({
-      data: {
-        source: s.source, externalId: s.externalId!, dealType: s.dealType, category: s.category, city: s.city,
-        region: s.region, district: s.district, disposition: s.disposition, areaM2: s.areaM2, price: s.price,
-        pricePerM2: s.pricePerM2, url: s.url, latitude: s.latitude, longitude: s.longitude,
-        firstSeenAt: prvni.get(k)!, lastSeenAt: s.scrapedAt,
-        ceny: { create: { price: s.price, pricePerM2: s.pricePerM2, at: s.scrapedAt } },
-      },
-    });
-  }
-  // Drive vyrazene nabidky zustanou u nemovitosti vyrazene
-  for (const v of await prisma.excludedListing.findMany()) {
-    const i = await prisma.inzerat.findUnique({ where: { source_externalId: { source: v.source, externalId: v.externalId } } });
-    if (!i) continue;
-    await prisma.zarazeniInzeratu.upsert({
-      where: { propertyId_inzeratId: { propertyId: v.propertyId, inzeratId: i.id } },
-      update: { stav: "VYRAZENO" },
-      create: { propertyId: v.propertyId, inzeratId: i.id, stav: "VYRAZENO", duvod: v.reason ?? "vyřazeno dříve", rozhodnutoAt: v.createdAt },
-    });
-  }
-  console.log(`Převedeno ${posledni.size} dosavadních nabídek do databáze trhu.`);
-}
-
 /** Overi existenci zarazenych inzeratu a porizuje jejich screenshoty. */
 async function zarazeneInzeraty() {
   const inzeraty = await prisma.inzerat.findMany({
@@ -119,8 +83,6 @@ async function zarazeneInzeraty() {
 async function main() {
   const zacatek = new Date();
   console.log(`[${zacatek.toISOString()}] Noční sken trhu`);
-
-  await prevedStareNabidky();
 
   const sledovane = (await prisma.property.findMany({ where: { status: { not: "SOLD" }, sledovatTrh: true } }))
     .filter((p) => NEMOVITOST_MAP.get(p.type)?.srealityCesta);
