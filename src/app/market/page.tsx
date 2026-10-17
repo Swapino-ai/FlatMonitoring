@@ -7,7 +7,10 @@ import { MarketComparisonChart } from "@/components/charts";
 import { ScanButton } from "@/components/ScanButton";
 import { prisma } from "@/lib/db";
 import { analyzeProperty, loadProperties } from "@/lib/portfolio";
-import { comparableStats } from "@/lib/market";
+import Link from "next/link";
+import { odhadZeZarazenych } from "@/lib/market/zarazeni";
+import { OKNO_ODHADU } from "@/lib/market/inzeraty";
+import { denISO } from "@/lib/format";
 import { czk, czkCompact, dateCz, pct } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -17,50 +20,48 @@ export default async function MarketPage() {
   const properties = await loadProperties();
   const analyses = properties.filter((p) => p.status !== "SOLD").map((p) => analyzeProperty(p));
 
-  const lastScans = await prisma.marketScan.findMany({
-    orderBy: { runAt: "desc" },
-    take: 6,
-    include: { _count: { select: { listings: true } } },
+  // Posledni behy skenu z deniku
+  const lastScans = await prisma.scanRun.findMany({ orderBy: { startedAt: "desc" }, take: 8 });
+  // Novy system: zarazene a navrzene nabidky po nemovitostech
+  const zarazeni = await prisma.zarazeniInzeratu.findMany({
+    where: { stav: { in: ["ZARAZENO", "NAVRH"] } },
+    include: { inzerat: { select: { dealType: true, pricePerM2: true, firstSeenAt: true } } },
   });
 
-  const rows = await Promise.all(
-    analyses.map(async (a) => {
-      const p = a.property;
-      const spolecne = {
-        city: p.city, district: p.district, category: p.type,
-        latitude: p.latitude, longitude: p.longitude, region: p.region,
-        areaM2: p.areaM2, disposition: p.disposition,
-      };
-      const sale = await comparableStats({ ...spolecne, dealType: "SALE" as const });
-      const rent = await comparableStats({ ...spolecne, dealType: "RENT" as const });
-
-      const myPricePerM2 = a.totalInvestment / p.areaM2;
-      const myRentPerM2 = a.monthlyRent / p.areaM2;
-
-      return {
-        id: p.id,
-        name: p.name,
-        city: p.city,
-        areaM2: p.areaM2,
-        myPricePerM2,
-        myValuePerM2: a.currentValue / p.areaM2,
-        marketPricePerM2: sale?.medianPricePerM2 ?? null,
-        marketSample: sale?.count ?? 0,
-        myRent: a.monthlyRent,
-        myRentPerM2,
-        marketRentPerM2: rent?.medianPricePerM2 ?? null,
-        rentSample: rent?.count ?? 0,
-        lastValuation: p.valuations[0] ?? null,
-      };
-    }),
-  );
+  const rows = analyses.map((a) => {
+    const p = a.property;
+    const moje = zarazeni.filter((z) => z.propertyId === p.id);
+    const odhad = (d: "SALE" | "RENT") => odhadZeZarazenych(
+      moje.filter((z) => z.stav === "ZARAZENO" && z.inzerat.dealType === d)
+        .map((z) => ({ datum: denISO(z.inzerat.firstSeenAt), pricePerM2: z.inzerat.pricePerM2 ?? 0 })),
+      p.areaM2, OKNO_ODHADU,
+    );
+    const sale = odhad("SALE");
+    const rent = odhad("RENT");
+    return {
+      id: p.id,
+      name: p.name,
+      city: p.city,
+      areaM2: p.areaM2,
+      sledovat: p.sledovatTrh,
+      navrhu: moje.filter((z) => z.stav === "NAVRH").length,
+      myPricePerM2: a.totalInvestment / p.areaM2,
+      myValuePerM2: a.currentValue / p.areaM2,
+      marketPricePerM2: sale?.perM2 ?? null,
+      marketSample: sale?.pocet ?? 0,
+      myRent: a.monthlyRent,
+      myRentPerM2: a.monthlyRent / p.areaM2,
+      marketRentPerM2: rent?.perM2 ?? null,
+      rentSample: rent?.pocet ?? 0,
+    };
+  });
 
   const chartData = rows
     .filter((r) => r.marketPricePerM2 != null)
     .map((r) => ({ name: r.name, tvoje: Math.round(r.myPricePerM2), trh: Math.round(r.marketPricePerM2!) }));
 
-  const lastScanAt = lastScans[0]?.runAt;
-  const totalListings = lastScans.reduce((a, s) => a + s._count.listings, 0);
+  const lastScanAt = lastScans[0]?.startedAt;
+  const totalListings = lastScans.reduce((a, s) => a + s.listingsFound, 0);
 
   return (
     <>
@@ -70,8 +71,8 @@ export default async function MarketPage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Porovnání s trhem</h1>
             <p className="mt-1 text-sm text-ink-secondary">
-              Měsíční sken nabídek ze Sreality a Bezrealitek. Jde o <strong>nabídkové</strong> ceny — realizované bývají o
-              5–10 % nižší.
+              Odhady z nabídek ze Sreality, které jsi u nemovitosti zařadil (medián z posledních 10). Jde o <strong>nabídkové</strong> ceny —
+              realizované bývají o 5–10 % nižší. Kliknutím na nemovitost otevřeš její ocenění a trh.
             </p>
           </div>
           {user.role === "OWNER" && <ScanButton disabled={properties.length === 0} />}
@@ -79,7 +80,7 @@ export default async function MarketPage() {
 
         <StatGrid>
           <Stat label="Poslední sken" value={lastScanAt ? dateCz(lastScanAt) : "nikdy"}
-            sub={lastScanAt ? `${totalListings} nabídek v posledních bězích` : "Spusť sken nebo nastav měsíční cron"} />
+            sub={lastScanAt ? `${totalListings} nabídek v posledních bězích` : "Zapni u nemovitosti Sledovat trh"} />
           <Stat label="Hodnota portfolia" value={czkCompact(analyses.reduce((a, x) => a + x.currentValue, 0))} />
           <Stat label="Pořízeno za" value={czkCompact(analyses.reduce((a, x) => a + x.totalInvestment, 0))} />
           <Stat label="Nerealizovaný zisk"
@@ -112,7 +113,14 @@ export default async function MarketPage() {
                   const rentGap = r.marketRentPerM2 ? ((r.myRentPerM2 - r.marketRentPerM2) / r.marketRentPerM2) * 100 : null;
                   return (
                     <tr key={r.id}>
-                      <td className="font-medium">{r.name}<div className="text-xs text-ink-muted">{r.city} · {r.areaM2} m²</div></td>
+                      <td className="font-medium">
+                        <Link href={`/properties/${r.id}/trh`} className="text-accent hover:underline">{r.name}</Link>
+                        <div className="text-xs text-ink-muted">
+                          {r.city} · {r.areaM2} m²
+                          {!r.sledovat && " · trh se nesleduje"}
+                          {r.navrhu > 0 && <span className="ml-1 font-medium text-accent">· {r.navrhu} ke kontrole</span>}
+                        </div>
+                      </td>
                       <td className="num">{czk(r.myPricePerM2)}</td>
                       <td className="num">{czk(r.myValuePerM2)}</td>
                       <td className="num">{r.marketPricePerM2 ? czk(r.marketPricePerM2) : <span className="text-ink-muted">—</span>}</td>
@@ -130,13 +138,16 @@ export default async function MarketPage() {
                         ) : <span className="text-ink-muted">—</span>}
                       </td>
                       <td>
-                        {r.marketSample >= 3 ? (
-                          <Badge tone={r.marketSample >= 15 ? "good" : r.marketSample >= 7 ? "neutral" : "warn"}>
-                            {r.marketSample} nabídek
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-ink-muted">málo dat</span>
-                        )}
+                        <Link href={`/properties/${r.id}/trh`} className="inline-flex items-center gap-1.5">
+                          {r.marketSample > 0 || r.rentSample > 0 ? (
+                            <Badge tone={r.marketSample >= 7 ? "good" : r.marketSample >= 3 ? "neutral" : "warn"}>
+                              {r.marketSample} prodej · {r.rentSample} nájem
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-ink-muted">nic zařazeno</span>
+                          )}
+                          <span className="text-xs text-accent">Ocenění →</span>
+                        </Link>
                       </td>
                     </tr>
                   );
@@ -145,28 +156,27 @@ export default async function MarketPage() {
             </table>
           </div>
           <p className="mt-3 text-xs text-ink-muted">
-            Odhad se počítá jako medián ceny za m² u srovnatelných bytů (stejné město, dispozice, plocha ±25 %) za posledních
-            60 dní. Při méně než 3 nabídkách se odhad nepočítá — raději žádné číslo než nedůvěryhodné.
+            Trh = medián ceny za m² z posledních 10 nabídek, které jsi u nemovitosti zařadil. Vzorek ukazuje, z kolika zařazených
+            nabídek číslo vzniklo.
           </p>
         </Card>
 
-        <Card title="Historie skenů">
+        <Card title="Poslední běhy skenu">
           {lastScans.length === 0 ? (
-            <Empty>Sken ještě neproběhl. Spusť ho ručně, nebo nastav měsíční cron podle README.</Empty>
+            <Empty>Sken ještě neproběhl. Zapni u nemovitosti „Sledovat trh“ a spusť sken.</Empty>
           ) : (
             <div className="table-scroll">
             <table className="table-base">
-              <thead><tr><th>Kdy</th><th>Zdroj</th><th>Stav</th><th className="num">Nabídek</th><th>Poznámka</th></tr></thead>
+              <thead><tr><th>Kdy</th><th>Nemovitost</th><th>Typ</th><th>Stav</th><th className="num">Nabídek</th><th>Výsledek</th></tr></thead>
               <tbody>
                 {lastScans.map((s) => (
                   <tr key={s.id}>
-                    <td className="tabular-nums text-ink-secondary">{dateCz(s.runAt)}</td>
-                    <td>{s.source}</td>
-                    <td>
-                      <Badge tone={s.status === "OK" ? "good" : s.status === "PARTIAL" ? "warn" : "bad"}>{s.status}</Badge>
-                    </td>
-                    <td className="num">{s._count.listings}</td>
-                    <td className="max-w-md truncate text-xs text-ink-muted" title={s.message ?? ""}>{s.message}</td>
+                    <td className="tabular-nums text-ink-secondary">{dateCz(s.startedAt)}</td>
+                    <td>{s.propertyId ? <Link href={`/properties/${s.propertyId}/trh`} className="text-accent hover:underline">{s.propertyName}</Link> : s.propertyName}</td>
+                    <td>{s.dealType === "SALE" ? "prodej" : "nájem"}</td>
+                    <td><Badge tone={s.status === "OK" ? "good" : s.status === "SELHALO" ? "bad" : "warn"}>{s.status}</Badge></td>
+                    <td className="num">{s.listingsFound}</td>
+                    <td className="max-w-md truncate text-xs text-ink-muted" title={s.message ?? s.result ?? ""}>{s.message ?? s.result}</td>
                   </tr>
                 ))}
               </tbody>
