@@ -179,6 +179,19 @@ body {
       linear-gradient(160deg, rgb(52 103 240) 0%, rgb(31 79 216) 55%, rgb(24 62 178) 100%);
     box-shadow: 0 1px 2px rgba(24, 62, 178, 0.25), 0 14px 32px rgba(31, 79, 216, 0.28);
   }
+  /* Druha hlavni karta (najem) vedle modre: stejny styl v tyrkysove, at k sobe sedi
+     a pritom se prodej a najem na prvni pohled lisi. */
+  .hero-card.hero-card-najem {
+    --text-secondary: 214 245 240;
+    --text-muted: 167 230 221;
+    --border: 94 199 186;
+    --surface-sunken: 22 150 138;
+    background-color: rgb(13 128 118);
+    background-image:
+      radial-gradient(90% 130% at 100% 0%, rgba(255, 255, 255, 0.18), transparent 58%),
+      linear-gradient(160deg, rgb(20 170 155) 0%, rgb(13 135 124) 55%, rgb(10 105 97) 100%);
+    box-shadow: 0 1px 2px rgba(10, 105, 97, 0.25), 0 14px 32px rgba(13, 128, 118, 0.28);
+  }
   /* Tlacitko na modre karte: pruhledny svetly podklad misto bileho, jinak
      by bily text na bilem pozadi zmizel. */
   .hero-card .btn {

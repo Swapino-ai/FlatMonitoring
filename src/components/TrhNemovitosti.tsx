@@ -248,7 +248,7 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", typNemovitos
           const proNajem = t === "RENT";
           const cenaT = (n: number) => (proNajem ? `${czk(n)}/měs.` : czkCompact(n));
           return (
-            <div key={t} className={`card flex flex-col ${proNajem ? "" : "hero-card"}`}>
+            <div key={t} className={`card hero-card flex flex-col ${proNajem ? "hero-card-najem" : ""}`}>
               <div className="label">{proNajem ? "Odhad tržního nájmu" : "Odhad tržní hodnoty"}</div>
               {o ? (
                 <>
