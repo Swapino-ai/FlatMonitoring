@@ -2,6 +2,7 @@
  * Cista logika noveho sledovani trhu: podobnost navrzeneho inzeratu a odhad
  * z posledních zarazenych inzeratu. Bez databaze, at jde otestovat.
  */
+import { hodnotyNabidky, hodnotyZaznamu, profilTypu, vahaVlastnosti, type Profil } from "./profily";
 
 export interface NemovitostProSrovnani {
   areaM2: number;
@@ -12,6 +13,10 @@ export interface NemovitostProSrovnani {
   okruhKm: number;
   /** Tvrda hranice vzdalenosti (km); bez ni plati okruhKm */
   maxKm?: number;
+  /** Povolena odchylka plochy (podil), podle profilu typu; vychozi 0,25 */
+  tolerancePlochy?: number;
+  /** Jen stejna dispozice (byty); vychozi ano, kdyz ma nemovitost dispozici */
+  stejnaDispozice?: boolean;
 }
 
 export interface InzeratProSrovnani {
@@ -61,8 +66,10 @@ export function ohodnot(n: NemovitostProSrovnani, i: InzeratProSrovnani, medianZ
   const mimo = (duvod: string, km: number | null = null): Hodnoceni => ({ skore: 0, doporuceno: false, duvod, mimo: true, vzdalenostKm: km });
 
   // Dispozice musi byt stejna (pravidlo uzivatele); neznama dispozice jen snizi skore
-  if (n.disposition && i.disposition && n.disposition !== i.disposition) return mimo(`dispozice ${i.disposition}`);
-  if (n.disposition && !i.disposition) { skore -= 10; duvody.push("dispozice neuvedena"); }
+  if (n.stejnaDispozice !== false) {
+    if (n.disposition && i.disposition && n.disposition !== i.disposition) return mimo(`dispozice ${i.disposition}`);
+    if (n.disposition && !i.disposition) { skore -= 10; duvody.push("dispozice neuvedena"); }
+  }
 
   // Vzdalenost: okruh je tvrda hranice; bez polohy jen stejna obec
   let km: number | null = null;
@@ -75,11 +82,12 @@ export function ohodnot(n: NemovitostProSrovnani, i: InzeratProSrovnani, medianZ
     return mimo("jiná obec a neznámá poloha");
   }
 
-  // Plocha nejvys ±25 %
+  // Plocha nejvys ± tolerance profilu (byt 25 %, dum 30 %, garaz 40 %...)
+  const tolerance = n.tolerancePlochy ?? 0.25;
   if (i.areaM2 && n.areaM2) {
     const odchylka = Math.abs(i.areaM2 - n.areaM2) / n.areaM2;
-    if (odchylka > 0.25) return mimo(`plocha ${Math.round(i.areaM2)} m²`, km);
-    skore -= odchylka * 80;
+    if (odchylka > tolerance) return mimo(`plocha ${Math.round(i.areaM2)} m²`, km);
+    skore -= (odchylka / tolerance) * 20;
   } else {
     skore -= 15; duvody.push("plocha neznámá");
   }
@@ -137,26 +145,22 @@ export function vazenyMedian(body: { hodnota: number; vaha: number }[]): number 
 export const TYPY_DOMU = { PANEL: "Panel", CIHLA: "Cihla", NOVOSTAVBA: "Novostavba" } as const;
 export const STAVY_BYTU = { PRED_REKONSTRUKCI: "Před rekonstrukcí", CASTECNA_REKONSTRUKCE: "Částečná rekonstrukce", PO_REKONSTRUKCI: "Po rekonstrukci", NOVOSTAVBA: "Novostavba" } as const;
 /** Poradi stavu: sousedni stav (napr. castecna vs. po rekonstrukci) je jeste trochu podobny. */
-const PORADI_STAVU: Record<string, number> = { PRED_REKONSTRUKCI: 0, CASTECNA_REKONSTRUKCE: 1, PO_REKONSTRUKCI: 2, NOVOSTAVBA: 3 };
 
 /**
- * Vaha zarazene nabidky podle podobnosti s nemovitosti: cim podobnejsi byt, tim vic urcuje cenu.
- * Plocha 1–2× (stejna = 2×), typ domu: shoda 2×, neshoda ½×; stav: shoda 2×, sousedni 1×, vzdaleny ½×;
- * poloha: stejna obec 1,5×, okoli do 5 km 1×, dal ¾×; neznamo 1×. Rucni vaha ma prednost.
+ * Vaha zarazene nabidky podle podobnosti s nemovitosti: cim podobnejsi, tim vic urcuje cenu.
+ * Plocha 1–2× (stejna = 2×, v toleranci profilu klesa k 1×); vlastnosti podle profilu typu
+ * (hlavni shoda 2× / neshoda ½×, doplnkove 1,2× / 0,8×); poloha: stejna obec 1,5×, okoli do
+ * 5 km 1×, dal ¾×; neznamo 1×. Rucni vaha ma prednost.
  */
 export function vahaNabidky(
-  n: { areaM2: number; typDomu: string | null; stavBytu: string | null },
-  i: { areaM2: number | null; typDomu: string | null; stavBytu: string | null; vahaRucne: number | null; stejnaObec?: boolean; km?: number | null },
+  profil: Profil,
+  n: { areaM2: number; hodnoty: Record<string, string> },
+  i: { areaM2: number | null; hodnoty: Record<string, string>; vahaRucne: number | null; stejnaObec?: boolean; km?: number | null },
 ): number {
   if (i.vahaRucne != null) return i.vahaRucne;
   let v = 1;
-  if (i.areaM2 && n.areaM2) v *= 1 + Math.max(0, 1 - Math.abs(i.areaM2 - n.areaM2) / (0.25 * n.areaM2));
-  if (n.typDomu && i.typDomu) v *= n.typDomu === i.typDomu ? 2 : 0.5;
-  // Stav: shoda 2×, sousedni stav 1×, vzdaleny ½×
-  if (n.stavBytu && i.stavBytu) {
-    const rozdil = Math.abs((PORADI_STAVU[n.stavBytu] ?? 0) - (PORADI_STAVU[i.stavBytu] ?? 0));
-    v *= rozdil === 0 ? 2 : rozdil === 1 ? 1 : 0.5;
-  }
+  if (i.areaM2 && n.areaM2) v *= 1 + Math.max(0, 1 - Math.abs(i.areaM2 - n.areaM2) / (profil.tolerancePlochy * n.areaM2));
+  v *= vahaVlastnosti(profil, n.hodnoty, i.hodnoty);
   if (i.stejnaObec) v *= 1.5;
   else if (i.km != null) v *= i.km <= 5 ? 1 : 0.75;
   return Math.round(v * 100) / 100;
@@ -176,28 +180,31 @@ export function polohaNabidky(n: Poloha, i: Poloha): { stejnaObec: boolean; km: 
   return { stejnaObec: !!n.city && zakladObce(n.city) === zakladObce(i.city), km };
 }
 
-/** Typ domu a stav: rucni volba u zarazeni, jinak to, co AI vycetla z inzeratu. */
-export function vlastnostiNabidky(z: { typDomu: string | null; stavBytu: string | null }, parametry: unknown) {
-  const p = (parametry ?? {}) as { typDomu?: string | null; stavBytu?: string | null };
-  // Jen hodnoty, se kterymi vahy umi pocitat (AI muze vratit napr. JINY)
-  const aiTyp = p.typDomu && p.typDomu in TYPY_DOMU ? p.typDomu : null;
-  const aiStav = p.stavBytu && p.stavBytu in STAVY_BYTU ? p.stavBytu : null;
-  return {
-    typDomu: z.typDomu ?? aiTyp,
-    stavBytu: z.stavBytu ?? aiStav,
-    typAi: !z.typDomu && !!aiTyp,
-    stavAi: !z.stavBytu && !!aiStav,
-  };
-}
+type Zaznam = { vlastnosti?: unknown; typDomu?: string | null; stavBytu?: string | null };
 
-/** Vaha zarazeni: spoji rucni volby, AI parametry inzeratu a polohu. */
+/** Vaha zarazeni: spoji rucni volby, AI parametry inzeratu a polohu podle profilu typu nemovitosti. */
 export function vahaZarazeni(
-  n: Poloha & { areaM2: number; typDomu: string | null; stavBytu: string | null },
-  z: { typDomu: string | null; stavBytu: string | null; vahaRucne: number | null },
+  n: Poloha & Zaznam & { areaM2: number; type: string },
+  z: Zaznam & { vahaRucne: number | null },
   i: Poloha & { areaM2: number | null; parametry?: unknown },
 ): number {
-  const v = vlastnostiNabidky(z, i.parametry);
-  return vahaNabidky(n, { areaM2: i.areaM2, typDomu: v.typDomu, stavBytu: v.stavBytu, vahaRucne: z.vahaRucne, ...polohaNabidky(n, i) });
+  const profil = profilTypu(n.type);
+  const { hodnoty } = hodnotyNabidky(profil, hodnotyZaznamu(profil, z), i.parametry);
+  return vahaNabidky(profil, { areaM2: n.areaM2, hodnoty: hodnotyZaznamu(profil, n) }, { areaM2: i.areaM2, hodnoty, vahaRucne: z.vahaRucne, ...polohaNabidky(n, i) });
+}
+
+/**
+ * Jednotka odhadu: garaze a stani se porovnavaji za kus (cena celkem, plocha 1), ostatni za m².
+ * Garaz 18 a 22 m² stoji skoro stejne — Kc/m² by u nich zkreslovaly.
+ */
+export function jednotkaOdhadu(type: string, areaM2: number): { zaKus: boolean; plocha: number } {
+  const zaKus = profilTypu(type).zaKus;
+  return { zaKus, plocha: zaKus ? 1 : areaM2 };
+}
+
+/** Cena nabidky v jednotce odhadu (za kus, nebo za m²). */
+export function cenaVJednotce(i: { price: number; pricePerM2: number | null }, zaKus: boolean): number {
+  return zaKus ? i.price : i.pricePerM2 ?? 0;
 }
 
 export interface OdhadZarazenych {
@@ -242,6 +249,19 @@ export function odhadZeZarazenych(body: ZarazenyBod[], areaM2: number, oknoDni =
   return {
     hodnota: posledni.hodnota, perM2: posledni.perM2, pocet: posledni.pocet,
     median: { hodnota: posledni.medianHodnota, perM2: posledni.medianPerM2 }, rada,
+  };
+}
+
+/**
+ * Odhad spocitany za kus (garaz) prevede tak, aby perM2 byly skutecne Kc/m² nemovitosti —
+ * zbytek aplikace pak muze vsude ukazovat Kc/m² stejne.
+ */
+export function odhadNaM2(o: OdhadZarazenych | null, zaKus: boolean, areaM2: number): OdhadZarazenych | null {
+  if (!o || !zaKus) return o;
+  const m2 = areaM2 || 1;
+  return {
+    ...o, perM2: o.hodnota / m2, median: { hodnota: o.median.hodnota, perM2: o.median.hodnota / m2 },
+    rada: o.rada.map((b) => ({ ...b, perM2: b.hodnota / m2, medianPerM2: b.medianHodnota / m2 })),
   };
 }
 

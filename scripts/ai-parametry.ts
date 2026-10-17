@@ -11,7 +11,8 @@
 import { PrismaClient, type Prisma } from "@prisma/client";
 import Anthropic from "@anthropic-ai/sdk";
 import type { BrowserContext } from "playwright";
-import { AI_MODEL, CENIK, vytahniParametry } from "../src/lib/market/aiParametry";
+import { AI_MODEL, CENIK, PROFILY_OD, vytahniParametry } from "../src/lib/market/aiParametry";
+import { hodnotyNabidky, hodnotyZaznamu, profilTypu } from "../src/lib/market/profily";
 import { HLAVICKY_PROHLIZECE, sleep } from "../src/lib/market/util";
 import { nactiDetail } from "./sreality-detail";
 
@@ -22,7 +23,8 @@ export async function doplnParametry(prisma: PrismaClient, limit = 150, kontextZ
   }
   const cekajici = await prisma.inzerat.findMany({
     // Bez parametru, nebo bez fotek galerie (ty se pak jen doplni, AI se znovu nevola)
-    where: { OR: [{ parametryAt: null }, { fotkyUrl: { isEmpty: true } }], url: { not: null }, zmizelAt: null, zarazeni: { some: { stav: { in: ["NAVRH", "ZARAZENO"] } } } },
+    // Bez parametru, prectene pred profily typu, nebo bez fotek (ty se jen doplni)
+    where: { OR: [{ parametryAt: null }, { parametryAt: { lt: PROFILY_OD } }, { fotkyUrl: { isEmpty: true } }], url: { not: null }, zmizelAt: null, zarazeni: { some: { stav: { in: ["NAVRH", "ZARAZENO"] } } } },
     include: { zarazeni: { select: { stav: true } } },
   });
   // Zarazene napred (z nich se pocita odhad), pak navrhy
@@ -54,16 +56,16 @@ export async function doplnParametry(prisma: PrismaClient, limit = 150, kontextZ
         console.log(`  ${i.externalId}: stránka není detail inzerátu (${new URL(stranka.url()).pathname.slice(0, 40)}), přeskočeno`);
         continue;
       }
-      if (i.parametryAt) {
+      if (i.parametryAt && i.parametryAt >= PROFILY_OD) {
         // Parametry uz jsou, chybely jen fotky
         await prisma.inzerat.update({ where: { id: i.id }, data: { fotkyUrl: d.fotky } });
         continue;
       }
-      const r = await vytahniParametry(d.text, client);
+      const r = await vytahniParametry(d.text, profilTypu(i.category), client);
       vstup += r.vstup; vystup += r.vystup;
       await prisma.inzerat.update({
         where: { id: i.id },
-        data: { parametry: { ...r.parametry, model: AI_MODEL } as Prisma.InputJsonValue, parametryAt: new Date(), fotkyUrl: d.fotky },
+        data: { parametry: r.parametry as unknown as Prisma.InputJsonValue, parametryAt: new Date(), fotkyUrl: d.fotky },
       });
       hotovo++;
     } catch (e) {
@@ -85,26 +87,27 @@ export async function doplnParametry(prisma: PrismaClient, limit = 150, kontextZ
   await porovnej(prisma);
 }
 
-/** Shoda AI s rucne nastavenym typem domu a stavem u zarazenych nabidek. */
+/** Shoda AI s tim, co jsi u zarazenych nastavil rucne, po vlastnostech profilu. */
 async function porovnej(prisma: PrismaClient) {
-  const rucne = await prisma.zarazeniInzeratu.findMany({
-    where: { OR: [{ typDomu: { not: null } }, { stavBytu: { not: null } }], inzerat: { parametryAt: { not: null } } },
-    include: { inzerat: { select: { externalId: true, parametry: true } } },
+  const zaznamy = await prisma.zarazeniInzeratu.findMany({
+    where: { stav: "ZARAZENO", inzerat: { parametryAt: { gte: PROFILY_OD } } },
+    include: { inzerat: { select: { externalId: true, category: true, parametry: true } } },
   });
-  if (!rucne.length) return;
-  const vysledek = { typ: [0, 0, 0], stav: [0, 0, 0] }; // shoda, neshoda, AI nevi
-  for (const z of rucne) {
-    const p = (z.inzerat.parametry ?? {}) as { typDomu?: string | null; stavBytu?: string | null };
-    for (const [k, rucni, ai] of [["typ", z.typDomu, p.typDomu], ["stav", z.stavBytu, p.stavBytu]] as const) {
-      if (!rucni) continue;
-      const v = vysledek[k];
-      if (!ai) v[2]++;
-      else if (ai === rucni) v[0]++;
-      else { v[1]++; console.log(`  nesouhlasí ${k} u ${z.inzerat.externalId}: ručně ${rucni}, AI ${ai}`); }
+  const souhrn = new Map<string, [number, number, number]>(); // shoda, jinak, AI nevi
+  for (const z of zaznamy) {
+    const profil = profilTypu(z.inzerat.category);
+    const rucne = hodnotyZaznamu(profil, z);
+    const { ai } = hodnotyNabidky(profil, {}, z.inzerat.parametry);
+    for (const [klic, hodnota] of Object.entries(rucne)) {
+      const nazev = `${profil.nazev}: ${profil.vlastnosti.find((v) => v.klic === klic)?.nazev ?? klic}`;
+      const v = souhrn.get(nazev) ?? [0, 0, 0];
+      if (!ai[klic]) v[2]++;
+      else if (ai[klic] === hodnota) v[0]++;
+      else { v[1]++; console.log(`  nesouhlasí ${nazev} u ${z.inzerat.externalId}: ručně ${hodnota}, AI ${ai[klic]}`); }
+      souhrn.set(nazev, v);
     }
   }
-  console.log(`Porovnání s ručním označením — typ domu: shoda ${vysledek.typ[0]}, jinak ${vysledek.typ[1]}, AI neví ${vysledek.typ[2]}; ` +
-    `stav bytu: shoda ${vysledek.stav[0]}, jinak ${vysledek.stav[1]}, AI neví ${vysledek.stav[2]}.`);
+  if (souhrn.size) console.log("Porovnání s ručním označením — " + [...souhrn].map(([n, [a, b, c]]) => `${n}: shoda ${a}, jinak ${b}, AI neví ${c}`).join("; ") + ".");
 }
 
 if (process.argv[1]?.endsWith("ai-parametry.ts")) {

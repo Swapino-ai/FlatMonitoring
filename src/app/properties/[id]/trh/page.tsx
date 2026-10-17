@@ -13,7 +13,8 @@ import { denISO } from "@/lib/format";
 import { nahledAi } from "@/lib/market/aiNahled";
 import { odhadZeZarazenych } from "@/lib/market/zarazeni";
 import { OKNO_ODHADU, navrhniProNemovitost, korenOceneni, okruhNemovitosti } from "@/lib/market/inzeraty";
-import { polohaNabidky, vahaZarazeni, vzdalenost } from "@/lib/market/zarazeni";
+import { cenaVJednotce, jednotkaOdhadu, odhadNaM2, polohaNabidky, vahaZarazeni, vzdalenost } from "@/lib/market/zarazeni";
+import { hodnotyZaznamu, profilTypu } from "@/lib/market/profily";
 
 export const dynamic = "force-dynamic";
 
@@ -61,13 +62,21 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
   const zdroj = korenP ?? property;
   const okruh = okruhNemovitosti(zdroj);
   const vyloucene = (zdroj.excludedCities ?? "").split(",").map((m) => m.trim()).filter(Boolean);
-  const plochaOd = Math.round(zdroj.areaM2 * 0.75), plochaDo = Math.round(zdroj.areaM2 * 1.25);
+  // Pravidla a vahy podle profilu typu (byt, dum, garaz, pozemek, komercni)
+  const profil = profilTypu(property.type);
+  const { zaKus, plocha } = jednotkaOdhadu(property.type, property.areaM2);
+  const tol = profilTypu(zdroj.type).tolerancePlochy;
+  const plochaOd = Math.round(zdroj.areaM2 * (1 - tol)), plochaDo = Math.round(zdroj.areaM2 * (1 + tol));
+  const hlavni = profil.vlastnosti.filter((v) => v.hlavni).map((v) => v.nazev.toLowerCase());
+  const doplnkove = profil.vlastnosti.filter((v) => !v.hlavni).map((v) => v.nazev.toLowerCase());
   const klic = [
-    `Prodej i nájem: ${nazevNemovitosti(zdroj.type).toLowerCase()}${zdroj.disposition ? ` ${zdroj.disposition} (jen stejná dispozice)` : ""}, ${plochaOd}–${plochaDo} m²`,
+    `Prodej i nájem: ${nazevNemovitosti(zdroj.type).toLowerCase()}${zdroj.disposition && profil.stejnaDispozice ? ` ${zdroj.disposition} (jen stejná dispozice)` : ""}, ${plochaOd}–${plochaDo} m²`,
     `do ${okruh.zaklad} km od obce ${zdroj.city}${okruh.pevny ? " (pevný okruh)" : `, při málo nabídkách až ${okruh.max} km`}; nabídka bez polohy jen ze stejné obce.`,
     vyloucene.length ? `Nezahrnuje se: ${vyloucene.join(", ")}.` : "",
-    `Váha nabídky: podobná plocha, stejný typ domu a stav (tvoje volba, jinak co AI vyčte z inzerátu) a poloha — stejná obec 1,5×, okolí do 5 km 1×, dál ¾×.`,
-    `Odhad = vážený průměr a vážený medián Kč/m² (váha podle podobnosti) ze zařazených nabídek, které se objevily za poslední 2 měsíce, × ${property.areaM2} m²${koren !== id && korenP ? ` (nabídky sdílené s ${korenP.name})` : ""}.`,
+    `Váha nabídky: podobná plocha; ${hlavni.join(", ")} (shoda 2×, jinak ½×)${doplnkove.length ? `; ${doplnkove.join(", ")} (1,2× / 0,8×)` : ""} — tvoje volba, jinak co AI vyčte z inzerátu; poloha: stejná obec 1,5×, okolí do 5 km 1×, dál ¾×.`,
+    zaKus
+      ? `Odhad = vážený průměr a vážený medián ceny za kus ze zařazených nabídek, které se objevily za poslední 2 měsíce${koren !== id && korenP ? ` (nabídky sdílené s ${korenP.name})` : ""}.`
+      : `Odhad = vážený průměr a vážený medián Kč/m² (váha podle podobnosti) ze zařazených nabídek, které se objevily za poslední 2 měsíce, × ${property.areaM2} m²${koren !== id && korenP ? ` (nabídky sdílené s ${korenP.name})` : ""}.`,
   ].filter(Boolean).join(" ");
 
   // Obce, ze kterych nabidky prisly: klikem je jde vyloucit
@@ -88,9 +97,9 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
   const radky: RadekTrhu[] = zaznamy.map((z) => {
     const i = z.inzerat;
     return {
-      typDomu: z.typDomu, stavBytu: z.stavBytu, vahaRucne: z.vahaRucne,
+      rucne: hodnotyZaznamu(profil, z), vahaRucne: z.vahaRucne,
       vaha: vahaZarazeni(property, z, i),
-      ai: nahledAi(i.parametry), fotkyUrl: i.fotkyUrl, stejnaObec: polohaNabidky(property, i).stejnaObec,
+      ai: nahledAi(i.parametry, profil), fotkyUrl: i.fotkyUrl, stejnaObec: polohaNabidky(property, i).stejnaObec,
       id: z.id, stav: z.stav as RadekTrhu["stav"], skore: z.skore, doporuceno: z.doporuceno, duvod: z.duvod,
       dealType: i.dealType === "RENT" ? "RENT" : "SALE", disposition: i.disposition, areaM2: i.areaM2,
       price: i.price, pricePerM2: i.pricePerM2, city: i.city, district: i.district, url: i.url,
@@ -103,10 +112,10 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
   });
 
   const odhad = (d: "SALE" | "RENT"): OdhadPanel | null => {
-    const o = odhadZeZarazenych(
-      radky.filter((r) => r.dealType === d && r.stav === "ZARAZENO").map((r) => ({ datum: r.firstSeen, pricePerM2: r.pricePerM2 ?? 0, vaha: r.vaha })),
-      property.areaM2, OKNO_ODHADU,
-    );
+    const o = odhadNaM2(odhadZeZarazenych(
+      radky.filter((r) => r.dealType === d && r.stav === "ZARAZENO").map((r) => ({ datum: r.firstSeen, pricePerM2: cenaVJednotce(r, zaKus), vaha: r.vaha })),
+      plocha, OKNO_ODHADU,
+    ), zaKus, property.areaM2);
     return o ? {
       hodnota: o.hodnota, perM2: o.perM2, pocet: o.pocet, median: o.median,
       rada: o.rada.map((b) => ({ datum: b.datum, hodnota: b.hodnota, median: b.medianHodnota })),
@@ -144,7 +153,7 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
           </p>
         </div>
 
-        <TrhNemovitosti propertyId={id} pocatecniTyp={typ === "RENT" ? "RENT" : "SALE"} trhId={koren} klic={klic} obce={obce} vlastnosti={{ typDomu: property.typDomu, stavBytu: property.stavBytu }} canEdit={canEdit} sledovat={korenP?.sledovatTrh ?? false}
+        <TrhNemovitosti propertyId={id} pocatecniTyp={typ === "RENT" ? "RENT" : "SALE"} trhId={koren} klic={klic} obce={obce} typNemovitosti={property.type} zaKus={zaKus} vlastnosti={hodnotyZaznamu(profil, property)} canEdit={canEdit} sledovat={korenP?.sledovatTrh ?? false}
           propojeni={{ podle: koren !== id && korenP ? { id: korenP.id, name: korenP.name } : null, navazane, moznosti }} skenovatelne={skenovatelne}
           poloha={property.latitude != null && property.longitude != null ? { lat: property.latitude, lon: property.longitude } : null}
           radky={radky} diag={diag} odhady={{ SALE: odhad("SALE"), RENT: odhad("RENT") }} />

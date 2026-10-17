@@ -26,12 +26,12 @@ model User {
   createdAt    DateTime @default(now())
 
   /// Kontaktni udaje; pouzivaji se v exportech a podkladech k zdaneni
-  street       String?
-  city         String?
-  zip          String?
-  phone        String?
+  street  String?
+  city    String?
+  zip     String?
+  phone   String?
   /// Ucet, kam najemci plati nedoplatek z vyuctovani (kontrolovany tvar)
-  account      String?
+  account String?
 
   podily PropertyOwner[]
 }
@@ -109,6 +109,8 @@ model Property {
   typDomu        String?
   /// PRED_REKONSTRUKCI | PO_REKONSTRUKCI | NOVOSTAVBA
   stavBytu       String?
+  /// Vlastnosti podle profilu typu (garaz: elektrina, pozemek pod...; dum: pozemek, kanalizace...)
+  vlastnosti     Json?
 
   // --- Porizeni ---
   purchaseDate     DateTime
@@ -138,9 +140,9 @@ model Property {
   owners        PropertyOwner[]
   rentEstimates RentEstimate[]
 
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
-  cadastre  CadastreRecord?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  cadastre         CadastreRecord?
   zarazeniInzeratu ZarazeniInzeratu[]
 }
 
@@ -179,16 +181,16 @@ model Lease {
   property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   // Jednoznacna identita najemce; sloupce tenant* nize jsou jeji zrcadlo pro rychle cteni
-  tenantId     String?
-  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
 
-  tenantName   String
-  tenantEmail  String?
-  tenantPhone  String?
+  tenantName    String
+  tenantEmail   String?
+  tenantPhone   String?
   // Adresa najemce: do smlouvy, k vyuctovani a k dokladum
-  tenantStreet String?
-  tenantCity   String?
-  tenantZip    String?
+  tenantStreet  String?
+  tenantCity    String?
+  tenantZip     String?
   // Ucet, kam se posila vratka preplatku z vyuctovani sluzeb
   tenantAccount String?
 
@@ -210,7 +212,7 @@ model Lease {
   advanceNote        String?
   /// Rozpis zaloh po sluzbach [{serviceId, amount}]; null = jen celkova castka. Soucet je utilitiesMonthly.
   advanceItems       Json?
-  paymentDay       Int     @default(15)
+  paymentDay         Int     @default(15)
 
   isActive Boolean @default(true)
   notes    String?
@@ -530,9 +532,9 @@ model LeaseAdvanceChange {
 /// Vyuctovani sluzby od dodavatele: od-do, skutecny naklad a zalohy, ktere se dodavateli platily.
 /// Obdobi nemusi sedet na mesic ani na smlouvu — rozuctovani na najemce se pocita ze dnu.
 model ServiceSettlement {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   serviceId String
-  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   periodFrom DateTime
   periodTo   DateTime // vcetne posledniho dne
@@ -570,9 +572,9 @@ model SettlementReading {
 /// Databaze najemniku. Jeden clovek = jeden radek, at ma smluv kolik chce (prodlouzeni,
 /// novy byt). Kontaktni udaje se drzi tady; smlouvy je jen odkazuji.
 model Tenant {
-  id      String @id @default(cuid())
+  id      String  @id @default(cuid())
   /// Citelne poradove cislo pro lidi (N-0001)
-  cislo   Int    @unique @default(autoincrement())
+  cislo   Int     @unique @default(autoincrement())
   name    String
   email   String?
   phone   String?
@@ -660,7 +662,7 @@ model TenantStatement {
 
   status String @default("VYDANO") // VYDANO | ODESLANO | VYPORADANO | STORNO
 
-  issuedAt     DateTime @default(now())
+  issuedAt     DateTime  @default(now())
   issuedById   String?
   sentAt       DateTime?
   sentVia      String? // EMAIL | OSOBNE | POSTA | JINAK
@@ -678,7 +680,7 @@ model TenantStatement {
 /// Provozovatel nemovitosti: strana, ktera je na najemnich smlouvach a vyuctovani jako pronajimatel.
 /// Nemusi byt vlastnik (vlastnici jsou v PropertyOwner a vidi sve portfolio); muze to byt firma ci sprava.
 model Operator {
-  id      String @id @default(cuid())
+  id      String  @id @default(cuid())
   name    String
   street  String?
   city    String?
@@ -763,24 +765,26 @@ model InzeratCena {
 
 /// Vztah inzeratu k nemovitosti: NAVRH (ceka na rozhodnuti), ZARAZENO, VYRAZENO
 model ZarazeniInzeratu {
-  id          String    @id @default(cuid())
-  propertyId  String
-  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  inzeratId   String
-  inzerat     Inzerat   @relation(fields: [inzeratId], references: [id], onDelete: Cascade)
-  stav        String    @default("NAVRH")
+  id           String    @id @default(cuid())
+  propertyId   String
+  property     Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  inzeratId    String
+  inzerat      Inzerat   @relation(fields: [inzeratId], references: [id], onDelete: Cascade)
+  stav         String    @default("NAVRH")
   /// Podobnost 0-100 (vzdalenost, plocha, dispozice)
-  skore       Float?
+  skore        Float?
   /// Aplikace doporucuje zaradit; rozhoduje ale uzivatel
-  doporuceno  Boolean   @default(false)
-  duvod       String?
+  doporuceno   Boolean   @default(false)
+  duvod        String?
   /// Vlastnosti nabidky (oznaci uzivatel) pro vahu v odhadu
-  typDomu     String?
-  stavBytu    String?
+  typDomu      String?
+  stavBytu     String?
+  /// Rucne urcene vlastnosti nabidky podle profilu typu (maji prednost pred AI)
+  vlastnosti   Json?
   /// Rucne zadana vaha; bez ni se spocita z podobnosti
-  vahaRucne   Float?
+  vahaRucne    Float?
   rozhodnutoAt DateTime?
-  createdAt   DateTime  @default(now())
+  createdAt    DateTime  @default(now())
 
   @@unique([propertyId, inzeratId])
   @@index([propertyId, stav])

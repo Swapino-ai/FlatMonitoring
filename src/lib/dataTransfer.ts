@@ -125,7 +125,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       scanRadiusKm: x.scanRadiusKm == null ? null : c(x.scanRadiusKm),
       excludedCities: s(x.excludedCities),
       sledovatTrh: x.sledovatTrh === true,
-      oceneniPodle: s(x.oceneniPodle), typDomu: s(x.typDomu), stavBytu: s(x.stavBytu),
+      oceneniPodle: s(x.oceneniPodle), typDomu: s(x.typDomu), stavBytu: s(x.stavBytu), ...(x.vlastnosti != null ? { vlastnosti: x.vlastnosti } : {}),
       disposition: s(x.disposition), areaM2: c(x.areaM2),
       floor: x.floor == null ? null : Math.round(c(x.floor)),
       hasBalcony: !!x.hasBalcony, hasCellar: !!x.hasCellar, hasParking: !!x.hasParking,
@@ -301,7 +301,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     const zarazeni = (t.zarazeniInzeratu as any[] ?? []).map((x) => ({
       id: String(x.id), propertyId: String(x.propertyId), inzeratId: String(x.inzeratId), stav: String(x.stav),
       skore: x.skore == null ? null : c(x.skore), doporuceno: x.doporuceno === true, duvod: s(x.duvod),
-      typDomu: s(x.typDomu), stavBytu: s(x.stavBytu), vahaRucne: x.vahaRucne == null ? null : c(x.vahaRucne),
+      typDomu: s(x.typDomu), stavBytu: s(x.stavBytu), vahaRucne: x.vahaRucne == null ? null : c(x.vahaRucne), ...(x.vlastnosti != null ? { vlastnosti: x.vlastnosti } : {}),
       rozhodnutoAt: d(x.rozhodnutoAt), createdAt: dPovinne(x.createdAt ?? new Date()),
     }));
     if (zarazeni.length) obnoveno.zarazeniInzeratu = (await tx.zarazeniInzeratu.createMany({ data: zarazeni })).count;

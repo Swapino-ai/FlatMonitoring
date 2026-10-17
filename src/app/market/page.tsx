@@ -8,7 +8,7 @@ import { ScanButton } from "@/components/ScanButton";
 import { prisma } from "@/lib/db";
 import { analyzeProperty, loadProperties } from "@/lib/portfolio";
 import Link from "next/link";
-import { odhadZeZarazenych, vahaZarazeni } from "@/lib/market/zarazeni";
+import { cenaVJednotce, jednotkaOdhadu, odhadNaM2, odhadZeZarazenych, vahaZarazeni } from "@/lib/market/zarazeni";
 import { OKNO_ODHADU } from "@/lib/market/inzeraty";
 import { denISO } from "@/lib/format";
 import { czk, czkCompact, dateCz, pct } from "@/lib/format";
@@ -25,17 +25,19 @@ export default async function MarketPage() {
   // Novy system: zarazene a navrzene nabidky po nemovitostech
   const zarazeni = await prisma.zarazeniInzeratu.findMany({
     where: { stav: { in: ["ZARAZENO", "NAVRH"] } },
-    include: { inzerat: { select: { dealType: true, pricePerM2: true, firstSeenAt: true, areaM2: true, city: true, latitude: true, longitude: true, parametry: true } } },
+    include: { inzerat: { select: { dealType: true, price: true, pricePerM2: true, firstSeenAt: true, areaM2: true, city: true, latitude: true, longitude: true, parametry: true } } },
   });
 
   const rows = analyses.map((a) => {
     const p = a.property;
     const moje = zarazeni.filter((z) => z.propertyId === (p.oceneniPodle ?? p.id));
-    const odhad = (d: "SALE" | "RENT") => odhadZeZarazenych(
+    // Garaze za kus, ostatni za m²; vysledek vzdy prevedeny na Kc/m²
+    const { zaKus, plocha } = jednotkaOdhadu(p.type, p.areaM2);
+    const odhad = (d: "SALE" | "RENT") => odhadNaM2(odhadZeZarazenych(
       moje.filter((z) => z.stav === "ZARAZENO" && z.inzerat.dealType === d)
-        .map((z) => ({ datum: denISO(z.inzerat.firstSeenAt), pricePerM2: z.inzerat.pricePerM2 ?? 0, vaha: vahaZarazeni(p, z, z.inzerat) })),
-      p.areaM2, OKNO_ODHADU,
-    );
+        .map((z) => ({ datum: denISO(z.inzerat.firstSeenAt), pricePerM2: cenaVJednotce(z.inzerat, zaKus), vaha: vahaZarazeni(p, z, z.inzerat) })),
+      plocha, OKNO_ODHADU,
+    ), zaKus, p.areaM2);
     const sale = odhad("SALE");
     const rent = odhad("RENT");
     return {

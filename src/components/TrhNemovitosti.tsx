@@ -13,7 +13,7 @@ import { SwipeNavrhy } from "./SwipeNavrhy";
 import { AiInfo } from "./AiInfo";
 import { Galerie, type PolozkaGalerie } from "./Galerie";
 import type { AiNahled } from "@/lib/market/aiNahled";
-import { STAVY_BYTU, TYPY_DOMU } from "@/lib/market/zarazeni";
+import { profilTypu } from "@/lib/market/profily";
 
 export interface RadekTrhu {
   id: string; // id zarazeni
@@ -38,8 +38,8 @@ export interface RadekTrhu {
   zmizel: string | null;
   /** Historie ceny od nejstarsi */
   ceny: { at: string; price: number }[];
-  typDomu?: string | null;
-  stavBytu?: string | null;
+  /** Rucne nastavene vlastnosti nabidky (podle profilu typu) */
+  rucne?: Record<string, string>;
   vahaRucne?: number | null;
   /** Vaha v odhadu (spocitana nebo rucni) */
   vaha?: number;
@@ -73,7 +73,7 @@ function km(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
  * Sledovani trhu u jedne nemovitosti: zapnuti, navrhy ke kontrole, zarazene a vyrazene
  * nabidky, odhad ze zarazenych za posledni 2 mesice a jeho vyvoj v case.
  */
-export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", trhId, propojeni, klic, obce = [], vlastnosti, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
+export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", typNemovitosti, zaKus = false, trhId, propojeni, klic, obce = [], vlastnosti, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
   diag?: StatistikaNavrhu;
   /** Ktera zalozka (prodej / najem) se otevre */
   pocatecniTyp?: "SALE" | "RENT";
@@ -81,7 +81,11 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", trhId, propo
   /** Nemovitost, jejiz nabidky se pouzivaji (pri propojenem oceneni jina nez propertyId) */
   trhId?: string;
   /** Vlastnosti bytu pro vahy srovnani */
-  vlastnosti?: { typDomu: string | null; stavBytu: string | null };
+  vlastnosti?: Record<string, string>;
+  /** Typ nemovitosti (BYT, GARAZ...) — urcuje profil vlastnosti */
+  typNemovitosti?: string;
+  /** Odhad za kus (garaz) */
+  zaKus?: boolean;
   /** Popis, podle ceho se hleda (klic) */
   klic?: string;
   /** Obce, ze kterych nabidky prisly; klikem vyloucit/vratit */
@@ -97,6 +101,7 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", trhId, propo
   odhady: { SALE: OdhadPanel | null; RENT: OdhadPanel | null };
 }) {
   const router = useRouter();
+  const profil = profilTypu(typNemovitosti);
   const [stav, setStav] = useState<TrhState>({});
   const [bezi, spust] = useTransition();
   const [typ, setTyp] = useState<"SALE" | "RENT">(pocatecniTyp);
@@ -132,12 +137,17 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", trhId, propo
   });
   // Typ domu, stav a vaha: zmena se ukaze hned, ulozeni a prepocet odhadu bezi na pozadi
   // (revalidace po akci prinese nova data sama, bez dalsiho router.refresh)
-  type Uprava = Partial<Pick<RadekTrhu, "typDomu" | "stavBytu" | "vahaRucne">>;
-  const [upravy, setUpravy] = useState<Record<string, Uprava>>({});
+  type Uprava = { vlastnost?: { klic: string; hodnota: string | null }; vahaRucne?: number | null };
+  const [upravy, setUpravy] = useState<Record<string, Partial<RadekTrhu>>>({});
   const [, ukladej] = useTransition();
   useEffect(() => { setUpravy({}); }, [radky]);
   const uprav = (r: RadekTrhu, data: Uprava) => {
-    setUpravy((u) => ({ ...u, [r.id]: { ...u[r.id], ...data } }));
+    setUpravy((u) => {
+      const puvodni = { ...r, ...u[r.id] };
+      const rucne = { ...(puvodni.rucne ?? {}) };
+      if (data.vlastnost) { if (data.vlastnost.hodnota) rucne[data.vlastnost.klic] = data.vlastnost.hodnota; else delete rucne[data.vlastnost.klic]; }
+      return { ...u, [r.id]: { ...u[r.id], rucne, ...(data.vahaRucne !== undefined ? { vahaRucne: data.vahaRucne } : {}) } };
+    });
     ukladej(async () => {
       const v = await nastavVlastnostNabidky(propertyId, r.id, data);
       if (v.error) setStav(v);
@@ -208,7 +218,7 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", trhId, propo
           {" · "}na trhu od {dateCz(r.firstSeen)}
         </div>
         {r.stav === "NAVRH" && r.duvod && <div className="text-xs text-ink-muted">{r.duvod}</div>}
-        {r.ai && <div className="mt-1"><AiInfo ai={r.ai} kompaktni={r.stav !== "NAVRH"} /></div>}
+        {r.ai && <div className="mt-1"><AiInfo ai={r.ai} profil={profil} kompaktni={r.stav !== "NAVRH"} /></div>}
       </div>
     );
   };
@@ -255,7 +265,9 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", trhId, propo
                 {najem ? <>{czk(odhad.hodnota)}<span className="text-xl font-normal opacity-80">/měs.</span></> : czkCompact(odhad.hodnota)}
               </div>
               <div className="mt-3 space-y-1 text-sm text-ink-secondary">
-                <div>{czk(odhad.perM2)}/m² · průměr z {odhad.pocet} {odhad.pocet === 1 ? "zařazené nabídky" : "zařazených nabídek"}</div>
+                <div>
+                  {zaKus ? <>cena za kus ({czk(odhad.perM2)}/m²)</> : <>{czk(odhad.perM2)}/m²</>} · průměr z {odhad.pocet} {odhad.pocet === 1 ? "zařazené nabídky" : "zařazených nabídek"}
+                </div>
                 <div className="text-xs opacity-80" title="Vážený medián: polovina nabídek (podle váhy) je levnější, polovina dražší — méně ho ovlivní jedna extrémní nabídka">
                   Medián {najem ? `${czk(odhad.median.hodnota)}/měs.` : czkCompact(odhad.median.hodnota)} ({czk(odhad.median.perM2)}/m²)
                 </div>
@@ -263,7 +275,7 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", trhId, propo
                   <div className="text-xs font-semibold text-ink-primary">Průměr a medián se liší o víc než 5 % — mezi nabídkami může být nějaká mimo.</div>
                 )}
               </div>
-              <div className="mt-auto pt-3 text-xs opacity-70">Nabídky z posledních 2 měsíců, váha podle podobnosti s tímto bytem.</div>
+              <div className="mt-auto pt-3 text-xs opacity-70">Nabídky z posledních 2 měsíců, váha podle podobnosti s touto nemovitostí.</div>
             </>
           ) : (
             <>
@@ -313,14 +325,15 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", trhId, propo
           <p className="text-ink-secondary">{klic}</p>
           {vlastnosti && (
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-              <span className="text-ink-muted">Tento byt (nabídky se stejnými vlastnostmi mají v odhadu větší váhu):</span>
-              {([["typDomu", TYPY_DOMU], ["stavBytu", STAVY_BYTU]] as const).map(([pole, volby]) => (
-                <span key={pole} className="flex flex-wrap gap-1">
-                  {Object.entries(volby).map(([k, n]) => {
-                    const aktivni = vlastnosti[pole] === k;
+              <span className="w-full text-ink-muted">Tahle nemovitost (nabídky se stejnými vlastnostmi mají v odhadu větší váhu):</span>
+              {profil.vlastnosti.map((vl) => (
+                <span key={vl.klic} className="flex flex-wrap items-center gap-1">
+                  <span className={`mr-0.5 ${vl.hlavni ? "font-semibold text-ink-secondary" : "text-ink-muted"}`}>{vl.nazev}</span>
+                  {Object.entries(vl.moznosti).map(([k, n]) => {
+                    const aktivni = vlastnosti[vl.klic] === k;
                     return (
                       <button key={k} type="button" disabled={!canEdit || bezi}
-                        onClick={() => akce(() => nastavVlastnostBytu(propertyId, pole, aktivni ? null : k))}
+                        onClick={() => akce(() => nastavVlastnostBytu(propertyId, vl.klic, aktivni ? null : k))}
                         className={`rounded-full border px-2.5 py-0.5 ${aktivni ? "border-accent bg-accent text-white" : "border-line bg-surface-card text-ink-secondary hover:border-accent"}`}>
                         {n}
                       </button>
@@ -478,21 +491,22 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", trhId, propo
                     );
                   })()}
 
-                  {/* Typ domu a stav: tvoje volba, jinak AI */}
+                  {/* Vlastnosti podle profilu typu: tvoje volba, jinak AI */}
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                    {([["typDomu", "Dům", TYPY_DOMU, r.ai?.typDomuDuvod], ["stavBytu", "Stav", STAVY_BYTU, r.ai?.stavBytuDuvod]] as const).map(([pole, nazev, volby, duvod]) => {
-                      const ai = r.ai?.[pole] ?? null;
-                      const aiNazev = ai ? (volby as Record<string, string>)[ai] ?? null : null;
-                      const rucne = r[pole] ?? null;
+                    {profil.vlastnosti.map((vl) => {
+                      const ai = r.ai?.hodnoty[vl.klic] ?? null;
+                      const aiNazev = ai ? vl.moznosti[ai] ?? null : null;
+                      const rucne = r.rucne?.[vl.klic] ?? null;
                       const rozpor = rucne && aiNazev && rucne !== ai;
+                      const duvod = r.ai?.duvody[vl.klic];
                       return (
-                        <label key={pole} className="flex items-center gap-1" title={duvod ? `AI: ${duvod}` : undefined}>
-                          <span className="text-ink-muted">{nazev}</span>
+                        <label key={vl.klic} className="flex items-center gap-1" title={duvod ? `AI: ${duvod}` : undefined}>
+                          <span className={vl.hlavni ? "text-ink-secondary" : "text-ink-muted"}>{vl.nazev}</span>
                           <select className={`rounded-md border bg-surface-card px-1.5 py-0.5 ${rucne ? "border-line font-medium" : aiNazev ? "border-dashed border-accent text-accent" : "border-line text-ink-muted"}`}
                             value={rucne ?? ""} disabled={!canEdit}
-                            onChange={(e) => uprav(r, { [pole]: e.target.value || null })}>
+                            onChange={(e) => uprav(r, { vlastnost: { klic: vl.klic, hodnota: e.target.value || null } })}>
                             <option value="">{aiNazev ? `${aiNazev} (AI)` : "neurčeno"}</option>
-                            {Object.entries(volby).map(([kl, n]) => <option key={kl} value={kl}>{n}</option>)}
+                            {Object.entries(vl.moznosti).map(([kl, n]) => <option key={kl} value={kl}>{n}</option>)}
                           </select>
                           {rozpor && <span className="text-[10px] text-warn">AI: {aiNazev}</span>}
                         </label>
@@ -564,7 +578,7 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", trhId, propo
       )}
 
       {swipe && (
-        <SwipeNavrhy propertyId={propertyId} navrhy={navrhy} najem={najem} vzdalenost={vzdalenost}
+        <SwipeNavrhy propertyId={propertyId} profil={profil} navrhy={navrhy} najem={najem} vzdalenost={vzdalenost}
           onKonec={(zmeneno) => { setSwipe(false); if (zmeneno) router.refresh(); }} />
       )}
 

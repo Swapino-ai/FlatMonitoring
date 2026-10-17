@@ -1,5 +1,7 @@
 "use server";
 
+import type { Prisma } from "@prisma/client";
+
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./auth";
@@ -63,21 +65,43 @@ export async function prepniVyloucenouObec(propertyId: string, obec: string): Pr
 }
 
 /** Vlastnosti bytu pro vahy srovnani (typ domu, stav). */
-export async function nastavVlastnostBytu(propertyId: string, pole: "typDomu" | "stavBytu", hodnota: string | null): Promise<TrhState> {
+/** Do JSON vlastnosti zapise (nebo smaze) jednu hodnotu. */
+function sVlastnosti(puvodni: unknown, klic: string, hodnota: string | null): Prisma.InputJsonValue {
+  const v = { ...((puvodni && typeof puvodni === "object" ? puvodni : {}) as Record<string, string>) };
+  if (hodnota) v[klic] = hodnota; else delete v[klic];
+  return v;
+}
+
+/** Vlastnost nemovitosti podle profilu typu (u bytu i starsi sloupce typDomu / stavBytu). */
+export async function nastavVlastnostBytu(propertyId: string, klic: string, hodnota: string | null): Promise<TrhState> {
   const auth = await majitel();
   if ("error" in auth) return auth;
-  await prisma.property.update({ where: { id: propertyId }, data: { [pole]: hodnota } });
+  const p = await prisma.property.findUnique({ where: { id: propertyId }, select: { vlastnosti: true } });
+  if (!p) return { error: "Nemovitost nenalezena." };
+  await prisma.property.update({
+    where: { id: propertyId },
+    data: { vlastnosti: sVlastnosti(p.vlastnosti, klic, hodnota), ...(klic === "typDomu" || klic === "stavBytu" ? { [klic]: hodnota } : {}) },
+  });
   await aktualizujSkupinu(propertyId);
   obnov(propertyId);
   return {};
 }
 
-/** Vlastnosti a rucni vaha zarazene nabidky. */
-export async function nastavVlastnostNabidky(propertyId: string, zarazeniId: string, data: { typDomu?: string | null; stavBytu?: string | null; vahaRucne?: number | null }): Promise<TrhState> {
+/** Vlastnost a rucni vaha zarazene nabidky. */
+export async function nastavVlastnostNabidky(propertyId: string, zarazeniId: string, data: { vlastnost?: { klic: string; hodnota: string | null }; vahaRucne?: number | null }): Promise<TrhState> {
   const auth = await majitel();
   if ("error" in auth) return auth;
   const koren = await korenOceneni(propertyId);
-  await prisma.zarazeniInzeratu.updateMany({ where: { id: zarazeniId, propertyId: koren }, data });
+  const z = await prisma.zarazeniInzeratu.findFirst({ where: { id: zarazeniId, propertyId: koren }, select: { vlastnosti: true } });
+  if (!z) return { error: "Nabídka nenalezena." };
+  const { klic, hodnota } = data.vlastnost ?? {};
+  await prisma.zarazeniInzeratu.update({
+    where: { id: zarazeniId },
+    data: {
+      ...(data.vahaRucne !== undefined ? { vahaRucne: data.vahaRucne } : {}),
+      ...(klic ? { vlastnosti: sVlastnosti(z.vlastnosti, klic, hodnota ?? null), ...(klic === "typDomu" || klic === "stavBytu" ? { [klic]: hodnota ?? null } : {}) } : {}),
+    },
+  });
   await aktualizujSkupinu(koren);
   for (const id of await clenoveOceneni(koren)) obnov(id);
   return {};

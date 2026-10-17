@@ -1,4 +1,5 @@
 import { median, odhadZeZarazenych, ohodnot, vahaNabidky, vahaZarazeni, vazenyMedian, vazenyPrumer, zakladObce } from "../src/lib/market/zarazeni";
+import { PROFILY, platneHodnoty, profilTypu } from "../src/lib/market/profily";
 
 let chyb = 0;
 const over = (n: string, ok: boolean, info?: unknown) => { if (!ok) { chyb++; console.log("CHYBA", n, info ?? ""); } };
@@ -32,20 +33,31 @@ over("rada po bodech", o.rada.length === 12 && o.rada[0].hodnota === 10000 && o.
 
 over("vazeny median", vazenyMedian([{ hodnota: 1, vaha: 1 }, { hodnota: 2, vaha: 1 }, { hodnota: 10, vaha: 5 }]) === 10);
 over("vazeny median rovne", vazenyMedian([{ hodnota: 1, vaha: 1 }, { hodnota: 3, vaha: 1 }]) === 2);
-const nn = { areaM2: 60, typDomu: "PANEL", stavBytu: "PRED_REKONSTRUKCI" };
-over("vaha stejny byt", vahaNabidky(nn, { areaM2: 60, typDomu: "PANEL", stavBytu: "PRED_REKONSTRUKCI", vahaRucne: null }) === 8);
-over("vaha jiny", vahaNabidky(nn, { areaM2: 75, typDomu: "CIHLA", stavBytu: "PO_REKONSTRUKCI", vahaRucne: null }) === 0.25);
-over("vaha castecna vs pred", vahaNabidky(nn, { areaM2: 60, typDomu: "PANEL", stavBytu: "CASTECNA_REKONSTRUKCE", vahaRucne: null }) === 4);
-over("vaha stejna obec", vahaNabidky(nn, { areaM2: 60, typDomu: null, stavBytu: null, vahaRucne: null, stejnaObec: true, km: 1 }) === 3);
-over("vaha daleko", vahaNabidky(nn, { areaM2: 60, typDomu: null, stavBytu: null, vahaRucne: null, stejnaObec: false, km: 12 }) === 1.5);
+const B = PROFILY.BYT, G = PROFILY.GARAZ;
+const nn = { areaM2: 60, hodnoty: { typDomu: "PANEL", stavBytu: "PRED_REKONSTRUKCI" } };
+const nab = (areaM2: number, hodnoty: Record<string, string>, x: object = {}) => ({ areaM2, hodnoty, vahaRucne: null, ...x });
+over("vaha stejny byt", vahaNabidky(B, nn, nab(60, { typDomu: "PANEL", stavBytu: "PRED_REKONSTRUKCI" })) === 8);
+over("vaha jiny", vahaNabidky(B, nn, nab(75, { typDomu: "CIHLA", stavBytu: "PO_REKONSTRUKCI" })) === 0.25);
+over("vaha castecna vs pred", vahaNabidky(B, nn, nab(60, { typDomu: "PANEL", stavBytu: "CASTECNA_REKONSTRUKCE" })) === 4);
+over("vaha stejna obec", vahaNabidky(B, nn, nab(60, {}, { stejnaObec: true, km: 1 })) === 3);
+over("vaha daleko", vahaNabidky(B, nn, nab(60, {}, { stejnaObec: false, km: 12 })) === 1.5);
+over("doplnkova vlastnost", vahaNabidky(B, { areaM2: 60, hodnoty: { venkovni: "ANO" } }, nab(60, { venkovni: "NE" })) === 1.6);
+over("garaz: elektrina sousedni, pozemek shoda", vahaNabidky(G, { areaM2: 20, hodnoty: { elektrina: "V230", pozemekPod: "VLASTNI" } }, nab(20, { elektrina: "V400", pozemekPod: "VLASTNI" })) === 4);
 over("zaklad obce", zakladObce("Nový Bor - Arnultovice") === "nový bor");
-over("vaha z AI", vahaZarazeni({ ...nn, city: "Tanvald", latitude: null, longitude: null },
+const byt = { areaM2: 60, type: "BYT", typDomu: "PANEL", stavBytu: "PRED_REKONSTRUKCI", vlastnosti: null };
+over("vaha z AI", vahaZarazeni({ ...byt, city: "Tanvald", latitude: null, longitude: null },
   { typDomu: null, stavBytu: null, vahaRucne: null },
   { areaM2: 60, city: "Tanvald", latitude: null, longitude: null, parametry: { typDomu: "PANEL", stavBytu: "PRED_REKONSTRUKCI" } }) === 12);
-over("rucni ma prednost pred AI", vahaZarazeni({ ...nn, city: "X", latitude: null, longitude: null },
+over("rucni ma prednost pred AI", vahaZarazeni({ ...byt, city: "X", latitude: null, longitude: null },
   { typDomu: "CIHLA", stavBytu: null, vahaRucne: null },
   { areaM2: 60, city: "Y", latitude: null, longitude: null, parametry: { typDomu: "PANEL" } }) === 1);
-over("vaha rucne", vahaNabidky(nn, { areaM2: 75, typDomu: null, stavBytu: null, vahaRucne: 3 }) === 3);
+over("nove vlastnosti v JSON", vahaZarazeni({ ...byt, typDomu: null, stavBytu: null, vlastnosti: { patro: "PRIZEMI" }, city: "X", latitude: null, longitude: null },
+  { vlastnosti: { patro: "PRIZEMI" }, vahaRucne: null }, { areaM2: 60, city: "Y", latitude: null, longitude: null }) === 2.4);
+over("neplatna hodnota AI se ignoruje", platneHodnoty(B, { typDomu: "SMISENA", patro: "PRIZEMI" }).typDomu === undefined);
+over("vaha rucne", vahaNabidky(B, nn, nab(75, {}, { vahaRucne: 3 })) === 3);
+over("profil garaze", profilTypu("PARKOVACI_STANI").zaKus && !profilTypu("BYT").zaKus && profilTypu("CHATA").klic === "DUM");
+over("dum: jina dispozice neni mimo", !ohodnot({ areaM2: 120, disposition: "4+1", latitude: null, longitude: null, city: "A", okruhKm: 5, stejnaDispozice: false, tolerancePlochy: 0.3 },
+  { areaM2: 140, disposition: "5+1", latitude: null, longitude: null, city: "A", pricePerM2: 1 }, null).mimo);
 
 console.log(chyb ? `${chyb} chyb` : "vše v pořádku");
 process.exit(chyb ? 1 : 0);

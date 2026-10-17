@@ -5,17 +5,19 @@ import { rozhodniInzeraty } from "@/lib/trhActions";
 import { czk, dateCz } from "@/lib/format";
 import type { RadekTrhu } from "./TrhNemovitosti";
 import { AiInfo } from "./AiInfo";
+import type { Profil } from "@/lib/market/profily";
 
 /**
  * Prochazeni navrhu jeden po druhem: tahnout doprava = zaradit, doleva = vyradit,
  * dolu / "Pozdeji" = nechat na pak. Funguje mysi, prstem i sipkami.
  */
-export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec }: {
+export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec, profil }: {
   propertyId: string;
   navrhy: RadekTrhu[];
   najem: boolean;
   vzdalenost: (r: RadekTrhu) => number | null;
   onKonec: (zmeneno: boolean) => void;
+  profil: Profil;
 }) {
   const [index, setIndex] = useState(0);
   const [posun, setPosun] = useState(0);
@@ -121,7 +123,7 @@ export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec }: 
               <div><div className="label">Vzdálenost</div><div className="font-medium">{d != null ? `${d.toFixed(1).replace(".", ",")} km` : "neznámá"}</div></div>
             </div>
             {r.duvod && <p className="mt-3 text-xs text-ink-muted">{r.duvod}</p>}
-            {r.ai && <div className="mt-3"><AiInfo ai={r.ai} /></div>}
+            {r.ai && <div className="mt-3"><AiInfo ai={r.ai} profil={profil} /></div>}
             {(r.fotkyUrl?.length ?? 0) > 0 && (
               <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1" onPointerDown={(e) => e.stopPropagation()}>
                 {r.fotkyUrl!.map((src, k) => (

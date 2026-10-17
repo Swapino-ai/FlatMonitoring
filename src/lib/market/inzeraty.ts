@@ -8,7 +8,8 @@ import { prisma } from "../db";
 import { okruhyProTyp } from "../geo";
 import { denISO } from "../format";
 import type { ScrapedListing } from "./types";
-import { odhadZeZarazenych, ohodnot, median, vOkneOdhadu, vahaZarazeni } from "./zarazeni";
+import { profilTypu } from "./profily";
+import { cenaVJednotce, jednotkaOdhadu, odhadNaM2, odhadZeZarazenych, ohodnot, median, vOkneOdhadu, vahaZarazeni } from "./zarazeni";
 
 /** Odhad z nabidek, ktere se objevily za posledni 2 mesice (ve dnech). */
 export const OKNO_ODHADU = 61;
@@ -114,7 +115,13 @@ export async function navrhniProNemovitost(propertyId: string, o: { ids?: string
   if (!p || (zapsat && !p.sledovatTrh)) return st;
   const { zaklad, max } = okruhNemovitosti(p);
   const vyloucene = rozdelMesta(p.excludedCities);
-  const nem = { areaM2: p.areaM2, disposition: p.disposition, latitude: p.latitude, longitude: p.longitude, city: p.city, okruhKm: zaklad, maxKm: max };
+  // Pravidla podle profilu typu: dispozice jen u bytu, tolerance plochy podle typu
+  const profil = profilTypu(p.type);
+  const { zaKus } = jednotkaOdhadu(p.type, p.areaM2);
+  const nem = {
+    areaM2: p.areaM2, disposition: p.disposition, latitude: p.latitude, longitude: p.longitude, city: p.city, okruhKm: zaklad, maxKm: max,
+    tolerancePlochy: profil.tolerancePlochy, stejnaDispozice: profil.stejnaDispozice,
+  };
 
   const zname = await prisma.zarazeniInzeratu.findMany({ where: { propertyId }, include: { inzerat: true } });
   // Uklid: navrhy, ktere uz pravidlum nevyhovuji (zprisnena pravidla, vyloucena obec), zmizi
@@ -141,12 +148,13 @@ export async function navrhniProNemovitost(propertyId: string, o: { ids?: string
   st.kandidatu = kandidati.length;
   for (const dealType of ["SALE", "RENT"] as const) {
     const zarazene = zname.filter((z) => z.stav === "ZARAZENO" && z.inzerat.dealType === dealType);
-    const medianZar = zarazene.length ? median(zarazene.map((z) => z.inzerat.pricePerM2 ?? 0).filter((x) => x > 0)) : null;
+    // Extremni cena proti zarazenym — u garazi za kus, jinak za m²
+    const medianZar = zarazene.length ? median(zarazene.map((z) => cenaVJednotce(z.inzerat, zaKus)).filter((x) => x > 0)) : null;
     for (const i of kandidati.filter((k) => k.dealType === dealType)) {
       if (znamych.has(i.id)) { st.uzZname++; continue; }
       if (i.zmizelAt) { st.zmizelych++; continue; }
       if (vyloucene.some((m) => i.city.toLowerCase().includes(m))) { st.vylouceneObce++; continue; }
-      const h = ohodnot(nem, i, medianZar || null);
+      const h = ohodnot(nem, { ...i, pricePerM2: cenaVJednotce(i, zaKus) }, medianZar || null);
       if (h.mimo) {
         if (h.duvod.startsWith("plocha")) st.velikost++;
         else if (h.duvod.startsWith("dispozice")) st.jinaDispozice++;
@@ -180,34 +188,37 @@ function snimekNabidek(inzeraty: { source: string; externalId: string; dispositi
  */
 /** Zarazene nabidky nemovitosti (u propojeneho oceneni od korene) s vahami pro odhad. */
 async function bodyOdhadu(propertyId: string, dealType: "SALE" | "RENT") {
-  const p = await prisma.property.findUnique({ where: { id: propertyId }, select: { areaM2: true, typDomu: true, stavBytu: true, city: true, latitude: true, longitude: true } });
+  const p = await prisma.property.findUnique({ where: { id: propertyId }, select: { areaM2: true, type: true, typDomu: true, stavBytu: true, vlastnosti: true, city: true, latitude: true, longitude: true } });
   if (!p) return null;
+  const { zaKus, plocha } = jednotkaOdhadu(p.type, p.areaM2);
   // Propojene oceneni: nabidky se berou od korene, plocha je vlastni
   const zdroj = await korenOceneni(propertyId);
   const zarazene = await prisma.zarazeniInzeratu.findMany({
     where: { propertyId: zdroj, stav: "ZARAZENO", inzerat: { dealType } }, include: { inzerat: true },
   });
   const body = zarazene.map((z) => ({
-    datum: denISO(z.inzerat.firstSeenAt), pricePerM2: z.inzerat.pricePerM2 ?? 0, i: z.inzerat,
+    datum: denISO(z.inzerat.firstSeenAt), pricePerM2: cenaVJednotce(z.inzerat, zaKus), i: z.inzerat,
     vaha: vahaZarazeni(p, z, z.inzerat),
   }));
-  return { p, body };
+  return { p, body, zaKus, plocha };
 }
 
 /** Aktualni odhad ze zarazenych nabidek (vazeny prumer i median), bez ukladani. */
 export async function odhadNemovitosti(propertyId: string, dealType: "SALE" | "RENT") {
   const b = await bodyOdhadu(propertyId, dealType);
-  return b ? odhadZeZarazenych(b.body, b.p.areaM2, OKNO_ODHADU) : null;
+  return b ? odhadNaM2(odhadZeZarazenych(b.body, b.plocha, OKNO_ODHADU), b.zaKus, b.p.areaM2) : null;
 }
 
 export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RENT") {
   const b = await bodyOdhadu(propertyId, dealType);
   if (!b) return null;
-  const { p, body } = b;
-  const odhad = odhadZeZarazenych(body, p.areaM2, OKNO_ODHADU);
+  const { p, body, zaKus, plocha } = b;
+  const odhad = odhadZeZarazenych(body, plocha, OKNO_ODHADU);
   if (!odhad) return null;
   const pouzite = vOkneOdhadu(body, OKNO_ODHADU).map((b) => ({ ...b.i, vaha: b.vaha }));
-  const perM2 = pouzite.map((i) => i.pricePerM2 ?? 0).sort((a, b) => a - b);
+  const perM2 = pouzite.map((i) => cenaVJednotce(i, zaKus)).sort((a, b) => a - b);
+  // Do historie vzdy i skutecna cena za m² (u garaze z odhadu za kus)
+  const naM2 = zaKus ? odhad.hodnota / (p.areaM2 || 1) : odhad.perM2;
   const kvantil = (q: number) => perM2[Math.min(perM2.length - 1, Math.floor((perM2.length - 1) * q))];
 
   // Jeden zaznam za den: behem dne (vic swipnuti) se dnesni zaznam jen prepisuje
@@ -215,21 +226,23 @@ export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RE
   const spolecne = {
     confidence: odhad.pocet >= 5 ? "HIGH" : odhad.pocet >= 3 ? "MEDIUM" : "LOW",
     sampleSize: odhad.pocet, comparables: snimekNabidek(pouzite),
-    notes: `Vážený průměr z ${odhad.pocet} zařazených nabídek za poslední 2 měsíce; vážený medián ${Math.round(odhad.median.hodnota).toLocaleString("cs-CZ")} Kč (${Math.round(odhad.median.perM2).toLocaleString("cs-CZ")} Kč/m²)`,
+    notes: zaKus
+      ? `Vážený průměr cen za kus z ${odhad.pocet} zařazených nabídek za poslední 2 měsíce; vážený medián ${Math.round(odhad.median.hodnota).toLocaleString("cs-CZ")} Kč`
+      : `Vážený průměr z ${odhad.pocet} zařazených nabídek za poslední 2 měsíce; vážený medián ${Math.round(odhad.median.hodnota).toLocaleString("cs-CZ")} Kč (${Math.round(odhad.median.perM2).toLocaleString("cs-CZ")} Kč/m²)`,
   };
 
   if (dealType === "SALE") {
     const dnesni = await prisma.valuation.findMany({ where: { propertyId, source: "VYBER", date: { gte: zacatekDne } }, orderBy: { date: "desc" } });
     if (dnesni.length) {
-      await prisma.valuation.update({ where: { id: dnesni[0].id }, data: { value: odhad.hodnota, pricePerM2: odhad.perM2, date: new Date(), ...spolecne } });
+      await prisma.valuation.update({ where: { id: dnesni[0].id }, data: { value: odhad.hodnota, pricePerM2: naM2, date: new Date(), ...spolecne } });
       if (dnesni.length > 1) await prisma.valuation.deleteMany({ where: { id: { in: dnesni.slice(1).map((v) => v.id) } } });
       return odhad;
     }
     const posledni = await prisma.valuation.findFirst({ where: { propertyId }, orderBy: { date: "desc" } });
     if (posledni?.source === "VYBER" && Math.abs(posledni.value - odhad.hodnota) < 1 && posledni.sampleSize === odhad.pocet) return odhad;
-    await prisma.valuation.create({ data: { propertyId, value: odhad.hodnota, pricePerM2: odhad.perM2, source: "VYBER", ...spolecne } });
+    await prisma.valuation.create({ data: { propertyId, value: odhad.hodnota, pricePerM2: naM2, source: "VYBER", ...spolecne } });
   } else {
-    const data = { monthlyRent: odhad.hodnota, rentPerM2: odhad.perM2, p25: kvantil(0.25), p75: kvantil(0.75), ...spolecne };
+    const data = { monthlyRent: odhad.hodnota, rentPerM2: naM2, p25: kvantil(0.25), p75: kvantil(0.75), ...spolecne };
     const dnesni = await prisma.rentEstimate.findMany({ where: { propertyId, source: "VYBER", date: { gte: zacatekDne } }, orderBy: { date: "desc" } });
     if (dnesni.length) {
       await prisma.rentEstimate.update({ where: { id: dnesni[0].id }, data: { ...data, date: new Date() } });

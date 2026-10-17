@@ -1,39 +1,37 @@
 /**
- * Co z AI parametru inzeratu ukazat v aplikaci: typ domu a stav se zduvodnenim,
- * shrnuti a doplnkove udaje jako kratke stitky. Ciste funkce, bez SDK.
+ * Co z AI parametru inzeratu ukazat v aplikaci: hodnoty vlastnosti profilu se zduvodnenim,
+ * drobne udaje a jednovetne shrnuti. Ciste funkce, bez SDK.
  */
+import { platneHodnoty, type Profil } from "./profily";
+
 export interface AiNahled {
-  typDomu: string | null;
-  typDomuDuvod: string;
-  stavBytu: string | null;
-  stavBytuDuvod: string;
-  shrnuti: string;
+  /** Hodnoty vlastnosti (klic -> hodnota) */
+  hodnoty: Record<string, string>;
+  /** Zduvodneni (klic -> text) */
+  duvody: Record<string, string>;
+  /** Drobne udaje k zobrazeni jako text */
   stitky: string[];
+  shrnuti: string;
 }
 
-type P = Partial<{
-  typDomu: string | null; typDomuDuvod: string; stavBytu: string | null; stavBytuDuvod: string; shrnuti: string;
-  podlazi: number | null; podlaziCelkem: number | null; vytah: boolean | null; balkon: boolean | null; sklep: boolean | null;
-  parkovani: boolean | null; energetickaTrida: string | null; vlastnictvi: string | null; rokRekonstrukce: number | null; zateplenyDum: boolean | null;
-}>;
-
-export function nahledAi(parametry: unknown): AiNahled | null {
+export function nahledAi(parametry: unknown, profil: Profil): AiNahled | null {
   if (!parametry || typeof parametry !== "object") return null;
-  const p = parametry as P;
+  const p = parametry as Record<string, unknown>;
+  // Novy tvar (profily): { hodnoty, duvody, info, shrnuti }
+  if (p.hodnoty && typeof p.hodnoty === "object") {
+    return {
+      hodnoty: platneHodnoty(profil, p.hodnoty),
+      duvody: (p.duvody && typeof p.duvody === "object" ? p.duvody : {}) as Record<string, string>,
+      stitky: Array.isArray(p.info) ? (p.info as unknown[]).filter((x): x is string => typeof x === "string") : [],
+      shrnuti: typeof p.shrnuti === "string" ? p.shrnuti : "",
+    };
+  }
+  // Starsi tvar (jen byty): hodnoty v koreni, zduvodneni jako typDomuDuvod
+  const duvody: Record<string, string> = {};
+  for (const v of profil.vlastnosti) if (typeof p[`${v.klic}Duvod`] === "string") duvody[v.klic] = p[`${v.klic}Duvod`] as string;
   const stitky: string[] = [];
-  if (p.podlazi != null) stitky.push(p.podlazi === 0 ? "přízemí" : `${p.podlazi}. patro${p.podlaziCelkem ? ` z ${p.podlaziCelkem}` : ""}`);
-  if (p.vytah != null) stitky.push(p.vytah ? "výtah" : "bez výtahu");
-  if (p.balkon) stitky.push("balkon/lodžie");
-  if (p.sklep) stitky.push("sklep");
-  if (p.parkovani) stitky.push("parkování");
-  if (p.zateplenyDum) stitky.push("zateplený dům");
-  if (p.rokRekonstrukce) stitky.push(`rekonstrukce ${p.rokRekonstrukce}`);
-  if (p.energetickaTrida) stitky.push(`energ. třída ${p.energetickaTrida}`);
-  if (p.vlastnictvi === "DRUZSTEVNI") stitky.push("družstevní");
-  else if (p.vlastnictvi === "OSOBNI") stitky.push("osobní vlastnictví");
-  return {
-    typDomu: p.typDomu ?? null, typDomuDuvod: p.typDomuDuvod ?? "",
-    stavBytu: p.stavBytu ?? null, stavBytuDuvod: p.stavBytuDuvod ?? "",
-    shrnuti: p.shrnuti ?? "", stitky,
-  };
+  if (typeof p.podlazi === "number") stitky.push(p.podlazi === 0 ? "přízemí" : `${p.podlazi}. patro${typeof p.podlaziCelkem === "number" ? ` z ${p.podlaziCelkem}` : ""}`);
+  if (p.vytah === true) stitky.push("výtah"); else if (p.vytah === false) stitky.push("bez výtahu");
+  if (typeof p.energetickaTrida === "string") stitky.push(`energ. třída ${p.energetickaTrida}`);
+  return { hodnoty: platneHodnoty(profil, p), duvody, stitky, shrnuti: typeof p.shrnuti === "string" ? p.shrnuti : "" };
 }

@@ -5,6 +5,7 @@
  */
 import { prisma } from "../db";
 import { srealitySource } from "./sreality";
+import { profilTypu } from "./profily";
 import { ulozInzeraty, navrhniProNemovitost, aktualizujSkupinu, okruhNemovitosti, type StatistikaNavrhu } from "./inzeraty";
 import { zacniBeh, ukonciBeh, type Spoust } from "../scanLog";
 
@@ -33,8 +34,9 @@ export async function skenujNemovitost(
       const nabidky = await srealitySource.fetchListings({
         city: p.city, district: p.district ?? undefined, region: p.region ?? undefined,
         // Stejna dispozice a plocha ±25 % uz pri stahovani; o zbytku rozhodne hodnoceni navrhu
-        category: p.type, dealType, areaM2: p.areaM2, toleranceM2: p.areaM2 * 0.25,
-        disposition: p.disposition ?? undefined,
+        category: p.type, dealType, areaM2: p.areaM2, toleranceM2: p.areaM2 * profilTypu(p.type).tolerancePlochy,
+        // Dispozice jen u bytu; u domu je ruzna a o podobnosti rozhodne vaha
+        disposition: profilTypu(p.type).stejnaDispozice ? p.disposition ?? undefined : undefined,
         targetSample: 40, maxPages: 8,
         // Okruh kolem obce; pri malo nabidkach se rozsiri, nejvys na tvrdou hranici
         okruhKm: okruh.zaklad, okruhMaxKm: okruh.max,
