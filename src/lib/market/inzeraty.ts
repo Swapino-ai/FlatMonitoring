@@ -8,7 +8,7 @@ import { prisma } from "../db";
 import { okruhyProTyp } from "../geo";
 import { denISO } from "../format";
 import type { ScrapedListing } from "./types";
-import { odhadZeZarazenych, ohodnot, median, vOkneOdhadu } from "./zarazeni";
+import { odhadZeZarazenych, ohodnot, median, vOkneOdhadu, vahaNabidky } from "./zarazeni";
 
 /** Odhad z nabidek, ktere se objevily za posledni 2 mesice (ve dnech). */
 export const OKNO_ODHADU = 61;
@@ -179,14 +179,17 @@ function snimekNabidek(inzeraty: { source: string; externalId: string; dispositi
  * odhad najmu), kdyz se zmenil. Vraci novy odhad, nebo null, kdyz nic zarazeneho neni.
  */
 export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RENT") {
-  const p = await prisma.property.findUnique({ where: { id: propertyId }, select: { areaM2: true } });
+  const p = await prisma.property.findUnique({ where: { id: propertyId }, select: { areaM2: true, typDomu: true, stavBytu: true } });
   if (!p) return null;
   // Propojene oceneni: nabidky se berou od korene, plocha je vlastni
   const zdroj = await korenOceneni(propertyId);
   const zarazene = await prisma.zarazeniInzeratu.findMany({
     where: { propertyId: zdroj, stav: "ZARAZENO", inzerat: { dealType } }, include: { inzerat: true },
   });
-  const body = zarazene.map((z) => ({ datum: denISO(z.inzerat.firstSeenAt), pricePerM2: z.inzerat.pricePerM2 ?? 0, i: z.inzerat }));
+  const body = zarazene.map((z) => ({
+    datum: denISO(z.inzerat.firstSeenAt), pricePerM2: z.inzerat.pricePerM2 ?? 0, i: z.inzerat,
+    vaha: vahaNabidky(p, { areaM2: z.inzerat.areaM2, typDomu: z.typDomu, stavBytu: z.stavBytu, vahaRucne: z.vahaRucne }),
+  }));
   const odhad = odhadZeZarazenych(body, p.areaM2, OKNO_ODHADU);
   if (!odhad) return null;
   const pouzite = vOkneOdhadu(body, OKNO_ODHADU).map((b) => b.i);

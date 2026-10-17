@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { nastavOceneniPodle, prepniVyloucenouObec, nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, type TrhState } from "@/lib/trhActions";
+import { nastavOceneniPodle, prepniVyloucenouObec, nastavVlastnostBytu, nastavVlastnostNabidky, nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, type TrhState } from "@/lib/trhActions";
 import type { StatistikaNavrhu } from "@/lib/market/inzeraty";
 import { czk, dateCz } from "@/lib/format";
 import { Hlaska } from "./form";
@@ -10,6 +10,7 @@ import { Badge } from "./Stat";
 import { Mapa, type BodOkoli } from "./Mapa";
 import { VyvojChart } from "./charts";
 import { SwipeNavrhy } from "./SwipeNavrhy";
+import { STAVY_BYTU, TYPY_DOMU } from "@/lib/market/zarazeni";
 
 export interface RadekTrhu {
   id: string; // id zarazeni
@@ -34,6 +35,11 @@ export interface RadekTrhu {
   zmizel: string | null;
   /** Historie ceny od nejstarsi */
   ceny: { at: string; price: number }[];
+  typDomu?: string | null;
+  stavBytu?: string | null;
+  vahaRucne?: number | null;
+  /** Vaha v odhadu (spocitana nebo rucni) */
+  vaha?: number;
   snimky: { id: string; createdAt: string }[];
   /** Fotografie z inzeratu (ulozene u zarazenych) */
   fotky?: string[];
@@ -57,11 +63,13 @@ function km(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
  * Sledovani trhu u jedne nemovitosti: zapnuti, navrhy ke kontrole, zarazene a vyrazene
  * nabidky, odhad ze zarazenych za posledni 2 mesice a jeho vyvoj v case.
  */
-export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
+export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], vlastnosti, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
   diag?: StatistikaNavrhu;
   propertyId: string;
   /** Nemovitost, jejiz nabidky se pouzivaji (pri propojenem oceneni jina nez propertyId) */
   trhId?: string;
+  /** Vlastnosti bytu pro vahy srovnani */
+  vlastnosti?: { typDomu: string | null; stavBytu: string | null };
   /** Popis, podle ceho se hleda (klic) */
   klic?: string;
   /** Obce, ze kterych nabidky prisly; klikem vyloucit/vratit */
@@ -219,6 +227,25 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
         <div className="rounded-card border border-line bg-surface-sunken/50 p-4 text-sm">
           <div className="label mb-1">Klíč hledání</div>
           <p className="text-ink-secondary">{klic}</p>
+          {vlastnosti && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+              <span className="text-ink-muted">Tento byt (nabídky se stejnými vlastnostmi mají v odhadu větší váhu):</span>
+              {([["typDomu", TYPY_DOMU], ["stavBytu", STAVY_BYTU]] as const).map(([pole, volby]) => (
+                <span key={pole} className="flex flex-wrap gap-1">
+                  {Object.entries(volby).map(([k, n]) => {
+                    const aktivni = vlastnosti[pole] === k;
+                    return (
+                      <button key={k} type="button" disabled={!canEdit || bezi}
+                        onClick={() => akce(() => nastavVlastnostBytu(propertyId, pole, aktivni ? null : k))}
+                        className={`rounded-full border px-2.5 py-0.5 ${aktivni ? "border-accent bg-accent text-white" : "border-line bg-surface-card text-ink-secondary hover:border-accent"}`}>
+                        {n}
+                      </button>
+                    );
+                  })}
+                </span>
+              ))}
+            </div>
+          )}
           {obce.length > 0 && (
             <div className="mt-3">
               <div className="mb-1.5 text-xs text-ink-muted">Obce, ze kterých nabídky přišly{canEdit ? " — klikem vyloučíš nebo vrátíš" : ""}:</div>
@@ -366,6 +393,32 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
                 <span className={`w-10 shrink-0 text-center text-xs ${k < 10 ? "font-semibold text-accent" : "text-ink-muted"}`}
                   title={k < 10 ? "Objevila se v posledních 2 měsících, počítá se do odhadu" : "Starší než 2 měsíce, do odhadu už nevstupuje"}>{k < 10 ? "v odhadu" : "starší"}</span>
                 {zakladRadku(r)}
+                <div className="flex w-full flex-wrap items-center gap-1.5 pl-[3.25rem] text-[11px]">
+                  {([["typDomu", TYPY_DOMU], ["stavBytu", STAVY_BYTU]] as const).map(([pole, volby]) => (
+                    <span key={pole} className="flex gap-1">
+                      {Object.entries(volby).map(([k, n]) => {
+                        const aktivni = r[pole] === k;
+                        return (
+                          <button key={k} type="button" disabled={!canEdit || bezi}
+                            onClick={() => akce(() => nastavVlastnostNabidky(propertyId, r.id, { [pole]: aktivni ? null : k }))}
+                            className={`rounded-full border px-2 py-0.5 ${aktivni ? "border-accent bg-accent-soft text-accent" : "border-line text-ink-muted hover:border-accent"}`}>
+                            {n}
+                          </button>
+                        );
+                      })}
+                    </span>
+                  ))}
+                  <span className="ml-auto flex items-center gap-1.5">
+                    <span className="font-semibold text-ink-secondary" title="Jak moc nabídka určuje odhad (podobnost plochy, typu domu a stavu)">váha {String(r.vaha ?? 1).replace(".", ",")}×</span>
+                    {canEdit && (
+                      <select className="rounded border border-line bg-surface-card px-1 py-0.5" value={r.vahaRucne ?? ""} disabled={bezi}
+                        onChange={(e) => akce(() => nastavVlastnostNabidky(propertyId, r.id, { vahaRucne: e.target.value === "" ? null : Number(e.target.value) }))}>
+                        <option value="">auto</option>
+                        {[0.5, 1, 2, 3, 5].map((v) => <option key={v} value={v}>{String(v).replace(".", ",")}×</option>)}
+                      </select>
+                    )}
+                  </span>
+                </div>
                 {odkazy(r)}
                 {canEdit && (
                   <span className="flex gap-1">

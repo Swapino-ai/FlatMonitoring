@@ -109,6 +109,42 @@ export interface ZarazenyBod {
   /** Kdy se inzerat objevil na trhu (rrrr-mm-dd) */
   datum: string;
   pricePerM2: number;
+  /** Vaha v odhadu (vychozi 1) */
+  vaha?: number;
+}
+
+/** Vazeny median: hodnota, u ktere kumulativni vaha prekroci polovinu. */
+export function vazenyMedian(body: { hodnota: number; vaha: number }[]): number {
+  const s = body.filter((b) => b.vaha > 0).sort((a, b) => a.hodnota - b.hodnota);
+  if (!s.length) return 0;
+  const celkem = s.reduce((a, b) => a + b.vaha, 0);
+  let kum = 0;
+  for (let k = 0; k < s.length; k++) {
+    kum += s[k].vaha;
+    if (Math.abs(kum - celkem / 2) < 1e-9 && k + 1 < s.length) return (s[k].hodnota + s[k + 1].hodnota) / 2;
+    if (kum > celkem / 2) return s[k].hodnota;
+  }
+  return s[s.length - 1].hodnota;
+}
+
+export const TYPY_DOMU = { PANEL: "Panel", CIHLA: "Cihla", NOVOSTAVBA: "Novostavba" } as const;
+export const STAVY_BYTU = { PRED_REKONSTRUKCI: "Před rekonstrukcí", PO_REKONSTRUKCI: "Po rekonstrukci", NOVOSTAVBA: "Novostavba" } as const;
+
+/**
+ * Vaha zarazene nabidky podle podobnosti s nemovitosti: cim podobnejsi byt, tim vic urcuje cenu.
+ * Plocha 1–2× (stejna = 2×), typ domu a stav: shoda 2×, neshoda ½×, neznamo 1×. Rucni vaha ma prednost.
+ */
+export function vahaNabidky(
+  n: { areaM2: number; typDomu: string | null; stavBytu: string | null },
+  i: { areaM2: number | null; typDomu: string | null; stavBytu: string | null; vahaRucne: number | null },
+): number {
+  if (i.vahaRucne != null) return i.vahaRucne;
+  let v = 1;
+  if (i.areaM2 && n.areaM2) v *= 1 + Math.max(0, 1 - Math.abs(i.areaM2 - n.areaM2) / (0.25 * n.areaM2));
+  for (const k of ["typDomu", "stavBytu"] as const) {
+    if (n[k] && i[k]) v *= n[k] === i[k] ? 2 : 0.5;
+  }
+  return Math.round(v * 100) / 100;
 }
 
 export interface OdhadZarazenych {
@@ -137,7 +173,7 @@ export function odhadZeZarazenych(body: ZarazenyBod[], areaM2: number, oknoDni =
   for (const b of platne) {
     const od = minusDni(b.datum, oknoDni);
     const vzorek = platne.filter((x) => x.datum > od && x.datum <= b.datum);
-    const perM2 = median(vzorek.map((x) => x.pricePerM2));
+    const perM2 = vazenyMedian(vzorek.map((x) => ({ hodnota: x.pricePerM2, vaha: x.vaha ?? 1 })));
     poDnech.set(b.datum, { perM2, hodnota: Math.round(perM2 * areaM2), pocet: vzorek.length });
   }
   const rada = [...poDnech.entries()].map(([datum, v]) => ({ datum, ...v }));

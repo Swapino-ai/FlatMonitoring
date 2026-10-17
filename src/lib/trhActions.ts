@@ -62,6 +62,27 @@ export async function prepniVyloucenouObec(propertyId: string, obec: string): Pr
   return { success: je ? `${obec} se zase započítává.` : `${obec} vyloučena, její návrhy zmizely.` };
 }
 
+/** Vlastnosti bytu pro vahy srovnani (typ domu, stav). */
+export async function nastavVlastnostBytu(propertyId: string, pole: "typDomu" | "stavBytu", hodnota: string | null): Promise<TrhState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+  await prisma.property.update({ where: { id: propertyId }, data: { [pole]: hodnota } });
+  await aktualizujSkupinu(propertyId);
+  obnov(propertyId);
+  return {};
+}
+
+/** Vlastnosti a rucni vaha zarazene nabidky. */
+export async function nastavVlastnostNabidky(propertyId: string, zarazeniId: string, data: { typDomu?: string | null; stavBytu?: string | null; vahaRucne?: number | null }): Promise<TrhState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+  const koren = await korenOceneni(propertyId);
+  await prisma.zarazeniInzeratu.updateMany({ where: { id: zarazeniId, propertyId: koren }, data });
+  await aktualizujSkupinu(koren);
+  for (const id of await clenoveOceneni(koren)) obnov(id);
+  return {};
+}
+
 /** Rucne urcena poloha inzeratu (sken ji pak neprepisuje). */
 export async function nastavPolohuInzeratu(propertyId: string, inzeratId: string, lat: number, lon: number): Promise<TrhState> {
   const auth = await majitel();

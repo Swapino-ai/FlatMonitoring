@@ -12,7 +12,7 @@ import { NEMOVITOST_MAP, nazevNemovitosti } from "@/lib/catalogs";
 import { denISO } from "@/lib/format";
 import { odhadZeZarazenych } from "@/lib/market/zarazeni";
 import { OKNO_ODHADU, navrhniProNemovitost, korenOceneni, okruhNemovitosti } from "@/lib/market/inzeraty";
-import { vzdalenost } from "@/lib/market/zarazeni";
+import { vzdalenost, vahaNabidky } from "@/lib/market/zarazeni";
 import { presunSnimkyNaDisk } from "@/lib/market/snimky";
 
 export const dynamic = "force-dynamic";
@@ -87,6 +87,8 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
   const radky: RadekTrhu[] = zaznamy.map((z) => {
     const i = z.inzerat;
     return {
+      typDomu: z.typDomu, stavBytu: z.stavBytu, vahaRucne: z.vahaRucne,
+      vaha: vahaNabidky(property, { areaM2: i.areaM2, typDomu: z.typDomu, stavBytu: z.stavBytu, vahaRucne: z.vahaRucne }),
       id: z.id, stav: z.stav as RadekTrhu["stav"], skore: z.skore, doporuceno: z.doporuceno, duvod: z.duvod,
       dealType: i.dealType === "RENT" ? "RENT" : "SALE", disposition: i.disposition, areaM2: i.areaM2,
       price: i.price, pricePerM2: i.pricePerM2, city: i.city, district: i.district, url: i.url,
@@ -100,7 +102,7 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
 
   const odhad = (d: "SALE" | "RENT"): OdhadPanel | null => {
     const o = odhadZeZarazenych(
-      radky.filter((r) => r.dealType === d && r.stav === "ZARAZENO").map((r) => ({ datum: r.firstSeen, pricePerM2: r.pricePerM2 ?? 0 })),
+      radky.filter((r) => r.dealType === d && r.stav === "ZARAZENO").map((r) => ({ datum: r.firstSeen, pricePerM2: r.pricePerM2 ?? 0, vaha: r.vaha })),
       property.areaM2, OKNO_ODHADU,
     );
     return o ? { hodnota: o.hodnota, perM2: o.perM2, pocet: o.pocet, rada: o.rada.map((b) => ({ datum: b.datum, hodnota: b.hodnota })) } : null;
@@ -122,7 +124,7 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
           </p>
         </div>
 
-        <TrhNemovitosti propertyId={id} trhId={koren} klic={klic} obce={obce} canEdit={canEdit} sledovat={korenP?.sledovatTrh ?? false}
+        <TrhNemovitosti propertyId={id} trhId={koren} klic={klic} obce={obce} vlastnosti={{ typDomu: property.typDomu, stavBytu: property.stavBytu }} canEdit={canEdit} sledovat={korenP?.sledovatTrh ?? false}
           propojeni={{ podle: koren !== id && korenP ? { id: korenP.id, name: korenP.name } : null, navazane, moznosti }} skenovatelne={skenovatelne}
           poloha={property.latitude != null && property.longitude != null ? { lat: property.latitude, lon: property.longitude } : null}
           radky={radky} diag={diag} odhady={{ SALE: odhad("SALE"), RENT: odhad("RENT") }} />

@@ -105,6 +105,10 @@ model Property {
   sledovatTrh    Boolean @default(false)
   /// Ocenuje se stejne jako jina nemovitost: sdili jeji zarazene nabidky (odhad = median za m2 x vlastni plocha)
   oceneniPodle   String?
+  /// Vlastnosti pro vahy srovnani: PANEL | CIHLA | NOVOSTAVBA
+  typDomu        String?
+  /// PRED_REKONSTRUKCI | PO_REKONSTRUKCI | NOVOSTAVBA
+  stavBytu       String?
 
   // --- Porizeni ---
   purchaseDate     DateTime
@@ -764,6 +768,11 @@ model ZarazeniInzeratu {
   /// Aplikace doporucuje zaradit; rozhoduje ale uzivatel
   doporuceno  Boolean   @default(false)
   duvod       String?
+  /// Vlastnosti nabidky (oznaci uzivatel) pro vahu v odhadu
+  typDomu     String?
+  stavBytu    String?
+  /// Rucne zadana vaha; bez ni se spocita z podobnosti
+  vahaRucne   Float?
   rozhodnutoAt DateTime?
   createdAt   DateTime  @default(now())
 
