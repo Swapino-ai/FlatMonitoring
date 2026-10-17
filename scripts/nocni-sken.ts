@@ -19,6 +19,7 @@ import { uklidDenik } from "../src/lib/scanLog";
 import { skenujNemovitost } from "../src/lib/market/sken";
 import { aktualizujSkupinu } from "../src/lib/market/inzeraty";
 import { presunSnimkyNaDisk } from "../src/lib/market/snimky";
+import { jeNastaveno } from "../src/lib/googleDrive";
 import { HLAVICKY_PROHLIZECE, sleep } from "../src/lib/market/util";
 
 const prisma = new PrismaClient();
@@ -64,6 +65,7 @@ async function zarazeneInzeraty() {
   let fotek = 0;
   let zmizelo = 0;
   let vraceno = 0;
+  let neovereno = 0;
   for (const i of inzeraty) {
     const potrebaFotky = i._count.snimky === 0;
     const potrebaSnimek = potrebaFotky || !i.snimky[0] || (i.snimky[0].price != null && Math.abs(i.snimky[0].price - i.price) >= 1);
@@ -73,17 +75,27 @@ async function zarazeneInzeraty() {
         if (!i.zmizelAt) { await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: new Date() } }); zmizelo++; }
         continue;
       }
+      if (existuje === null) neovereno++;
       if (existuje === true && i.zmizelAt) {
         await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: null } });
         vraceno++;
       }
-      if (kontext && potrebaSnimek && existuje) {
+      // "Nevim" (null, napr. presmerovani na souhlas s cookies) screenshot neblokuje:
+      // prohlizec souhlas odklikne a az pak se overi, ze je na detailu inzeratu
+      if (kontext && potrebaSnimek) {
         const stranka = await kontext.newPage();
         await stranka.goto(i.url!, { waitUntil: "domcontentloaded", timeout: 45_000 });
-        {
-          // Souhlas s cookies (Seznam CMP) by jinak prekryl celou stranku
-          await stranka.getByRole("button", { name: /souhlasím|přijmout vše|rozumím/i }).first().click({ timeout: 4000 }).catch(() => undefined);
-          await stranka.waitForTimeout(2500);
+        // Souhlas s cookies (Seznam CMP) by jinak prekryl celou stranku
+        await stranka.getByRole("button", { name: /souhlasím|přijmout vše|rozumím/i }).first().click({ timeout: 4000 }).catch(() => undefined);
+        await stranka.waitForTimeout(2500);
+        if (!stranka.url().includes(i.externalId)) {
+          console.log(`  ${i.externalId}: prohlížeč skončil jinde (${new URL(stranka.url()).hostname}${new URL(stranka.url()).pathname.slice(0, 40)}), snímek přeskočen`);
+        } else {
+          // Prohlizec potvrdil, ze inzerat zije: pripadne chybne "zmizel" se vrati
+          if (existuje === null && i.zmizelAt) {
+            await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: null } });
+            vraceno++;
+          }
           const data = await stranka.screenshot({ type: "jpeg", quality: 65 });
           await prisma.inzeratSnimek.create({ data: { inzeratId: i.id, price: i.price, data: new Uint8Array(data) } });
           snimku++;
@@ -115,7 +127,7 @@ async function zarazeneInzeraty() {
     await sleep(1500);
   }
   await prohlizec?.close();
-  console.log(`Zařazené inzeráty: ${inzeraty.length}, nových screenshotů ${snimku}, fotografií ${fotek}, zmizelo z trhu ${zmizelo}, chybně označených vráceno ${vraceno}.`);
+  console.log(`Zařazené inzeráty: ${inzeraty.length}, nových screenshotů ${snimku}, fotografií ${fotek}, zmizelo z trhu ${zmizelo}, chybně označených vráceno ${vraceno}, existenci nešlo ověřit ${neovereno}.`);
 }
 
 async function main() {
@@ -144,8 +156,12 @@ async function main() {
   for (const p of sledovane) {
     await aktualizujSkupinu(p.id);
   }
-  const presunuto = await presunSnimkyNaDisk(500).catch(() => 0);
-  if (presunuto) console.log(`Na Google Disk přesunuto ${presunuto} snímků.`);
+  const presunuto = await presunSnimkyNaDisk(500).catch((e) => { console.log("Přesun na Disk selhal:", e instanceof Error ? e.message : e); return 0; });
+  const naDisku = await prisma.inzeratSnimek.count({ where: { driveId: { not: null } } });
+  const cekaNaDisk = await prisma.inzeratSnimek.count({ where: { driveId: null, data: { not: null } } });
+  const disk = !jeNastaveno() ? "chybí GOOGLE_CLIENT_ID/SECRET"
+    : !(await prisma.googleConnection.findUnique({ where: { id: "main" } })) ? "Disk není v aplikaci připojený" : "připojeno";
+  console.log(`Google Disk (${disk}): přesunuto ${presunuto}, celkem na Disku ${naDisku}, čeká ${cekaNaDisk}.`);
 
   const smazano = await uklidDenik();
   if (smazano > 0) console.log(`Z deníku odklizeno ${smazano} záznamů starších 90 dnů.`);
