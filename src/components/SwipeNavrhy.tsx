@@ -22,6 +22,23 @@ export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec }: 
   const [pocty, setPocty] = useState({ zarazeno: 0, vyrazeno: 0, pozdeji: 0 });
   const start = useRef<number | null>(null);
   const r = navrhy[index];
+  // Sreality zakazuji vlozeni do iframe (frame-ancestors), proto nahled v samostatnem okne,
+  // ktere se pri dalsi karte samo prepne na dalsi inzerat
+  const okno = useRef<Window | null>(null);
+  const [nahled, setNahled] = useState(false);
+  const platnyOdkaz = (u: string | null | undefined) => !!u && !u.includes("/x/x/");
+  const otevriNahled = () => {
+    if (!r || !platnyOdkaz(r.url)) return;
+    const sirka = Math.round(window.screen.availWidth / 2);
+    okno.current = window.open(r.url!, "fm-nahled-inzeratu", `width=${sirka},height=${window.screen.availHeight},left=${window.screen.availWidth - sirka},top=0`);
+    setNahled(!!okno.current);
+  };
+  useEffect(() => {
+    if (!nahled || !r || !platnyOdkaz(r.url)) return;
+    if (okno.current && !okno.current.closed) okno.current.location.href = r.url!;
+    else setNahled(false);
+  }, [r, nahled]);
+  useEffect(() => () => { okno.current?.close(); }, []);
   const cena = (n: number) => (najem ? `${czk(n)}/měs.` : czk(n));
 
   const rozhodni = useCallback((volba: "ZARAZENO" | "VYRAZENO" | "POZDEJI") => {
@@ -118,6 +135,14 @@ export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec }: 
               className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-sm text-ink-muted shadow-pop transition-transform hover:scale-110">↓</button>
             <button type="button" aria-label="Zařadit" onClick={() => rozhodni("ZARAZENO")}
               className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-3xl text-good shadow-pop transition-transform hover:scale-110">✓</button>
+          </div>
+        )}
+        {!hotovo && (
+          <div className="mt-4 text-center">
+            <button type="button" onClick={otevriNahled} disabled={!platnyOdkaz(r?.url)}
+              className="rounded-full bg-white/15 px-4 py-1.5 text-sm text-white hover:bg-white/25 disabled:opacity-40">
+              {nahled ? "Náhled je otevřený vedle a přepíná se s kartou" : "Otevřít náhled inzerátu vedle"}
+            </button>
           </div>
         )}
         <p className="mt-3 text-center text-xs text-white/70">Táhni doprava = zařadit, doleva = vyřadit · klávesy ← → ↓</p>
