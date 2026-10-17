@@ -286,13 +286,30 @@ function SkupinaFormular({ services, typy, action, pending }: {
   const kroky = ["Služby", "Období", "Částky"];
   return (
     <form action={action} className="space-y-4">
-      {/* Ukazatel kroku */}
-      <ol className="flex flex-wrap items-center gap-2 text-xs">
-        {kroky.map((k, i) => (
-          <li key={k} className={`flex items-center gap-1.5 rounded-full px-3 py-1 ${krok === i + 1 ? "bg-accent text-white" : krok > i + 1 ? "bg-good/15 text-good" : "bg-surface-sunken text-ink-muted"}`}>
-            <span className="font-semibold">{i + 1}</span> {k}
-          </li>
-        ))}
+      {/* Ukazatel kroku: kolecka spojena carou, hotove kroky jdou kliknutim vratit */}
+      <ol className="flex items-center">
+        {kroky.map((k, i) => {
+          const c = i + 1;
+          const hotovo = krok > c;
+          const aktivni = krok === c;
+          return (
+            <li key={k} className={`flex items-center ${i < kroky.length - 1 ? "flex-1" : ""}`}>
+              <button type="button" disabled={!hotovo} onClick={() => hotovo && setKrok(c as 1 | 2 | 3)}
+                className="flex items-center gap-2 disabled:cursor-default">
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold transition-colors ${
+                  hotovo ? "bg-good text-white" : aktivni ? "bg-accent text-white ring-4 ring-accent/20" : "border-2 border-line bg-surface-card text-ink-muted"}`}>
+                  {hotovo ? "✓" : c}
+                </span>
+                <span className={`hidden text-sm sm:inline ${aktivni ? "font-semibold text-ink-primary" : hotovo ? "text-good" : "text-ink-muted"}`}>{k}</span>
+              </button>
+              {i < kroky.length - 1 && (
+                <span className="mx-3 h-1 flex-1 overflow-hidden rounded-full bg-line">
+                  <span className={`block h-full rounded-full bg-good transition-all duration-500 ${hotovo ? "w-full" : "w-0"}`} />
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ol>
       {chyba && <p className="rounded-lg bg-bad/10 px-3 py-2 text-sm text-bad">{chyba}</p>}
 
