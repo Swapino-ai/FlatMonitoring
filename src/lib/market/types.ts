@@ -34,6 +34,8 @@ export interface ScanQuery {
   toleranceM2?: number;
   disposition?: string;
   maxPages?: number;
+  /** Hledat v okruhu kolem obce (parametr vzdalenost na Sreality). Bez nej se hleda postaru: obec, pak kraj. */
+  okruhKm?: number;
   /** Kolik srovnatelnych nabidek staci — pak uz dalsi stranky nenacitame. */
   targetSample?: number;
 }

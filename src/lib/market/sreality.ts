@@ -26,6 +26,80 @@ export const srealitySource: MarketSource = {
   name: "SREALITY",
 
   async fetchListings(query: ScanQuery): Promise<ScrapedListing[]> {
+    // Hledani v okruhu kolem obce (overeno sondou: ?region=<obec>&region-typ=municipality&vzdalenost=<km>).
+    // Najde i nabidky v malych obcich, ktere vlastni vypis nemaji, a jejich nejblizsim okoli.
+    if (query.okruhKm) {
+      const vOkruhu = await hledejVOkruhu(query).catch(() => null);
+      if (vOkruhu) return vOkruhu;
+    }
+    return hledejPostaru(query);
+  },
+};
+
+/** Okruh kolem obce; kdyz je nabidek malo, okruh se zdvojnasobi (max. 20 km). Null = portal tento tvar odmitl. */
+async function hledejVOkruhu(query: ScanQuery): Promise<ScrapedListing[] | null> {
+  const druh = NEMOVITOST_MAP.get(query.category ?? "BYT");
+  if (!druh?.srealityCesta) return [];
+  const typ = query.dealType === "SALE" ? "prodej" : "pronajem";
+  const cilovyVzorek = query.targetSample ?? 15;
+  const maxPages = query.maxPages ?? 10;
+  let okruh = Math.max(1, Math.round(query.okruhKm!));
+  let posledni: ScrapedListing[] = [];
+  for (;;) {
+    const out: ScrapedListing[] = [];
+    for (let strana = 1; strana <= maxPages; strana++) {
+      const url = `https://www.sreality.cz/hledani/${typ}/${druh.srealityCesta}?region=${encodeURIComponent(query.city)}&region-typ=municipality&vzdalenost=${okruh}${strana > 1 ? `&strana=${strana}` : ""}`;
+      let stranka: { data: unknown; html: string };
+      try {
+        stranka = await nactiStranku(url);
+      } catch (e) {
+        if (strana > 1) break;
+        // Prazdny vysledek vraci portal take jako 404; zkusime vetsi okruh
+        if (String(e).includes("HTTP 404")) break;
+        throw e;
+      }
+      const zaznamy = najdiVysledky(stranka.data);
+      if (zaznamy.length === 0) break;
+      out.push(...prevedZaznamy(zaznamy, odkazyZVypisu(stranka.html), query, druh.srealityPodkategorie));
+      if (filtrujSrovnatelne(out, query).length >= cilovyVzorek) break;
+      if (strana < maxPages) await sleep(1500);
+    }
+    posledni = filtrujSrovnatelne(out, query);
+    if (posledni.length >= Math.min(cilovyVzorek, 10) || okruh >= 20) return posledni;
+    okruh = Math.min(20, okruh * 2);
+    await sleep(1500);
+  }
+}
+
+function prevedZaznamy(zaznamy: SrealityZaznam[], odkazy: Map<string, string>, query: ScanQuery, podkategorie: string | undefined): ScrapedListing[] {
+  const out: ScrapedListing[] = [];
+  for (const z of zaznamy) {
+    const cena = Number(z.priceCzk ?? 0);
+    if (!cena || cena <= 0) continue;
+    if (podkategorie && z.categorySubCb?.name !== podkategorie) continue;
+    const zaM2 = Number(z.priceCzkPerSqM ?? 0) || undefined;
+    const plocha = zaM2 ? Math.round((cena / zaM2) * 10) / 10 : plochaZNazvu(z.name);
+    out.push({
+      source: "SREALITY",
+      externalId: z.id ? String(z.id) : undefined,
+      dealType: query.dealType,
+      category: query.category ?? "BYT",
+      city: z.locality?.city ?? query.city,
+      district: z.locality?.cityPart ?? z.locality?.quarter ?? query.district,
+      disposition: z.categorySubCb?.name,
+      areaM2: plocha,
+      price: cena,
+      pricePerM2: zaM2 ?? (plocha ? cena / plocha : undefined),
+      url: z.id ? odkazy.get(String(z.id)) : undefined,
+      latitude: z.locality?.latitude,
+      longitude: z.locality?.longitude,
+    });
+  }
+  return out;
+}
+
+const hledejPostaru = async (query: ScanQuery): Promise<ScrapedListing[]> => {
+  {
     const out: ScrapedListing[] = [];
     // Po odfiltrovani dispozice a velikosti zbyde z jedne stranky jen par nabidek,
     // takze nacitame dal, dokud nemame dost vzorku nebo nedojdou stranky.
@@ -120,7 +194,7 @@ export const srealitySource: MarketSource = {
     }
 
     return filtrujSrovnatelne(out, query);
-  },
+  }
 };
 
 /** Inzeraty jsou v dehydratovanem stavu React Query, index dotazu se meni. */

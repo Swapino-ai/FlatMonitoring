@@ -7,6 +7,7 @@ import { prisma } from "../db";
 import { srealitySource } from "./sreality";
 import { ulozInzeraty, navrhniProNemovitost, aktualizujOdhad, type StatistikaNavrhu } from "./inzeraty";
 import { zacniBeh, ukonciBeh, type Spoust } from "../scanLog";
+import { okruhyProTyp } from "../geo";
 
 export interface VysledekSkenu {
   dealType: "SALE" | "RENT";
@@ -33,6 +34,8 @@ export async function skenujNemovitost(
         city: p.city, district: p.district ?? undefined, region: p.region ?? undefined,
         category: p.type, dealType, areaM2: p.areaM2, toleranceM2: Math.max(15, p.areaM2 * 0.4),
         targetSample: 40, maxPages: 8,
+        // Okruh kolem obce; pri malo nabidkach se sam rozsiri (az 20 km)
+        okruhKm: p.scanRadiusKm ?? okruhyProTyp(p.type)[0],
       });
       const { novych, zmenCeny, ids } = await ulozInzeraty(nabidky, p.region);
       nalezeneIds.push(...ids);
