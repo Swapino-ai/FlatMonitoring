@@ -1,8 +1,8 @@
 # Noční sken trhu — jediný plánovaný běh aplikace.
 #
-# Projde všechny nemovitosti, stáhne prodejní i nájemní nabídky, přecení
-# a odhadne nájem. Do historie se zapisuje jen změna, takže denní běh
-# nevyrobí 365 skoro shodných řádků za rok.
+# Projde jen nemovitosti se zapnutým „Sledovat trh“, uloží nabídky do databáze
+# trhu, navrhne nové k zařazení a přepočítá odhad jen ze zařazených nabídek.
+# U zařazených pořídí screenshot stránky a ověří, že inzerát ještě existuje.
 #
 # Neběží na Vercelu záměrně: Sreality odmítají dotazy z datových center
 # a sken mezi dotazy čeká, aby portál nezatěžoval — do limitu serverless
@@ -42,11 +42,17 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npx tsx scripts/kontrola-pripojeni.ts
 
-      - name: Sken trhu, přecenění a odhad nájmů
+      - name: Prohlížeč pro screenshoty zařazených inzerátů
+        run: npx playwright install --with-deps chromium
+
+      - name: Sken trhu (jen sledované nemovitosti), návrhy a odhad ze zařazených
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           MAPY_API_KEY: ${{ secrets.MAPY_API_KEY }}
+          # Volitelne: se stejnymi klici jako ve Vercelu se snimky nahraji rovnou na Google Disk
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: npm run sken
 
       - name: Záloha dat

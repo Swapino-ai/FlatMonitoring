@@ -101,6 +101,8 @@ model Property {
   /// Obce, ze kterych se nabidky k teto jednotce nepricitaji, oddelene carkou.
   /// Byt v Bohusovicich se nema poměřovat s Roudnici, i kdyz je blizko.
   excludedCities String?
+  /// Vstupuje nemovitost do sledovani trhu? Bez toho ji nocni sken preskoci.
+  sledovatTrh    Boolean @default(false)
 
   // --- Porizeni ---
   purchaseDate     DateTime
@@ -133,6 +135,7 @@ model Property {
   createdAt DateTime        @default(now())
   updatedAt DateTime        @updatedAt
   cadastre  CadastreRecord?
+  zarazeniInzeratu ZarazeniInzeratu[]
 }
 
 /// Hypoteka / uver — "zda vazne dluh na nich"
@@ -699,4 +702,83 @@ model PravidelnaPlatba {
   createdAt  DateTime @default(now())
 
   @@index([propertyId])
+}
+
+/// Inzerat z trhu. Kazdy jen jednou (zdroj + id inzeratu); sken ho jen aktualizuje.
+model Inzerat {
+  id          String  @id @default(cuid())
+  source      String
+  externalId  String
+  dealType    String // SALE | RENT
+  category    String
+  city        String
+  region      String?
+  district    String?
+  disposition String?
+  areaM2      Float?
+  price       Float
+  pricePerM2  Float?
+  url         String?
+  latitude    Float?
+  longitude   Float?
+  /// Poloha urcena rucne v mape; sken ji neprepisuje
+  polohaRucne Boolean @default(false)
+
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  /// Inzerat uz na portalu neni (overeno u zarazenych)
+  zmizelAt    DateTime?
+
+  ceny     InzeratCena[]
+  zarazeni ZarazeniInzeratu[]
+  snimky   InzeratSnimek[]
+
+  @@unique([source, externalId])
+  @@index([category, dealType, city])
+}
+
+/// Historie ceny inzeratu: novy radek jen pri zmene
+model InzeratCena {
+  id         String   @id @default(cuid())
+  inzeratId  String
+  inzerat    Inzerat  @relation(fields: [inzeratId], references: [id], onDelete: Cascade)
+  price      Float
+  pricePerM2 Float?
+  at         DateTime @default(now())
+
+  @@index([inzeratId])
+}
+
+/// Vztah inzeratu k nemovitosti: NAVRH (ceka na rozhodnuti), ZARAZENO, VYRAZENO
+model ZarazeniInzeratu {
+  id          String    @id @default(cuid())
+  propertyId  String
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  inzeratId   String
+  inzerat     Inzerat   @relation(fields: [inzeratId], references: [id], onDelete: Cascade)
+  stav        String    @default("NAVRH")
+  /// Podobnost 0-100 (vzdalenost, plocha, dispozice)
+  skore       Float?
+  /// Aplikace doporucuje zaradit; rozhoduje ale uzivatel
+  doporuceno  Boolean   @default(false)
+  duvod       String?
+  rozhodnutoAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([propertyId, inzeratId])
+  @@index([propertyId, stav])
+}
+
+/// Screenshot stranky inzeratu (jen zarazene). Data cekaji v databazi, nez se presunou na Google Disk.
+model InzeratSnimek {
+  id        String   @id @default(cuid())
+  inzeratId String
+  inzerat   Inzerat  @relation(fields: [inzeratId], references: [id], onDelete: Cascade)
+  price     Float?
+  data      Bytes?
+  mime      String   @default("image/jpeg")
+  driveId   String?
+  createdAt DateTime @default(now())
+
+  @@index([inzeratId])
 }

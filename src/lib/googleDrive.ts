@@ -257,3 +257,20 @@ export async function odvolej(refreshToken: string): Promise<void> {
 }
 
 export const odkazNaSlozku = (id: string) => `https://drive.google.com/drive/folders/${id}`;
+
+/** Nahraje mensi soubor primo ze serveru (multipart). Na snimky inzeratu, kde nejde o prohlizec. */
+export async function nahrajPrimo(a: { rodicId: string; nazev: string; mime: string; data: Uint8Array }): Promise<string> {
+  const hranice = `fm${Date.now().toString(36)}`;
+  const meta = JSON.stringify({ name: a.nazev, parents: [a.rodicId] });
+  const telo = Buffer.concat([
+    Buffer.from(`--${hranice}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${hranice}\r\nContent-Type: ${a.mime}\r\n\r\n`),
+    Buffer.from(a.data),
+    Buffer.from(`\r\n--${hranice}--`),
+  ]);
+  const r = await drive("/files?uploadType=multipart&fields=id", {
+    method: "POST",
+    headers: { "Content-Type": `multipart/related; boundary=${hranice}` },
+    body: telo,
+  }, UPLOAD);
+  return (await json<{ id: string }>(r, "Nahrání snímku")).id;
+}

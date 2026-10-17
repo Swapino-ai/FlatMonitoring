@@ -13,14 +13,15 @@ import { ikonaDomecek } from "@/lib/mapaIkona";
  */
 export interface BodOkoli {
   lat: number; lon: number;
-  druh: "PRODEJ" | "NAJEM";
+  druh: "PRODEJ" | "NAJEM" | "NAVRH";
   /** Radky popisu v okne po klepnuti. */
   popis: string[];
   url?: string | null;
 }
 
 const ZADNE_OKOLI: BodOkoli[] = [];
-const BARVY_OKOLI = { PRODEJ: "#7c3aed", NAJEM: "#0d9488" } as const;
+const BARVY_OKOLI = { PRODEJ: "#7c3aed", NAJEM: "#0d9488", NAVRH: "#9ca3af" } as const;
+const NAZVY_OKOLI = { PRODEJ: "Prodej", NAJEM: "Nájem", NAVRH: "Návrhy" } as const;
 
 export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72", zoom = 17, okoli = ZADNE_OKOLI }: {
   latitude: number | null;
@@ -49,10 +50,11 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
   const ikona = useRef<DivIcon | null>(null);
   const vrstvaOkoli = useRef<LayerGroup | null>(null);
   const [pripravena, setPripravena] = useState(false);
-  const [druhy, setDruhy] = useState({ PRODEJ: true, NAJEM: true });
+  const [druhy, setDruhy] = useState({ PRODEJ: true, NAJEM: true, NAVRH: true });
   const pocty = {
     PRODEJ: okoli.filter((b) => b.druh === "PRODEJ").length,
     NAJEM: okoli.filter((b) => b.druh === "NAJEM").length,
+    NAVRH: okoli.filter((b) => b.druh === "NAVRH").length,
   };
   const oknaVychozi = useRef(true);
 
@@ -226,13 +228,13 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
       </div>
       {okoli.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-          <span className="text-ink-muted">Srovnatelné nabídky, ze kterých vznikl odhad:</span>
-          {(["PRODEJ", "NAJEM"] as const).map((d) => pocty[d] > 0 && (
+          <span className="text-ink-muted">Nabídky na mapě:</span>
+          {(["PRODEJ", "NAJEM", "NAVRH"] as const).map((d) => pocty[d] > 0 && (
             <label key={d} className="flex cursor-pointer items-center gap-1.5">
               <input type="checkbox" checked={druhy[d]} onChange={(e) => setDruhy((x) => ({ ...x, [d]: e.target.checked }))}
                 className="h-3.5 w-3.5 rounded border-line accent-accent" />
               <span className="h-2.5 w-2.5 rounded-full" style={{ background: BARVY_OKOLI[d] }} aria-hidden />
-              {d === "PRODEJ" ? "Prodej" : "Nájem"} ({pocty[d]})
+              {NAZVY_OKOLI[d]} ({pocty[d]})
             </label>
           ))}
         </div>

@@ -25,7 +25,7 @@ export function ScanButton({ disabled }: { disabled?: boolean }) {
 
       const kroky: Krok[] = data.kroky ?? [];
       if (kroky.length === 0) {
-        setPostup("Není co skenovat — nejdřív přidej nemovitost.");
+        setPostup("Není co skenovat — u nemovitostí zapni „Sledovat trh“ (stránka Ocenění a trh).");
         return;
       }
 
@@ -56,14 +56,7 @@ export function ScanButton({ disabled }: { disabled?: boolean }) {
         if (selhalo.length && pocet === 0) {
           zpravy.push(`${k.popis}: nezdařilo se — ${selhalo[0].message ?? "portál neodpověděl"}`);
         } else {
-          if (d.valuation) {
-            zpravy.push(`${k.popis}: ${pocet} nabídek → nová hodnota ${Math.round(d.valuation.value).toLocaleString("cs-CZ")} Kč`);
-          } else if (d.rent) {
-            const castka = `${Math.round(d.rent.monthlyRent).toLocaleString("cs-CZ")} Kč/měs`;
-            zpravy.push(`${k.popis}: ${pocet} nabídek → ${castka}${d.rent.zapsano ? " (zapsáno)" : ` (beze změny — ${d.rent.duvod})`}`);
-          } else {
-            zpravy.push(`${k.popis}: ${pocet} nabídek`);
-          }
+          zpravy.push(`${k.popis}: ${pocet} nabídek, ${d.novych ?? 0} nových, ${d.navrhu ?? 0} návrhů k zařazení`);
         }
         setHotovo([...zpravy]);
       }

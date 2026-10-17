@@ -33,6 +33,11 @@ export async function exportujVse(): Promise<Zaloha> {
       valuation: await prisma.valuation.findMany(),
       rentEstimate: await prisma.rentEstimate.findMany(),
       excludedListing: await prisma.excludedListing.findMany(),
+      inzerat: await prisma.inzerat.findMany(),
+      inzeratCena: await prisma.inzeratCena.findMany(),
+      zarazeniInzeratu: await prisma.zarazeniInzeratu.findMany(),
+      // Snimky bez dat obrazku (ty jsou na Google Disku, nebo cekaji na presun) — zaloha by jinak byla obrovska
+      inzeratSnimek: await prisma.inzeratSnimek.findMany({ select: { id: true, inzeratId: true, price: true, mime: true, driveId: true, createdAt: true } }),
       marketScan: await prisma.marketScan.findMany(),
       marketListing: await prisma.marketListing.findMany(),
       marketIndex: await prisma.marketIndex.findMany(),
@@ -64,6 +69,10 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
 
   return prisma.$transaction(async (tx) => {
     // Mazani v opacnem poradi nez vkladani, kvuli cizim klicum
+    await tx.inzeratSnimek.deleteMany();
+    await tx.inzeratCena.deleteMany();
+    await tx.zarazeniInzeratu.deleteMany();
+    await tx.inzerat.deleteMany();
     await tx.marketListing.deleteMany();
     await tx.marketScan.deleteMany();
     await tx.marketIndex.deleteMany();
@@ -115,6 +124,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       region: s(x.region),
       scanRadiusKm: x.scanRadiusKm == null ? null : c(x.scanRadiusKm),
       excludedCities: s(x.excludedCities),
+      sledovatTrh: x.sledovatTrh === true,
       disposition: s(x.disposition), areaM2: c(x.areaM2),
       floor: x.floor == null ? null : Math.round(c(x.floor)),
       hasBalcony: !!x.hasBalcony, hasCellar: !!x.hasCellar, hasParking: !!x.hasParking,
@@ -270,6 +280,32 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       createdAt: dPovinne(x.createdAt ?? new Date()),
     }));
     if (vyrazene.length) obnoveno.excludedListing = (await tx.excludedListing.createMany({ data: vyrazene })).count;
+
+    // Databaze trhu: inzeraty, historie cen, zarazeni k nemovitostem, snimky (bez obrazku)
+    const inzeraty = (t.inzerat as any[] ?? []).map((x) => ({
+      id: String(x.id), source: String(x.source), externalId: String(x.externalId), dealType: String(x.dealType),
+      category: String(x.category), city: String(x.city), region: s(x.region), district: s(x.district),
+      disposition: s(x.disposition), areaM2: x.areaM2 == null ? null : c(x.areaM2), price: c(x.price),
+      pricePerM2: x.pricePerM2 == null ? null : c(x.pricePerM2), url: s(x.url),
+      latitude: x.latitude == null ? null : c(x.latitude), longitude: x.longitude == null ? null : c(x.longitude),
+      polohaRucne: x.polohaRucne === true, firstSeenAt: dPovinne(x.firstSeenAt), lastSeenAt: dPovinne(x.lastSeenAt), zmizelAt: d(x.zmizelAt),
+    }));
+    if (inzeraty.length) obnoveno.inzerat = (await tx.inzerat.createMany({ data: inzeraty })).count;
+    const ceny = (t.inzeratCena as any[] ?? []).map((x) => ({
+      id: String(x.id), inzeratId: String(x.inzeratId), price: c(x.price), pricePerM2: x.pricePerM2 == null ? null : c(x.pricePerM2), at: dPovinne(x.at),
+    }));
+    if (ceny.length) obnoveno.inzeratCena = (await tx.inzeratCena.createMany({ data: ceny })).count;
+    const zarazeni = (t.zarazeniInzeratu as any[] ?? []).map((x) => ({
+      id: String(x.id), propertyId: String(x.propertyId), inzeratId: String(x.inzeratId), stav: String(x.stav),
+      skore: x.skore == null ? null : c(x.skore), doporuceno: x.doporuceno === true, duvod: s(x.duvod),
+      rozhodnutoAt: d(x.rozhodnutoAt), createdAt: dPovinne(x.createdAt ?? new Date()),
+    }));
+    if (zarazeni.length) obnoveno.zarazeniInzeratu = (await tx.zarazeniInzeratu.createMany({ data: zarazeni })).count;
+    const snimky = (t.inzeratSnimek as any[] ?? []).filter((x) => x.driveId).map((x) => ({
+      id: String(x.id), inzeratId: String(x.inzeratId), price: x.price == null ? null : c(x.price),
+      mime: String(x.mime ?? "image/jpeg"), driveId: String(x.driveId), createdAt: dPovinne(x.createdAt),
+    }));
+    if (snimky.length) obnoveno.inzeratSnimek = (await tx.inzeratSnimek.createMany({ data: snimky })).count;
 
     // Denik nema cizi klice, muze se obnovit az nakonec
     const behy = (t.scanRun as any[] ?? []).map((x) => ({

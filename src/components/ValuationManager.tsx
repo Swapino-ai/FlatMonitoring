@@ -16,6 +16,7 @@ const SOURCE_LABELS: Record<string, string> = {
   MANUAL: "ruční odhad",
   EXPERT: "znalecký posudek",
   MARKET_SCAN: "sken trhu",
+  VYBER: "vybrané nabídky",
   INDEX: "index",
 };
 

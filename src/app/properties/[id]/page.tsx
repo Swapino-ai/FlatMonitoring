@@ -481,7 +481,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                 </>
               ) : (
                 <p className="mt-2 text-sm text-ink-secondary">
-                  Odhad zatím nevznikl. Sken běží každou noc; ručně ho pustíš níž u tržního nájmu.
+                  Odhad zatím nevznikl. Zapni sledování trhu a zařaď nabídky na stránce Ocenění a trh.
                 </p>
               )}
             </div>
@@ -836,7 +836,7 @@ function Row({ label, value, strong, muted, note, term }: {
 }
 
 function valuationSourceLabel(s: string): string {
-  return { MANUAL: "ruční", EXPERT: "znalec", MARKET_SCAN: "sken trhu", INDEX: "index", PURCHASE_PRICE: "pořizovací cena" }[s] ?? s;
+  return { MANUAL: "ruční", EXPERT: "znalec", MARKET_SCAN: "sken trhu", VYBER: "vybrané nabídky", INDEX: "index", PURCHASE_PRICE: "pořizovací cena" }[s] ?? s;
 }
 
 function buildAmortization(loans: { principal: number; interestRate: number; termMonths: number; startDate: Date; monthlyPayment: number }[]) {

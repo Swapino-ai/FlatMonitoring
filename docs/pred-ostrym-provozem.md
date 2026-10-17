@@ -33,6 +33,11 @@ Odškrtávej postupně.
 - [ ] Pravidelné platby jsou jen přehled dluhů (datum zaplacení); **nevstupují do Pohybů, cash flow ani daní**.
 - [ ] Zapsat zaplacení smí **kdokoli přihlášený** (pravidelné platby), i uživatel jen pro čtení. Rozhodnout, jestli to v ostré tak nechat.
 
+- [ ] **Sledování trhu:** u nemovitostí, které se mají oceňovat, zapnout „Sledovat trh“ (Ocenění a trh) a zařadit nabídky.
+  Staré automatické ocenění (zdroj „sken trhu“) zůstává v historii; nové vzniká jen ze zařazených nabídek.
+- [ ] Volitelně přidat do GitHub Secrets `GOOGLE_CLIENT_ID` a `GOOGLE_CLIENT_SECRET` (stejné jako ve Vercelu) — screenshoty zařazených
+  inzerátů se pak nahrají na Disk rovnou v nočním skenu. Bez nich čekají v databázi a přesunou se při otevření stránky trhu.
+
 ## C. Přihlášení a oprávnění
 
 - [ ] Silný `AUTH_SECRET` (jen ve Vercelu, ne v repozitáři), min. 32 náhodných znaků.

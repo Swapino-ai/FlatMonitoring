@@ -1,119 +1,158 @@
 /**
- * Nocni sken trhu — jediny, ktery aplikace ma.
+ * Nocni sken trhu.
  *
- * Projde vsechny nemovitosti, stahne prodejni i najemni nabidky, precenit
- * a odhadne najem. Bezi kazdou noc; do historie se ale zapisuje jen zmena,
- * takze denni beh nevyrobi 365 skoro shodnych radku za rok.
+ * Projde jen nemovitosti, ktere maji zapnute "Sledovat trh". Nabidky ze Sreality
+ * ulozi do databaze trhu (kazdy inzerat jednou, s historii ceny), navrhne nove
+ * k zarazeni a prepocita odhad JEN ze zarazenych inzeratu. Z nevybranych nabidek
+ * nic neoceňuje.
+ *
+ * U zarazenych inzeratu navic overi, jestli jeste existuji, a porizuje jejich
+ * screenshot (kdyz chybi nebo se zmenila cena).
  *
  * Spousti se z GitHub Actions (.github/workflows/nocni-sken.yml) — Sreality
  * odmitaji dotazy z datovych center a Vercel ma casovy limit.
  */
 import { PrismaClient } from "@prisma/client";
-import { odhadniNajemPriZmene, runScan, valuateFromMarket } from "../src/lib/market";
-import { NEMOVITOST_MAP, nazevNemovitosti } from "../src/lib/catalogs";
+import { NEMOVITOST_MAP } from "../src/lib/catalogs";
 import { doplnPolohu } from "../src/lib/geokodovani";
-import { uklidDenik, ukonciBeh, zacniBeh } from "../src/lib/scanLog";
+import { uklidDenik } from "../src/lib/scanLog";
+import { skenujNemovitost } from "../src/lib/market/sken";
+import { aktualizujOdhad } from "../src/lib/market/inzeraty";
+import { presunSnimkyNaDisk } from "../src/lib/market/snimky";
+import { HLAVICKY_PROHLIZECE, sleep } from "../src/lib/market/util";
 
 const prisma = new PrismaClient();
+
+/** Jednorazove: prevede dosavadni nabidky a vyrazene do nove databaze trhu. */
+async function prevedStareNabidky() {
+  if (await prisma.inzerat.count() > 0) return;
+  const stare = await prisma.marketListing.findMany({ where: { externalId: { not: null } }, orderBy: { scrapedAt: "asc" } });
+  if (stare.length === 0) return;
+  const posledni = new Map<string, typeof stare[number]>();
+  const prvni = new Map<string, Date>();
+  for (const s of stare) {
+    const k = `${s.source}|${s.externalId}`;
+    if (!prvni.has(k)) prvni.set(k, s.scrapedAt);
+    posledni.set(k, s);
+  }
+  for (const [k, s] of posledni) {
+    await prisma.inzerat.create({
+      data: {
+        source: s.source, externalId: s.externalId!, dealType: s.dealType, category: s.category, city: s.city,
+        region: s.region, district: s.district, disposition: s.disposition, areaM2: s.areaM2, price: s.price,
+        pricePerM2: s.pricePerM2, url: s.url, latitude: s.latitude, longitude: s.longitude,
+        firstSeenAt: prvni.get(k)!, lastSeenAt: s.scrapedAt,
+        ceny: { create: { price: s.price, pricePerM2: s.pricePerM2, at: s.scrapedAt } },
+      },
+    });
+  }
+  // Drive vyrazene nabidky zustanou u nemovitosti vyrazene
+  for (const v of await prisma.excludedListing.findMany()) {
+    const i = await prisma.inzerat.findUnique({ where: { source_externalId: { source: v.source, externalId: v.externalId } } });
+    if (!i) continue;
+    await prisma.zarazeniInzeratu.upsert({
+      where: { propertyId_inzeratId: { propertyId: v.propertyId, inzeratId: i.id } },
+      update: { stav: "VYRAZENO" },
+      create: { propertyId: v.propertyId, inzeratId: i.id, stav: "VYRAZENO", duvod: v.reason ?? "vyřazeno dříve", rozhodnutoAt: v.createdAt },
+    });
+  }
+  console.log(`Převedeno ${posledni.size} dosavadních nabídek do databáze trhu.`);
+}
+
+/** Overi existenci zarazenych inzeratu a porizuje jejich screenshoty. */
+async function zarazeneInzeraty() {
+  const inzeraty = await prisma.inzerat.findMany({
+    where: { zarazeni: { some: { stav: "ZARAZENO" } }, url: { not: null }, zmizelAt: null },
+    include: { snimky: { orderBy: { createdAt: "desc" }, take: 1 } },
+  });
+  if (inzeraty.length === 0) return;
+
+  let chromium: typeof import("playwright").chromium | null = null;
+  try {
+    chromium = (await import("playwright")).chromium;
+  } catch {
+    console.log("Playwright není k dispozici, screenshoty se přeskočí.");
+  }
+  const prohlizec = chromium ? await chromium.launch().catch((e) => { console.log("Prohlížeč nešel spustit:", e.message); return null; }) : null;
+  const kontext = prohlizec ? await prohlizec.newContext({
+    viewport: { width: 1280, height: 2000 }, locale: "cs-CZ", userAgent: HLAVICKY_PROHLIZECE["User-Agent"],
+  }) : null;
+
+  let snimku = 0;
+  let zmizelo = 0;
+  for (const i of inzeraty) {
+    const potrebaSnimek = !i.snimky[0] || (i.snimky[0].price != null && Math.abs(i.snimky[0].price - i.price) >= 1);
+    try {
+      if (kontext && potrebaSnimek) {
+        const stranka = await kontext.newPage();
+        const odpoved = await stranka.goto(i.url!, { waitUntil: "domcontentloaded", timeout: 45_000 });
+        const stav = odpoved?.status() ?? 0;
+        if (stav === 404 || stav === 410 || !stranka.url().includes("/detail/")) {
+          await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: new Date() } });
+          zmizelo++;
+        } else {
+          // Souhlas s cookies (Seznam CMP) by jinak prekryl celou stranku
+          await stranka.getByRole("button", { name: /souhlasím|přijmout vše|rozumím/i }).first().click({ timeout: 4000 }).catch(() => undefined);
+          await stranka.waitForTimeout(2500);
+          const data = await stranka.screenshot({ type: "jpeg", quality: 65 });
+          await prisma.inzeratSnimek.create({ data: { inzeratId: i.id, price: i.price, data: new Uint8Array(data) } });
+          snimku++;
+        }
+        await stranka.close();
+      } else {
+        // Bez prohlizece aspon overime, ze inzerat existuje
+        const r = await fetch(i.url!, { headers: HLAVICKY_PROHLIZECE, redirect: "follow" });
+        if (r.status === 404 || r.status === 410 || !r.url.includes("/detail/")) {
+          await prisma.inzerat.update({ where: { id: i.id }, data: { zmizelAt: new Date() } });
+          zmizelo++;
+        }
+      }
+    } catch (e) {
+      console.log(`  ${i.externalId}: ${e instanceof Error ? e.message : e}`);
+    }
+    await sleep(1500);
+  }
+  await prohlizec?.close();
+  console.log(`Zařazené inzeráty: ${inzeraty.length}, nových screenshotů ${snimku}, zmizelo z trhu ${zmizelo}.`);
+}
 
 async function main() {
   const zacatek = new Date();
   console.log(`[${zacatek.toISOString()}] Noční sken trhu`);
 
-  const vsechny = await prisma.property.findMany({ where: { status: { not: "SOLD" } } });
-  const skenovatelne = vsechny.filter((p) => NEMOVITOST_MAP.get(p.type)?.srealityCesta);
+  await prevedStareNabidky();
 
-  console.log(`${vsechny.length} nemovitostí, z toho ${skenovatelne.length} se skenuje.`);
-  if (skenovatelne.length === 0) return;
+  const sledovane = (await prisma.property.findMany({ where: { status: { not: "SOLD" }, sledovatTrh: true } }))
+    .filter((p) => NEMOVITOST_MAP.get(p.type)?.srealityCesta);
+  console.log(`${sledovane.length} nemovitostí se sleduje.`);
 
-  // Kraj a souradnice u tech, kterym chybi — bez kraje neni zaloha pro obce
-  // bez vlastniho vypisu z ceho vyjit
-  for (const p of skenovatelne) {
-    if (p.region && p.latitude != null) continue;
-    const n = await doplnPolohu(p.id);
-    if (n?.region) {
-      p.region = n.region;
-      p.latitude = n.latitude;
-      p.longitude = n.longitude;
-      console.log(`  ${p.name}: doplněn kraj ${n.region}`);
-    }
-  }
-
-  // Jeden dotaz na kombinaci typ + mesto + dispozice — portaly zbytecne
-  // nezatezujeme tim, ze bychom se na totez ptali u kazde nemovitosti znovu
-  const dotazy = new Map<string, typeof skenovatelne[number]>();
-  for (const p of skenovatelne) dotazy.set(`${p.type}|${p.city}|${p.disposition}`, p);
-
-  console.log(`\nStahuji trh (${dotazy.size} kombinací × prodej i pronájem):`);
-  let ok = 0;
   let selhalo = 0;
-
-  for (const q of dotazy.values()) {
-    for (const dealType of ["SALE", "RENT"] as const) {
-      const results = await runScan({
-        city: q.city,
-        district: q.district ?? undefined,
-        disposition: q.disposition ?? undefined,
-        areaM2: q.areaM2,
-        category: q.type,
-        region: q.region ?? undefined,
-        dealType,
-      });
-      for (const r of results) {
-        const popis = `${nazevNemovitosti(q.type)} ${q.city} ${q.disposition ?? ""} ${dealType === "SALE" ? "prodej" : "pronájem"}`;
-        console.log(`  ${popis.padEnd(42)} ${r.status} (${r.count})${r.message ? " — " + r.message : ""}`);
-        r.status === "FAILED" ? selhalo++ : ok++;
-      }
+  let ok = 0;
+  for (const p of sledovane) {
+    if (!p.region || p.latitude == null) await doplnPolohu(p.id);
+    const { vysledky, navrhu } = await skenujNemovitost(p.id, "CRON_NOCNI");
+    for (const v of vysledky) {
+      const typ = v.dealType === "SALE" ? "prodej " : "pronájem";
+      console.log(`  ${p.name.padEnd(30)} ${typ} ${v.chyba ? `SELHALO — ${v.chyba}` : `${v.nalezeno} nabídek, ${v.novych} nových, ${v.zmenCeny} změn ceny`}`);
+      if (v.chyba) selhalo++; else ok++;
     }
+    console.log(`  ${"".padEnd(30)} ${navrhu} nových návrhů k zařazení`);
   }
 
-  console.log(`\nPřeceňuji a odhaduji nájmy:`);
-  for (const p of skenovatelne) {
-    // Prodejni cena a najem jsou dva ruzne vysledky, proto i dva zaznamy
-    // v deniku — jinak by nebylo poznat, ktery z nich selhal
-    for (const dealType of ["SALE", "RENT"] as const) {
-      const beh = await zacniBeh({
-        trigger: "CRON_NOCNI", dealType, propertyId: p.id,
-        propertyName: p.name, city: p.city, category: p.type,
-      });
-      try {
-        const v = dealType === "SALE"
-          ? await valuateFromMarket(p.id)
-          : await odhadniNajemPriZmene(p.id);
-
-        if (!v) {
-          const duvod = "málo srovnatelných nabídek, odhad nevznikl";
-          console.log(`  ${p.name} ${dealType === "SALE" ? "cena" : "nájem"}: ${duvod}`);
-          await ukonciBeh(beh, { status: "PRAZDNY", result: duvod });
-          continue;
-        }
-
-        const castka = "value" in v
-          ? `${v.value.toLocaleString("cs-CZ")} Kč`
-          : `${v.monthlyRent.toLocaleString("cs-CZ")} Kč/měs`;
-        const text = v.zapsano ? `${castka} zapsáno (${v.duvod})` : `${castka} — beze změny (${v.duvod})`;
-        console.log(`  ${p.name} ${dealType === "SALE" ? "cena " : "nájem"}: ${text}, ${v.stats.count} nabídek`);
-        await ukonciBeh(beh, {
-          status: "OK", listingsFound: v.stats.count,
-          okruhKm: v.stats.okruhKm, result: text,
-        });
-      } catch (e) {
-        const zprava = e instanceof Error ? e.message : String(e);
-        console.log(`  ${p.name} ${dealType}: selhalo — ${zprava}`);
-        await ukonciBeh(beh, { status: "SELHALO", message: zprava });
-        selhalo++;
-      }
-    }
+  await zarazeneInzeraty();
+  // Zmizele inzeraty v odhadu zustavaji (byly to skutecne nabidky), jen se prepocita
+  for (const p of sledovane) {
+    await aktualizujOdhad(p.id, "SALE");
+    await aktualizujOdhad(p.id, "RENT");
   }
+  const presunuto = await presunSnimkyNaDisk(50).catch(() => 0);
+  if (presunuto) console.log(`Na Google Disk přesunuto ${presunuto} snímků.`);
 
   const smazano = await uklidDenik();
-  if (smazano > 0) console.log(`\nZ deníku odklizeno ${smazano} záznamů starších 90 dnů.`);
+  if (smazano > 0) console.log(`Z deníku odklizeno ${smazano} záznamů starších 90 dnů.`);
 
   const s = ((Date.now() - zacatek.getTime()) / 1000).toFixed(0);
   console.log(`\nHotovo za ${s} s — ${ok} úspěšných dotazů, ${selhalo} selhalo.`);
-
-  // Nenulovy exit kod jen kdyz selhalo uplne vsechno — jedna nefunkcni obec
-  // nema shodit cely beh
   if (ok === 0 && selhalo > 0) process.exitCode = 1;
 }
 
