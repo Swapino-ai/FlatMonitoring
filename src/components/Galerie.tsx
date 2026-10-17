@@ -14,8 +14,21 @@ export interface PolozkaGalerie {
  * Galerie fotek inzeratu: mrizka nahledu, klik zvetsi fotku a v ni se lze posouvat
  * sipkami (tlacitka, klavesy ← →, tazeni prstem). Esc zavre zvetseni, pak galerii.
  */
-export function Galerie({ polozky, onZavrit }: { polozky: PolozkaGalerie[]; onZavrit: () => void }) {
-  const [index, setIndex] = useState<number | null>(null);
+export function Galerie({ polozky, onZavrit, rovnou }: {
+  polozky: PolozkaGalerie[];
+  onZavrit: () => void;
+  /** Otevrit rovnou zvetsenou polozku (bez mrizky nahledu); zavreni pak zavre celou galerii */
+  rovnou?: number;
+}) {
+  const [index, setIndexVnitrni] = useState<number | null>(rovnou ?? null);
+  // Kdyz se otevrelo rovnou zvetsene, mrizka se nezobrazuje: zmenseni = zavrit
+  const setIndex = useCallback((i: number | null | ((p: number | null) => number | null)) => {
+    setIndexVnitrni((p) => {
+      const n = typeof i === "function" ? i(p) : i;
+      if (n == null && rovnou != null) { onZavrit(); return p; }
+      return n;
+    });
+  }, [rovnou, onZavrit]);
   const startX = useRef<number | null>(null);
 
   const posun = useCallback((o: number) => {
@@ -24,7 +37,7 @@ export function Galerie({ polozky, onZavrit }: { polozky: PolozkaGalerie[]; onZa
 
   useEffect(() => {
     const klavesy = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { if (index != null) setIndex(null); else onZavrit(); }
+      if (e.key === "Escape") { if (index != null && rovnou == null) setIndex(null); else onZavrit(); }
       else if (index != null && e.key === "ArrowRight") posun(1);
       else if (index != null && e.key === "ArrowLeft") posun(-1);
     };
@@ -39,12 +52,12 @@ export function Galerie({ polozky, onZavrit }: { polozky: PolozkaGalerie[]; onZa
   if (index != null) {
     const p = polozky[index];
     return (
-      <div className="fixed inset-0 z-[2000] flex flex-col bg-black/95" onClick={() => setIndex(null)}>
+      <div className="fixed inset-0 z-[2000] flex flex-col bg-black/95" onClick={() => (rovnou != null ? onZavrit() : setIndex(null))}>
         <div className="flex items-center justify-between gap-3 p-3 text-sm text-white/80" onClick={(e) => e.stopPropagation()}>
           <span className="truncate">{index + 1} / {polozky.length}{p.popis ? ` · ${p.popis}` : ""}</span>
           <span className="flex shrink-0 gap-2">
             <a href={p.src} target="_blank" rel="noreferrer" className="rounded-full bg-white/15 px-3 py-1 hover:bg-white/25">Otevřít ↗</a>
-            <button type="button" className="rounded-full bg-white/15 px-3 py-1 hover:bg-white/25" onClick={() => setIndex(null)}>Všechny fotky</button>
+            {rovnou == null && <button type="button" className="rounded-full bg-white/15 px-3 py-1 hover:bg-white/25" onClick={() => setIndex(null)}>Všechny fotky</button>}
             <button type="button" className="rounded-full bg-white/15 px-3 py-1 hover:bg-white/25" onClick={onZavrit}>Zavřít ✕</button>
           </span>
         </div>

@@ -161,7 +161,7 @@ export function Comparables({ nabidky, tvojeKcM2, datumOceneni, poznamka, fotky 
           );
         })}
       </div>
-      {otevreny && <Galerie polozky={[{ src: `/api/snimek/${otevreny}`, popis: "Screenshot stránky inzerátu", posouvat: true }]} onZavrit={() => setOtevreny(null)} />}
+      {otevreny && <Galerie polozky={[{ src: `/api/snimek/${otevreny}`, popis: "Screenshot stránky inzerátu", posouvat: true }]} rovnou={0} onZavrit={() => setOtevreny(null)} />}
 
       {serazene.length > 8 && (
         <button onClick={() => setVse(!vse)} className="btn w-full border-dashed text-ink-secondary">
