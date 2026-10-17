@@ -15,7 +15,7 @@ import { platneHodnoty, type Profil } from "./profily";
 export const AI_MODEL = process.env.AI_MODEL || "claude-haiku-5-5";
 
 /** Parametry vyctene pred zavedenim profilu se prectou znovu (nove vlastnosti, jine typy). */
-export const PROFILY_OD = new Date("2026-10-17T22:00:00Z");
+export const PROFILY_OD = new Date("2026-10-17T20:30:00Z");
 
 /** Co se uklada do Inzerat.parametry */
 export interface AiParametry {
