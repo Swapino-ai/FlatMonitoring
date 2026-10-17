@@ -64,7 +64,11 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
     : skupinaState.error || skupinaState.success ? skupinaState
     : delState.error || delState.success ? delState : {};
 
-  const sSluzbami = services.filter((s) => vyuctovani.some((v) => v.serviceId === s.id));
+  // Spolecna vyuctovani (vice sluzeb jednim dokladem) se ukazuji zvlast jako jeden rozbalovaci radek
+  const jednotliva = vyuctovani.filter((v) => !v.batchId);
+  const davky = [...new Map(vyuctovani.filter((v) => v.batchId).map((v) => [v.batchId!, vyuctovani.filter((x) => x.batchId === v.batchId)])).entries()]
+    .sort((a, b) => (a[1][0].od < b[1][0].od ? 1 : -1));
+  const sSluzbami = services.filter((s) => jednotliva.some((v) => v.serviceId === s.id));
 
   return (
     <div>
@@ -74,8 +78,75 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
         <p className="py-3 text-center text-sm text-ink-muted">Zatím žádné vyúčtování od dodavatelů.</p>
       ) : (
         <div className="space-y-5">
+          {davky.length > 0 && (
+            <div>
+              <div className="mb-2 text-sm font-semibold">Společná vyúčtování</div>
+              <div className="divide-y divide-line/70 rounded-xl border border-line">
+                {davky.map(([id, casti]) => {
+                  const naklad = casti.reduce((a, v) => a + v.naklad, 0);
+                  const zal = casti.reduce((a, v) => a + v.zalohyDodavateli, 0);
+                  const vysl = zal - naklad;
+                  const otevrene = rozbaleno.has(`d:${id}`);
+                  const prvni = casti[0];
+                  return (
+                    <div key={id}>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3.5 py-2.5">
+                        <button type="button" onClick={() => prepni(`d:${id}`)} aria-expanded={otevrene} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                          <svg viewBox="0 0 20 20" className={`h-4 w-4 shrink-0 text-ink-muted transition-transform ${otevrene ? "rotate-90" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M8 5l5 5-5 5" /></svg>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium tabular-nums">{obdobi(prvni.od, prvni.do)}</span>
+                            <span className="block text-xs text-ink-muted">{casti.length} služeb{prvni.cisloFaktury ? ` · č. ${prvni.cisloFaktury}` : ""}</span>
+                          </span>
+                        </button>
+                        <div className="text-right">
+                          <div className="text-sm font-semibold tabular-nums">{czk(naklad)}</div>
+                          <div className={`text-xs tabular-nums ${vysl >= 0 ? "text-good" : "text-bad"}`}>{vysl >= 0 ? "přeplatek" : "nedoplatek"} {czk(Math.abs(vysl))}</div>
+                        </div>
+                        {canEdit && (
+                          <SmazatTlacitko action={delAction} id={prvni.id}
+                            potvrzeni={`Smazat společné vyúčtování ${obdobi(prvni.od, prvni.do)} u všech ${casti.length} služeb?`} />
+                        )}
+                      </div>
+                      {otevrene && (
+                        <table className="w-full border-t border-line/60 bg-surface-sunken/40 text-sm">
+                          <thead>
+                            <tr className="text-xs text-ink-muted">
+                              <th className="px-3.5 py-1.5 text-left font-medium">Služba</th>
+                              <th className="px-2 py-1.5 text-right font-medium">Zálohy</th>
+                              <th className="px-2 py-1.5 text-right font-medium">Skutečnost</th>
+                              <th className="px-3.5 py-1.5 text-right font-medium">Rozdíl</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {casti.map((v) => {
+                              const sl = services.find((x) => x.id === v.serviceId);
+                              const r = v.zalohyDodavateli - v.naklad;
+                              return (
+                                <tr key={v.id} className="border-t border-line/40">
+                                  <td className="px-3.5 py-1.5">{sl ? `${nazevDruhu(typy, sl.type)} · ${sl.provider}` : "—"}{sl?.notes && <span className="block text-xs italic text-ink-muted">{sl.notes}</span>}</td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums">{czk(v.zalohyDodavateli)}</td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums">{czk(v.naklad)}</td>
+                                  <td className={`px-3.5 py-1.5 text-right tabular-nums ${r >= 0 ? "text-good" : "text-bad"}`}>{r >= 0 ? "+" : "−"}{czk(Math.abs(r))}</td>
+                                </tr>
+                              );
+                            })}
+                            <tr className="border-t border-line font-semibold">
+                              <td className="px-3.5 py-1.5">Celkem</td>
+                              <td className="px-2 py-1.5 text-right tabular-nums">{czk(zal)}</td>
+                              <td className="px-2 py-1.5 text-right tabular-nums">{czk(naklad)}</td>
+                              <td className={`px-3.5 py-1.5 text-right tabular-nums ${vysl >= 0 ? "text-good" : "text-bad"}`}>{vysl >= 0 ? "+" : "−"}{czk(Math.abs(vysl))}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {sSluzbami.map((s) => {
-            const radky = vyuctovani.filter((v) => v.serviceId === s.id).sort((a, b) => (a.od < b.od ? 1 : -1));
+            const radky = jednotliva.filter((v) => v.serviceId === s.id).sort((a, b) => (a.od < b.od ? 1 : -1));
             return (
               <div key={s.id}>
                 <div className="mb-2 flex items-center gap-2.5">
