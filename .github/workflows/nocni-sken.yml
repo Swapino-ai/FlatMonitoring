@@ -53,6 +53,8 @@ jobs:
           # Volitelne: se stejnymi klici jako ve Vercelu se snimky nahraji rovnou na Google Disk
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          # AI cte text stranek inzeratu (typ domu, stav bytu...); bez klice se preskoci
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: npm run sken
 
       - name: Záloha dat

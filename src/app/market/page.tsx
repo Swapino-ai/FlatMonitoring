@@ -8,7 +8,7 @@ import { ScanButton } from "@/components/ScanButton";
 import { prisma } from "@/lib/db";
 import { analyzeProperty, loadProperties } from "@/lib/portfolio";
 import Link from "next/link";
-import { odhadZeZarazenych, vahaNabidky } from "@/lib/market/zarazeni";
+import { odhadZeZarazenych, vahaZarazeni } from "@/lib/market/zarazeni";
 import { OKNO_ODHADU } from "@/lib/market/inzeraty";
 import { denISO } from "@/lib/format";
 import { czk, czkCompact, dateCz, pct } from "@/lib/format";
@@ -25,7 +25,7 @@ export default async function MarketPage() {
   // Novy system: zarazene a navrzene nabidky po nemovitostech
   const zarazeni = await prisma.zarazeniInzeratu.findMany({
     where: { stav: { in: ["ZARAZENO", "NAVRH"] } },
-    include: { inzerat: { select: { dealType: true, pricePerM2: true, firstSeenAt: true, areaM2: true } } },
+    include: { inzerat: { select: { dealType: true, pricePerM2: true, firstSeenAt: true, areaM2: true, city: true, latitude: true, longitude: true, parametry: true } } },
   });
 
   const rows = analyses.map((a) => {
@@ -33,7 +33,7 @@ export default async function MarketPage() {
     const moje = zarazeni.filter((z) => z.propertyId === (p.oceneniPodle ?? p.id));
     const odhad = (d: "SALE" | "RENT") => odhadZeZarazenych(
       moje.filter((z) => z.stav === "ZARAZENO" && z.inzerat.dealType === d)
-        .map((z) => ({ datum: denISO(z.inzerat.firstSeenAt), pricePerM2: z.inzerat.pricePerM2 ?? 0, vaha: vahaNabidky(p, { areaM2: z.inzerat.areaM2, typDomu: z.typDomu, stavBytu: z.stavBytu, vahaRucne: z.vahaRucne }) })),
+        .map((z) => ({ datum: denISO(z.inzerat.firstSeenAt), pricePerM2: z.inzerat.pricePerM2 ?? 0, vaha: vahaZarazeni(p, z, z.inzerat) })),
       p.areaM2, OKNO_ODHADU,
     );
     const sale = odhad("SALE");

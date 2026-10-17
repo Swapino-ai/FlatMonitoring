@@ -10,9 +10,10 @@ import { prisma } from "@/lib/db";
 import { loadProperty } from "@/lib/portfolio";
 import { NEMOVITOST_MAP, nazevNemovitosti } from "@/lib/catalogs";
 import { denISO } from "@/lib/format";
+import { nahledAi } from "@/lib/market/aiNahled";
 import { odhadZeZarazenych } from "@/lib/market/zarazeni";
 import { OKNO_ODHADU, navrhniProNemovitost, korenOceneni, okruhNemovitosti } from "@/lib/market/inzeraty";
-import { vzdalenost, vahaNabidky } from "@/lib/market/zarazeni";
+import { polohaNabidky, vahaZarazeni, vzdalenost } from "@/lib/market/zarazeni";
 import { presunSnimkyNaDisk } from "@/lib/market/snimky";
 
 export const dynamic = "force-dynamic";
@@ -66,6 +67,7 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
     `Prodej i nájem: ${nazevNemovitosti(zdroj.type).toLowerCase()}${zdroj.disposition ? ` ${zdroj.disposition} (jen stejná dispozice)` : ""}, ${plochaOd}–${plochaDo} m²`,
     `do ${okruh.zaklad} km od obce ${zdroj.city}${okruh.pevny ? " (pevný okruh)" : `, při málo nabídkách až ${okruh.max} km`}; nabídka bez polohy jen ze stejné obce.`,
     vyloucene.length ? `Nezahrnuje se: ${vyloucene.join(", ")}.` : "",
+    `Váha nabídky: podobná plocha, stejný typ domu a stav (tvoje volba, jinak co AI vyčte z inzerátu) a poloha — stejná obec 1,5×, okolí do 5 km 1×, dál ¾×.`,
     `Odhad = vážený průměr a vážený medián Kč/m² (váha podle podobnosti) ze zařazených nabídek, které se objevily za poslední 2 měsíce, × ${property.areaM2} m²${koren !== id && korenP ? ` (nabídky sdílené s ${korenP.name})` : ""}.`,
   ].filter(Boolean).join(" ");
 
@@ -88,7 +90,8 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
     const i = z.inzerat;
     return {
       typDomu: z.typDomu, stavBytu: z.stavBytu, vahaRucne: z.vahaRucne,
-      vaha: vahaNabidky(property, { areaM2: i.areaM2, typDomu: z.typDomu, stavBytu: z.stavBytu, vahaRucne: z.vahaRucne }),
+      vaha: vahaZarazeni(property, z, i),
+      ai: nahledAi(i.parametry), fotkyUrl: i.fotkyUrl, stejnaObec: polohaNabidky(property, i).stejnaObec,
       id: z.id, stav: z.stav as RadekTrhu["stav"], skore: z.skore, doporuceno: z.doporuceno, duvod: z.duvod,
       dealType: i.dealType === "RENT" ? "RENT" : "SALE", disposition: i.disposition, areaM2: i.areaM2,
       price: i.price, pricePerM2: i.pricePerM2, city: i.city, district: i.district, url: i.url,

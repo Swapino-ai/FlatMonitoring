@@ -1,4 +1,4 @@
-import { median, odhadZeZarazenych, ohodnot, vahaNabidky, vazenyMedian, vazenyPrumer } from "../src/lib/market/zarazeni";
+import { median, odhadZeZarazenych, ohodnot, vahaNabidky, vahaZarazeni, vazenyMedian, vazenyPrumer, zakladObce } from "../src/lib/market/zarazeni";
 
 let chyb = 0;
 const over = (n: string, ok: boolean, info?: unknown) => { if (!ok) { chyb++; console.log("CHYBA", n, info ?? ""); } };
@@ -36,6 +36,15 @@ const nn = { areaM2: 60, typDomu: "PANEL", stavBytu: "PRED_REKONSTRUKCI" };
 over("vaha stejny byt", vahaNabidky(nn, { areaM2: 60, typDomu: "PANEL", stavBytu: "PRED_REKONSTRUKCI", vahaRucne: null }) === 8);
 over("vaha jiny", vahaNabidky(nn, { areaM2: 75, typDomu: "CIHLA", stavBytu: "PO_REKONSTRUKCI", vahaRucne: null }) === 0.25);
 over("vaha castecna vs pred", vahaNabidky(nn, { areaM2: 60, typDomu: "PANEL", stavBytu: "CASTECNA_REKONSTRUKCE", vahaRucne: null }) === 4);
+over("vaha stejna obec", vahaNabidky(nn, { areaM2: 60, typDomu: null, stavBytu: null, vahaRucne: null, stejnaObec: true, km: 1 }) === 3);
+over("vaha daleko", vahaNabidky(nn, { areaM2: 60, typDomu: null, stavBytu: null, vahaRucne: null, stejnaObec: false, km: 12 }) === 1.5);
+over("zaklad obce", zakladObce("Nový Bor - Arnultovice") === "nový bor");
+over("vaha z AI", vahaZarazeni({ ...nn, city: "Tanvald", latitude: null, longitude: null },
+  { typDomu: null, stavBytu: null, vahaRucne: null },
+  { areaM2: 60, city: "Tanvald", latitude: null, longitude: null, parametry: { typDomu: "PANEL", stavBytu: "PRED_REKONSTRUKCI" } }) === 12);
+over("rucni ma prednost pred AI", vahaZarazeni({ ...nn, city: "X", latitude: null, longitude: null },
+  { typDomu: "CIHLA", stavBytu: null, vahaRucne: null },
+  { areaM2: 60, city: "Y", latitude: null, longitude: null, parametry: { typDomu: "PANEL" } }) === 1);
 over("vaha rucne", vahaNabidky(nn, { areaM2: 75, typDomu: null, stavBytu: null, vahaRucne: 3 }) === 3);
 
 console.log(chyb ? `${chyb} chyb` : "vše v pořádku");

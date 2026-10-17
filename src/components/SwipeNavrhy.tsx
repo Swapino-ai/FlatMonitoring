@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { rozhodniInzeraty } from "@/lib/trhActions";
 import { czk, dateCz } from "@/lib/format";
 import type { RadekTrhu } from "./TrhNemovitosti";
+import { AiInfo } from "./AiInfo";
 
 /**
  * Prochazeni navrhu jeden po druhem: tahnout doprava = zaradit, doleva = vyradit,
@@ -120,6 +121,17 @@ export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec }: 
               <div><div className="label">Vzdálenost</div><div className="font-medium">{d != null ? `${d.toFixed(1).replace(".", ",")} km` : "neznámá"}</div></div>
             </div>
             {r.duvod && <p className="mt-3 text-xs text-ink-muted">{r.duvod}</p>}
+            {r.ai && <div className="mt-3"><AiInfo ai={r.ai} /></div>}
+            {(r.fotkyUrl?.length ?? 0) > 0 && (
+              <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1" onPointerDown={(e) => e.stopPropagation()}>
+                {r.fotkyUrl!.map((src, k) => (
+                  <a key={src} href={src} target="_blank" rel="noreferrer" className="shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={src} alt={`Fotka ${k + 1}`} loading="lazy" referrerPolicy="no-referrer" className="h-28 w-40 rounded-lg object-cover" />
+                  </a>
+                ))}
+              </div>
+            )}
             {r.url && !r.url.includes("/x/x/") && (
               <a href={r.url} target="_blank" rel="noreferrer noopener" onPointerDown={(e) => e.stopPropagation()}
                 className="mt-4 inline-block text-sm font-medium text-accent hover:underline">Otevřít inzerát na Sreality ↗</a>

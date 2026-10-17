@@ -20,6 +20,7 @@ import { skenujNemovitost } from "../src/lib/market/sken";
 import { aktualizujSkupinu } from "../src/lib/market/inzeraty";
 import { presunSnimkyNaDisk } from "../src/lib/market/snimky";
 import { jeNastaveno } from "../src/lib/googleDrive";
+import { doplnParametry } from "./ai-parametry";
 import { HLAVICKY_PROHLIZECE, sleep } from "../src/lib/market/util";
 
 const prisma = new PrismaClient();
@@ -152,6 +153,8 @@ async function main() {
   }
 
   await zarazeneInzeraty();
+  // AI precte text stranek novych navrhu a zarazenych (typ domu, stav...) — pred prepoctem vah
+  await doplnParametry(prisma, 150).catch((e) => console.log("AI parametry selhaly:", e instanceof Error ? e.message : e));
   // Zmizele inzeraty v odhadu zustavaji (byly to skutecne nabidky), jen se prepocita
   for (const p of sledovane) {
     await aktualizujSkupinu(p.id);

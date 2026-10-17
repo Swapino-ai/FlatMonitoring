@@ -141,11 +141,12 @@ const PORADI_STAVU: Record<string, number> = { PRED_REKONSTRUKCI: 0, CASTECNA_RE
 
 /**
  * Vaha zarazene nabidky podle podobnosti s nemovitosti: cim podobnejsi byt, tim vic urcuje cenu.
- * Plocha 1–2× (stejna = 2×), typ domu: shoda 2×, neshoda ½×; stav: shoda 2×, sousedni 1×, vzdaleny ½×; neznamo 1×. Rucni vaha ma prednost.
+ * Plocha 1–2× (stejna = 2×), typ domu: shoda 2×, neshoda ½×; stav: shoda 2×, sousedni 1×, vzdaleny ½×;
+ * poloha: stejna obec 1,5×, okoli do 5 km 1×, dal ¾×; neznamo 1×. Rucni vaha ma prednost.
  */
 export function vahaNabidky(
   n: { areaM2: number; typDomu: string | null; stavBytu: string | null },
-  i: { areaM2: number | null; typDomu: string | null; stavBytu: string | null; vahaRucne: number | null },
+  i: { areaM2: number | null; typDomu: string | null; stavBytu: string | null; vahaRucne: number | null; stejnaObec?: boolean; km?: number | null },
 ): number {
   if (i.vahaRucne != null) return i.vahaRucne;
   let v = 1;
@@ -156,7 +157,44 @@ export function vahaNabidky(
     const rozdil = Math.abs((PORADI_STAVU[n.stavBytu] ?? 0) - (PORADI_STAVU[i.stavBytu] ?? 0));
     v *= rozdil === 0 ? 2 : rozdil === 1 ? 1 : 0.5;
   }
+  if (i.stejnaObec) v *= 1.5;
+  else if (i.km != null) v *= i.km <= 5 ? 1 : 0.75;
   return Math.round(v * 100) / 100;
+}
+
+/** Obec bez casti ("Novy Bor - Arnultovice" -> "novy bor"), pro porovnani. */
+export function zakladObce(obec: string | null | undefined): string {
+  return (obec ?? "").split(/\s+-\s+|,/)[0].trim().toLocaleLowerCase("cs");
+}
+
+type Poloha = { city: string | null; latitude: number | null; longitude: number | null };
+
+/** Je nabidka ze stejne obce jako nemovitost, a jak daleko je. */
+export function polohaNabidky(n: Poloha, i: Poloha): { stejnaObec: boolean; km: number | null } {
+  const km = n.latitude != null && n.longitude != null && i.latitude != null && i.longitude != null
+    ? vzdalenost({ lat: n.latitude, lon: n.longitude }, { lat: i.latitude, lon: i.longitude }) : null;
+  return { stejnaObec: !!n.city && zakladObce(n.city) === zakladObce(i.city), km };
+}
+
+/** Typ domu a stav: rucni volba u zarazeni, jinak to, co AI vycetla z inzeratu. */
+export function vlastnostiNabidky(z: { typDomu: string | null; stavBytu: string | null }, parametry: unknown) {
+  const p = (parametry ?? {}) as { typDomu?: string | null; stavBytu?: string | null };
+  return {
+    typDomu: z.typDomu ?? p.typDomu ?? null,
+    stavBytu: z.stavBytu ?? p.stavBytu ?? null,
+    typAi: !z.typDomu && !!p.typDomu,
+    stavAi: !z.stavBytu && !!p.stavBytu,
+  };
+}
+
+/** Vaha zarazeni: spoji rucni volby, AI parametry inzeratu a polohu. */
+export function vahaZarazeni(
+  n: Poloha & { areaM2: number; typDomu: string | null; stavBytu: string | null },
+  z: { typDomu: string | null; stavBytu: string | null; vahaRucne: number | null },
+  i: Poloha & { areaM2: number | null; parametry?: unknown },
+): number {
+  const v = vlastnostiNabidky(z, i.parametry);
+  return vahaNabidky(n, { areaM2: i.areaM2, typDomu: v.typDomu, stavBytu: v.stavBytu, vahaRucne: z.vahaRucne, ...polohaNabidky(n, i) });
 }
 
 export interface OdhadZarazenych {

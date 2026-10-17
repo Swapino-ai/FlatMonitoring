@@ -10,6 +10,8 @@ import { Badge } from "./Stat";
 import { Mapa, type BodOkoli } from "./Mapa";
 import { VyvojChart } from "./charts";
 import { SwipeNavrhy } from "./SwipeNavrhy";
+import { AiInfo } from "./AiInfo";
+import type { AiNahled } from "@/lib/market/aiNahled";
 import { STAVY_BYTU, TYPY_DOMU } from "@/lib/market/zarazeni";
 
 export interface RadekTrhu {
@@ -43,6 +45,11 @@ export interface RadekTrhu {
   snimky: { id: string; createdAt: string }[];
   /** Fotografie z inzeratu (ulozene u zarazenych) */
   fotky?: string[];
+  /** Parametry vyctene AI z textu stranky */
+  ai?: AiNahled | null;
+  /** Odkazy na fotky z galerie inzeratu (i u navrhu) */
+  fotkyUrl?: string[];
+  stejnaObec?: boolean;
 }
 
 export interface OdhadPanel {
@@ -174,10 +181,12 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
         </div>
         <div className="text-xs text-ink-secondary">
           {[r.disposition, r.areaM2 ? `${r.areaM2} m²` : null, r.district && r.district !== r.city ? `${r.city}, ${r.district}` : r.city,
+            r.stejnaObec ? "stejná obec" : null,
             d != null ? `${d.toFixed(1).replace(".", ",")} km` : r.lat == null ? "bez polohy" : null].filter(Boolean).join(" · ")}
           {" · "}na trhu od {dateCz(r.firstSeen)}
         </div>
         {r.stav === "NAVRH" && r.duvod && <div className="text-xs text-ink-muted">{r.duvod}</div>}
+        {r.ai && <div className="mt-1"><AiInfo ai={r.ai} kompaktni={r.stav !== "NAVRH"} /></div>}
       </div>
     );
   };
@@ -185,8 +194,10 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
   const odkazy = (r: RadekTrhu) => (
     <span className="flex shrink-0 items-center gap-2 text-xs">
       {r.url && !r.url.includes("/x/x/") && <a href={r.url} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">Inzerát ↗</a>}
-      {(r.fotky?.length ?? 0) > 0 && (
-        <button type="button" onClick={() => setGalerie(r.fotky!)} className="text-accent hover:underline">Fotky ({r.fotky!.length})</button>
+      {(r.fotky?.length ?? 0) > 0 ? (
+        <button type="button" onClick={() => setGalerie(r.fotky!.map((id) => `/api/snimek/${id}`))} className="text-accent hover:underline">Fotky ({r.fotky!.length})</button>
+      ) : (r.fotkyUrl?.length ?? 0) > 0 && (
+        <button type="button" onClick={() => setGalerie(r.fotkyUrl!)} className="text-accent hover:underline">Fotky ({r.fotkyUrl!.length})</button>
       )}
       {r.snimky.map((s, k) => (
         <a key={s.id} href={`/api/snimek/${s.id}`} target="_blank" rel="noreferrer" className="text-accent hover:underline" title={`Screenshot z ${dateCz(s.createdAt)}`}>
@@ -418,18 +429,21 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
                     <span key={pole} className="flex gap-1">
                       {Object.entries(volby).map(([k, n]) => {
                         const aktivni = r[pole] === k;
+                        // Bez rucni volby plati to, co vycetla AI: carkovane, klik ji potvrdi
+                        const odAi = !r[pole] && r.ai?.[pole] === k;
                         return (
                           <button key={k} type="button" disabled={!canEdit || bezi}
+                            title={odAi ? `Podle AI: ${pole === "typDomu" ? r.ai?.typDomuDuvod : r.ai?.stavBytuDuvod} — klikem potvrdíš` : undefined}
                             onClick={() => akce(() => nastavVlastnostNabidky(propertyId, r.id, { [pole]: aktivni ? null : k }))}
-                            className={`rounded-full border px-2 py-0.5 ${aktivni ? "border-accent bg-accent-soft text-accent" : "border-line text-ink-muted hover:border-accent"}`}>
-                            {n}
+                            className={`rounded-full border px-2 py-0.5 ${aktivni ? "border-accent bg-accent-soft text-accent" : odAi ? "border-dashed border-accent text-accent" : "border-line text-ink-muted hover:border-accent"}`}>
+                            {n}{odAi && " · AI"}
                           </button>
                         );
                       })}
                     </span>
                   ))}
                   <span className="ml-auto flex items-center gap-1.5">
-                    <span className="font-semibold text-ink-secondary" title="Jak moc nabídka určuje odhad (podobnost plochy, typu domu a stavu)">váha {String(r.vaha ?? 1).replace(".", ",")}×</span>
+                    <span className="font-semibold text-ink-secondary" title="Jak moc nabídka určuje odhad (podobnost plochy, typu domu, stavu a polohy)">váha {String(r.vaha ?? 1).replace(".", ",")}×</span>
                     {canEdit && (
                       <select className="rounded border border-line bg-surface-card px-1 py-0.5" value={r.vahaRucne ?? ""} disabled={bezi}
                         onChange={(e) => akce(() => nastavVlastnostNabidky(propertyId, r.id, { vahaRucne: e.target.value === "" ? null : Number(e.target.value) }))}>
@@ -491,10 +505,10 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
       {galerie && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 p-4" onClick={() => setGalerie(null)}>
           <div className="mx-auto grid max-w-5xl gap-3 sm:grid-cols-2" onClick={(e) => e.stopPropagation()}>
-            {galerie.map((id) => (
-              <a key={id} href={`/api/snimek/${id}`} target="_blank" rel="noreferrer">
+            {galerie.map((src) => (
+              <a key={src} href={src} target="_blank" rel="noreferrer">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/api/snimek/${id}`} alt="Fotografie z inzerátu" loading="lazy" className="w-full rounded-xl" />
+                <img src={src} alt="Fotografie z inzerátu" loading="lazy" referrerPolicy="no-referrer" className="w-full rounded-xl" />
               </a>
             ))}
           </div>

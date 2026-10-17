@@ -290,6 +290,8 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       pricePerM2: x.pricePerM2 == null ? null : c(x.pricePerM2), url: s(x.url),
       latitude: x.latitude == null ? null : c(x.latitude), longitude: x.longitude == null ? null : c(x.longitude),
       polohaRucne: x.polohaRucne === true, firstSeenAt: dPovinne(x.firstSeenAt), lastSeenAt: dPovinne(x.lastSeenAt), zmizelAt: d(x.zmizelAt),
+      ...(x.parametry != null ? { parametry: x.parametry } : {}), parametryAt: d(x.parametryAt),
+      fotkyUrl: Array.isArray(x.fotkyUrl) ? x.fotkyUrl.map(String) : [],
     }));
     if (inzeraty.length) obnoveno.inzerat = (await tx.inzerat.createMany({ data: inzeraty })).count;
     const ceny = (t.inzeratCena as any[] ?? []).map((x) => ({

@@ -735,6 +735,12 @@ model Inzerat {
   /// Inzerat uz na portalu neni (overeno u zarazenych)
   zmizelAt    DateTime?
 
+  /// Parametry vytazene AI z textu stranky (typ domu, stav bytu, podlazi...); viz lib/market/aiParametry
+  parametry   Json?
+  parametryAt DateTime?
+  /// Odkazy na fotky z galerie inzeratu (pro nahled v navrzich, bez stahovani)
+  fotkyUrl    String[]  @default([])
+
   ceny     InzeratCena[]
   zarazeni ZarazeniInzeratu[]
   snimky   InzeratSnimek[]
