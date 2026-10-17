@@ -165,8 +165,9 @@ export async function navrhniProNemovitost(propertyId: string, o: { ids?: string
 }
 
 /** Snimek nabidek pro zaznam oceneni (stejny tvar jako u starsich oceneni, at je zobrazi i mapa). */
-function snimekNabidek(inzeraty: { source: string; externalId: string; disposition: string | null; areaM2: number | null; price: number; pricePerM2: number | null; district: string | null; city: string; url: string | null; latitude: number | null; longitude: number | null; lastSeenAt: Date }[]) {
+function snimekNabidek(inzeraty: { source: string; externalId: string; disposition: string | null; areaM2: number | null; price: number; pricePerM2: number | null; district: string | null; city: string; url: string | null; latitude: number | null; longitude: number | null; lastSeenAt: Date; fotkyUrl: string[]; vaha: number }[]) {
   return inzeraty.map((i) => ({
+    fotka: i.fotkyUrl[0] ?? null, vaha: i.vaha,
     disposition: i.disposition, areaM2: i.areaM2, price: i.price, pricePerM2: i.pricePerM2 ?? 0,
     district: i.district ?? i.city, url: i.url, source: i.source, scrapedAt: i.lastSeenAt.toISOString(),
     klic: `${i.source}|${i.externalId}`, latitude: i.latitude, longitude: i.longitude, zLokality: true,
@@ -205,7 +206,7 @@ export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RE
   const { p, body } = b;
   const odhad = odhadZeZarazenych(body, p.areaM2, OKNO_ODHADU);
   if (!odhad) return null;
-  const pouzite = vOkneOdhadu(body, OKNO_ODHADU).map((b) => b.i);
+  const pouzite = vOkneOdhadu(body, OKNO_ODHADU).map((b) => ({ ...b.i, vaha: b.vaha }));
   const perM2 = pouzite.map((i) => i.pricePerM2 ?? 0).sort((a, b) => a - b);
   const kvantil = (q: number) => perM2[Math.min(perM2.length - 1, Math.floor((perM2.length - 1) * q))];
 
