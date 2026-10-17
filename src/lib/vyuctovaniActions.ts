@@ -175,7 +175,14 @@ export async function saveSettlementSkupina(
     }, konec);
     return mesicniNaklad(k) || mesicniNaklad(s);
   });
-  const naklady = rozdelPodleVah(naklad, vahy);
+  // Skutecny naklad po sluzbach z pruvodce; jinak se celkovy naklad rozdeli podle vah
+  let naklady = rozdelPodleVah(naklad, vahy);
+  try {
+    const poSluzbach = JSON.parse(String(formData.get("nakladyPoSluzbach") ?? "null")) as Record<string, number> | null;
+    if (poSluzbach && sluzby.every((sl) => Number.isFinite(Number(poSluzbach[sl.id])))) {
+      naklady = sluzby.map((sl) => Math.round(Number(poSluzbach[sl.id]) * 100) / 100);
+    }
+  } catch { /* neplatny JSON: zustane rozdeleni podle vah */ }
   // Zalohy po sluzbach z pruvodce (kolik se kazde sluzbe skutecne zaplatilo); jinak rozdeleni podle vah
   let zalohyCasti = rozdelPodleVah(zalohy, vahy);
   try {

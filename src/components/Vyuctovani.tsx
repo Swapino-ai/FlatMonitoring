@@ -250,6 +250,8 @@ function SkupinaFormular({ services, typy, action, pending }: {
   const [zaplaceno, setZaplaceno] = useState<ZaplacenoSluzbe[] | null>(null);
   const [zalohy, setZalohy] = useState<Record<string, string>>({});
   const [naklad, setNaklad] = useState("");
+  // Skutecny naklad po sluzbach (nepovinne): kdyz je vyplneny u vsech, celkovy naklad je jejich soucet
+  const [skutecnost, setSkutecnost] = useState<Record<string, string>>({});
   const [nacitam, setNacitam] = useState(false);
   const [chyba, setChyba] = useState("");
 
@@ -280,8 +282,13 @@ function SkupinaFormular({ services, typy, action, pending }: {
   }
 
   const soucetZaloh = Object.values(zalohy).reduce((a, v) => a + (cislo(v) || 0), 0);
-  const nakladCislo = cislo(naklad);
-  const vysledek = Number.isFinite(nakladCislo) && naklad !== "" ? soucetZaloh - nakladCislo : null;
+  const ids = zaplaceno?.map((x) => x.id) ?? [];
+  const vyplnenoSkutecnost = ids.filter((id) => (skutecnost[id] ?? "").trim() !== "");
+  const poPolozkach = vyplnenoSkutecnost.length > 0;
+  const vsechnyPolozky = poPolozkach && vyplnenoSkutecnost.length === ids.length;
+  const soucetSkutecnosti = vyplnenoSkutecnost.reduce((a, id) => a + (cislo(skutecnost[id]) || 0), 0);
+  const nakladCislo = poPolozkach ? soucetSkutecnosti : cislo(naklad);
+  const vysledek = Number.isFinite(nakladCislo) && (poPolozkach || naklad !== "") ? soucetZaloh - nakladCislo : null;
 
   const kroky = ["Služby", "Období", "Částky"];
   return (
@@ -364,7 +371,12 @@ function SkupinaFormular({ services, typy, action, pending }: {
         <div className="space-y-3">
           <p className="text-sm text-ink-secondary">Období {od && doDne ? obdobi(od, doDne) : ""}</p>
           <div className="rounded-xl border border-line">
-            <div className="border-b border-line px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Zálohy zaplacené dodavateli</div>
+            <div className="flex items-center gap-3 border-b border-line px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+              <span className="flex-1">Služba</span>
+              <span className="w-32 text-right">Zálohy zaplaceno</span>
+              <span className="w-32 text-right">Skutečnost</span>
+              <span className="w-24 text-right">Rozdíl</span>
+            </div>
             <ul className="divide-y divide-line/60">
               {zaplaceno.map((x) => (
                 <li key={x.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
@@ -377,20 +389,39 @@ function SkupinaFormular({ services, typy, action, pending }: {
                   </span>
                   <input type="text" inputMode="decimal" aria-label={`Zálohy: ${nazev(x.id)}`} className="input w-32 py-1 text-right tabular-nums"
                     value={zalohy[x.id] ?? ""} onChange={(e) => setZalohy((z) => ({ ...z, [x.id]: e.target.value }))} />
-                  <span className="text-xs text-ink-muted">Kč</span>
+                  <input type="text" inputMode="decimal" aria-label={`Skutečnost: ${nazev(x.id)}`} placeholder="z dokladu"
+                    className="input w-32 py-1 text-right tabular-nums"
+                    value={skutecnost[x.id] ?? ""} onChange={(e) => setSkutecnost((z) => ({ ...z, [x.id]: e.target.value }))} />
+                  {(() => {
+                    const sk = (skutecnost[x.id] ?? "").trim();
+                    if (!sk) return <span className="w-24" />;
+                    const r = (cislo(zalohy[x.id] ?? "0") || 0) - (cislo(sk) || 0);
+                    return <span className={`w-24 text-right text-xs font-semibold tabular-nums ${r >= 0 ? "text-good" : "text-bad"}`}>{r >= 0 ? "+" : "−"}{czk(Math.abs(r))}</span>;
+                  })()}
                 </li>
               ))}
               <li className="flex items-center gap-3 px-3 py-2 text-sm font-semibold">
-                <span className="flex-1">Zálohy celkem</span>
-                <span className="tabular-nums">{czk(soucetZaloh)}</span>
+                <span className="flex-1">Celkem</span>
+                <span className="w-32 text-right tabular-nums">{czk(soucetZaloh)}</span>
+                <span className="w-32 text-right tabular-nums">{poPolozkach ? czk(soucetSkutecnosti) : "—"}</span>
+                <span className="w-24" />
               </li>
             </ul>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="label mb-1.5 block" htmlFor="pruvodce-naklad">Skutečný náklad podle dokladu (Kč)</label>
-              <input id="pruvodce-naklad" type="text" inputMode="decimal" required className="input text-right tabular-nums"
-                value={naklad} onChange={(e) => setNaklad(e.target.value)} />
+              <label className="label mb-1.5 block" htmlFor="pruvodce-naklad">Skutečný náklad celkem (Kč)</label>
+              {poPolozkach ? (
+                <p className="input bg-surface-sunken text-right font-semibold tabular-nums">{czk(soucetSkutecnosti)}</p>
+              ) : (
+                <input id="pruvodce-naklad" type="text" inputMode="decimal" className="input text-right tabular-nums"
+                  value={naklad} onChange={(e) => setNaklad(e.target.value)} />
+              )}
+              <p className="mt-1 text-xs text-ink-muted">
+                {poPolozkach
+                  ? vsechnyPolozky ? "Součet skutečnosti po službách." : `Doplň skutečnost u všech služeb (chybí ${ids.length - vyplnenoSkutecnost.length}).`
+                  : "Zadej celkem z dokladu, nebo vyplň skutečnost u každé služby."}
+              </p>
             </div>
             <div className="flex items-end">
               {vysledek != null && (
@@ -402,18 +433,23 @@ function SkupinaFormular({ services, typy, action, pending }: {
             <Pole label="Číslo dokladu" name="invoiceNo" placeholder="nepovinné" />
             <TextPole label="Poznámka" name="notes" />
           </div>
-          <p className="text-xs text-ink-muted">Náklad se rozdělí mezi služby podle jejich měsíčních nákladů, zálohy podle částek výše.</p>
+          <p className="text-xs text-ink-muted">
+            {poPolozkach ? "Každá služba se vyúčtuje svou skutečností a zálohami." : "Celkový náklad se rozdělí mezi služby podle jejich měsíčních nákladů, zálohy podle částek výše."}
+          </p>
 
           {[...vybrane].map((id) => <input key={id} type="hidden" name="serviceId" value={id} />)}
           <input type="hidden" name="periodFrom" value={od ?? ""} />
           <input type="hidden" name="periodTo" value={doDne ?? ""} />
           <input type="hidden" name="totalCost" value={Number.isFinite(nakladCislo) ? String(nakladCislo) : ""} />
           <input type="hidden" name="supplierAdvances" value={String(soucetZaloh)} />
+          {vsechnyPolozky && (
+            <input type="hidden" name="nakladyPoSluzbach" value={JSON.stringify(Object.fromEntries(ids.map((id) => [id, cislo(skutecnost[id]) || 0])))} />
+          )}
           <input type="hidden" name="zalohyPoSluzbach" value={JSON.stringify(Object.fromEntries(Object.entries(zalohy).map(([k, v]) => [k, cislo(v) || 0])))} />
 
           <div className="flex justify-between">
             <button type="button" className="btn" onClick={() => setKrok(2)}>Zpět</button>
-            <button type="submit" disabled={pending || naklad === "" || !Number.isFinite(nakladCislo)} className="btn btn-primary">
+            <button type="submit" disabled={pending || (poPolozkach ? !vsechnyPolozky : naklad === "" || !Number.isFinite(nakladCislo))} className="btn btn-primary">
               {pending ? "Ukládám…" : "Uložit společné vyúčtování"}
             </button>
           </div>
