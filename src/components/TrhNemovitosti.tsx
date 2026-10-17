@@ -420,48 +420,94 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
         ) : (
           <ul className="divide-y divide-line/70 rounded-xl border border-line">
             {zarazene.map((r) => { const k = r.firstSeen > hraniceOkna ? 0 : 99; return (
-              <li key={r.id} className={`flex flex-wrap items-center gap-3 px-3 py-2.5 ${r.zmizel ? "opacity-70" : ""}`}>
-                <span className={`w-10 shrink-0 text-center text-xs ${k < 10 ? "font-semibold text-accent" : "text-ink-muted"}`}
-                  title={k < 10 ? "Objevila se v posledních 2 měsících, počítá se do odhadu" : "Starší než 2 měsíce, do odhadu už nevstupuje"}>{k < 10 ? "v odhadu" : "starší"}</span>
-                {zakladRadku(r)}
-                <div className="flex w-full flex-wrap items-center gap-1.5 pl-[3.25rem] text-[11px]">
-                  {([["typDomu", TYPY_DOMU], ["stavBytu", STAVY_BYTU]] as const).map(([pole, volby]) => (
-                    <span key={pole} className="flex gap-1">
-                      {Object.entries(volby).map(([k, n]) => {
-                        const aktivni = r[pole] === k;
-                        // Bez rucni volby plati to, co vycetla AI: carkovane, klik ji potvrdi
-                        const odAi = !r[pole] && r.ai?.[pole] === k;
-                        return (
-                          <button key={k} type="button" disabled={!canEdit || bezi}
-                            title={odAi ? `Podle AI: ${pole === "typDomu" ? r.ai?.typDomuDuvod : r.ai?.stavBytuDuvod} — klikem potvrdíš` : undefined}
-                            onClick={() => akce(() => nastavVlastnostNabidky(propertyId, r.id, { [pole]: aktivni ? null : k }))}
-                            className={`rounded-full border px-2 py-0.5 ${aktivni ? "border-accent bg-accent-soft text-accent" : odAi ? "border-dashed border-accent text-accent" : "border-line text-ink-muted hover:border-accent"}`}>
-                            {n}{odAi && " · AI"}
-                          </button>
-                        );
-                      })}
-                    </span>
-                  ))}
-                  <span className="ml-auto flex items-center gap-1.5">
-                    <span className="font-semibold text-ink-secondary" title="Jak moc nabídka určuje odhad (podobnost plochy, typu domu, stavu a polohy)">váha {String(r.vaha ?? 1).replace(".", ",")}×</span>
+              <li key={r.id} className={`flex gap-3 px-3 py-3 ${r.zmizel ? "opacity-70" : ""}`}>
+                {/* Nahled: prvni fotka, klik otevre galerii */}
+                {(() => {
+                  const fotky = (r.fotky?.length ?? 0) > 0 ? r.fotky!.map((id) => `/api/snimek/${id}`) : r.fotkyUrl ?? [];
+                  return fotky.length > 0 ? (
+                    <button type="button" onClick={() => setGalerie(fotky)} className="relative hidden h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:block" title="Fotky inzerátu">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={fotky[0]} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+                      <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[10px] text-white">{fotky.length}</span>
+                    </button>
+                  ) : <div className="hidden h-20 w-28 shrink-0 rounded-lg bg-surface-sunken sm:block" />;
+                })()}
+
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  {(() => {
+                    const d = vzdalenost(r);
+                    const prvni = r.ceny[0]?.price;
+                    const zmenaCeny = prvni && Math.abs(prvni - r.price) >= 1 ? ((r.price - prvni) / prvni) * 100 : null;
+                    return (
+                      <div>
+                        <div className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="font-semibold tabular-nums">{cena(r.price)}</span>
+                          {r.pricePerM2 != null && <span className="text-xs text-ink-muted tabular-nums">{czk(r.pricePerM2)}/m²</span>}
+                          {zmenaCeny != null && (
+                            <span className={`text-xs ${zmenaCeny < 0 ? "text-good" : "text-bad"}`}>{zmenaCeny < 0 ? "▼" : "▲"} {Math.abs(zmenaCeny).toFixed(1).replace(".", ",")} %</span>
+                          )}
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${k < 10 ? "bg-accent-soft text-accent" : "bg-surface-sunken text-ink-muted"}`}
+                            title={k < 10 ? "Objevila se v posledních 2 měsících, počítá se do odhadu" : "Starší než 2 měsíce, do odhadu už nevstupuje"}>{k < 10 ? "v odhadu" : "starší"}</span>
+                          {r.zmizel && <Badge tone="neutral">zmizel {dateCz(r.zmizel)}</Badge>}
+                        </div>
+                        <div className="text-xs text-ink-secondary">
+                          {[r.disposition, r.areaM2 ? `${r.areaM2} m²` : null, r.district && r.district !== r.city ? `${r.city}, ${r.district}` : r.city,
+                            r.stejnaObec ? "stejná obec" : null, d != null ? `${d.toFixed(1).replace(".", ",")} km` : null, `od ${dateCz(r.firstSeen)}`].filter(Boolean).join(" · ")}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Typ domu a stav: tvoje volba, jinak AI */}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    {([["typDomu", "Dům", TYPY_DOMU, r.ai?.typDomuDuvod], ["stavBytu", "Stav", STAVY_BYTU, r.ai?.stavBytuDuvod]] as const).map(([pole, nazev, volby, duvod]) => {
+                      const ai = r.ai?.[pole] ?? null;
+                      const aiNazev = ai ? (volby as Record<string, string>)[ai] ?? null : null;
+                      const rucne = r[pole] ?? null;
+                      const rozpor = rucne && aiNazev && rucne !== ai;
+                      return (
+                        <label key={pole} className="flex items-center gap-1" title={duvod ? `AI: ${duvod}` : undefined}>
+                          <span className="text-ink-muted">{nazev}</span>
+                          <select className={`rounded-md border bg-surface-card px-1.5 py-0.5 ${rucne ? "border-line font-medium" : aiNazev ? "border-dashed border-accent text-accent" : "border-line text-ink-muted"}`}
+                            value={rucne ?? ""} disabled={!canEdit || bezi}
+                            onChange={(e) => akce(() => nastavVlastnostNabidky(propertyId, r.id, { [pole]: e.target.value || null }))}>
+                            <option value="">{aiNazev ? `${aiNazev} (AI)` : "neurčeno"}</option>
+                            {Object.entries(volby).map(([kl, n]) => <option key={kl} value={kl}>{n}</option>)}
+                          </select>
+                          {rozpor && <span className="text-[10px] text-warn">AI: {aiNazev}</span>}
+                        </label>
+                      );
+                    })}
+                    {r.ai?.stitky.length ? <span className="text-ink-muted">{r.ai.stitky.join(" · ")}</span> : null}
+                  </div>
+                  {r.ai?.shrnuti && <p className="line-clamp-1 text-xs italic text-ink-muted" title={r.ai.shrnuti}>{r.ai.shrnuti}</p>}
+                </div>
+
+                {/* Vaha a akce */}
+                <div className="flex shrink-0 flex-col items-end justify-between gap-1.5 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold tabular-nums text-ink-secondary" title="Jak moc nabídka určuje odhad (podobnost plochy, typu domu, stavu a polohy)">váha {String(r.vaha ?? 1).replace(".", ",")}×</span>
                     {canEdit && (
-                      <select className="rounded border border-line bg-surface-card px-1 py-0.5" value={r.vahaRucne ?? ""} disabled={bezi}
+                      <select className="rounded-md border border-line bg-surface-card px-1 py-0.5" value={r.vahaRucne ?? ""} disabled={bezi} title="Ruční váha"
                         onChange={(e) => akce(() => nastavVlastnostNabidky(propertyId, r.id, { vahaRucne: e.target.value === "" ? null : Number(e.target.value) }))}>
                         <option value="">auto</option>
                         {[0.5, 1, 2, 3, 5].map((v) => <option key={v} value={v}>{String(v).replace(".", ",")}×</option>)}
                       </select>
                     )}
+                  </div>
+                  <span className="flex flex-wrap justify-end gap-2">
+                    {r.url && !r.url.includes("/x/x/") && <a href={r.url} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">Inzerát ↗</a>}
+                    {r.snimky[0] && <a href={`/api/snimek/${r.snimky[0].id}`} target="_blank" rel="noreferrer" className="text-accent hover:underline" title={`Screenshot z ${dateCz(r.snimky[0].createdAt)}`}>Snímek</a>}
                   </span>
+                  {canEdit && (
+                    <span className="flex gap-1">
+                      {(r.lat == null || r.polohaRucne) && (
+                        <button type="button" className="btn px-2 py-0.5 text-xs" onClick={() => setPolohaPro(r)}>{r.lat == null ? "Určit polohu" : "Poloha"}</button>
+                      )}
+                      <button type="button" className="btn px-2 py-0.5 text-xs" disabled={bezi} onClick={() => rozhodni([r.id], "VYRAZENO")}>Vyřadit</button>
+                    </span>
+                  )}
                 </div>
-                {odkazy(r)}
-                {canEdit && (
-                  <span className="flex gap-1">
-                    {r.lat == null || r.polohaRucne
-                      ? <button type="button" className="btn px-2 py-0.5 text-xs" onClick={() => setPolohaPro(r)}>{r.lat == null ? "Určit polohu" : "Upravit polohu"}</button>
-                      : null}
-                    <button type="button" className="btn px-2 py-0.5 text-xs" disabled={bezi} onClick={() => rozhodni([r.id], "VYRAZENO")}>Vyřadit</button>
-                  </span>
-                )}
               </li>
             ); })}
           </ul>
