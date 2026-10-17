@@ -228,8 +228,10 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
 
   return (
     <div className={celaObrazovka ? "fixed inset-0 z-[2000] flex flex-col bg-surface-card p-3 sm:p-4" : "no-print"}>
-      <div className={celaObrazovka ? "relative min-h-0 flex-1" : "relative"}>
-        <div ref={uzel} className={`w-full overflow-hidden rounded-card border border-line ${celaObrazovka ? "h-full" : vyskaTrida}`} />
+      {/* Vyska se meni jen na obalu: tridy kontejneru mapy patri Leafletu
+          (leaflet-container...) a React by je pri zmene className smazal */}
+      <div className={`relative ${celaObrazovka ? "min-h-0 flex-1" : vyskaTrida}`}>
+        <div ref={uzel} className="h-full w-full overflow-hidden rounded-card border border-line" />
 
         <button type="button" onClick={prepniCelouObrazovku}
           className="absolute right-2 top-2 z-[600] flex h-8 w-8 items-center justify-center rounded-md border border-line bg-surface-card/95 text-ink-secondary shadow hover:text-ink-primary"
