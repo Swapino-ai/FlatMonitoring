@@ -179,11 +179,14 @@ export function polohaNabidky(n: Poloha, i: Poloha): { stejnaObec: boolean; km: 
 /** Typ domu a stav: rucni volba u zarazeni, jinak to, co AI vycetla z inzeratu. */
 export function vlastnostiNabidky(z: { typDomu: string | null; stavBytu: string | null }, parametry: unknown) {
   const p = (parametry ?? {}) as { typDomu?: string | null; stavBytu?: string | null };
+  // Jen hodnoty, se kterymi vahy umi pocitat (AI muze vratit napr. JINY)
+  const aiTyp = p.typDomu && p.typDomu in TYPY_DOMU ? p.typDomu : null;
+  const aiStav = p.stavBytu && p.stavBytu in STAVY_BYTU ? p.stavBytu : null;
   return {
-    typDomu: z.typDomu ?? p.typDomu ?? null,
-    stavBytu: z.stavBytu ?? p.stavBytu ?? null,
-    typAi: !z.typDomu && !!p.typDomu,
-    stavAi: !z.stavBytu && !!p.stavBytu,
+    typDomu: z.typDomu ?? aiTyp,
+    stavBytu: z.stavBytu ?? aiStav,
+    typAi: !z.typDomu && !!aiTyp,
+    stavAi: !z.stavBytu && !!aiStav,
   };
 }
 

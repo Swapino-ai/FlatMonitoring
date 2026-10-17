@@ -7,7 +7,7 @@ import { STAVY_BYTU, TYPY_DOMU } from "@/lib/market/zarazeni";
  */
 export function AiInfo({ ai, kompaktni = false }: { ai: AiNahled | null | undefined; kompaktni?: boolean }) {
   if (!ai) return null;
-  const typ = ai.typDomu ? TYPY_DOMU[ai.typDomu as keyof typeof TYPY_DOMU] ?? ai.typDomu : null;
+  const typ = ai.typDomu === "JINY" ? "jiný typ domu" : ai.typDomu ? TYPY_DOMU[ai.typDomu as keyof typeof TYPY_DOMU] ?? ai.typDomu : null;
   const stav = ai.stavBytu ? STAVY_BYTU[ai.stavBytu as keyof typeof STAVY_BYTU] ?? ai.stavBytu : null;
   return (
     <div className={`space-y-1 ${kompaktni ? "text-[11px]" : "text-xs"}`}>

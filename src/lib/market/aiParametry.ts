@@ -13,8 +13,8 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 export const AI_MODEL = process.env.AI_MODEL || "claude-haiku-5-5";
 
 const Parametry = z.object({
-  typDomu: z.enum(["PANEL", "CIHLA", "NOVOSTAVBA"]).nullable()
-    .describe("Typ domu. Novostavba = dum postaveny nebo dokonceny v poslednich ~5 letech. Smisena/skeletova stavba bez dalsiho upresneni = null."),
+  typDomu: z.enum(["PANEL", "CIHLA", "NOVOSTAVBA", "JINY"]).nullable()
+    .describe("Typ domu. Novostavba = dum postaveny nebo dokonceny v poslednich ~5 letech. Smisena, skeletova, drevostavba apod. = JINY."),
   typDomuDuvod: z.string().describe("Kratka citace nebo zduvodneni z textu (cesky, do 120 znaku)."),
   stavBytu: z.enum(["PRED_REKONSTRUKCI", "CASTECNA_REKONSTRUKCE", "PO_REKONSTRUKCI", "NOVOSTAVBA"]).nullable()
     .describe("Skutecny stav BYTU (ne domu): puvodni stav / nutna rekonstrukce = PRED_REKONSTRUKCI; jen neco nove (kuchyn nebo koupelna nebo okna) = CASTECNA_REKONSTRUKCE; kompletne zrekonstruovano = PO_REKONSTRUKCI; novy byt = NOVOSTAVBA. Kdyz text nerika nic konkretniho, null."),
