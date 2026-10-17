@@ -19,6 +19,8 @@ function naIso(text: string): string | null {
   const m = /^(\d{1,2})[/.\-\s]+(\d{1,2})[/.\-\s]+(\d{4})$/.exec(text.trim());
   if (!m) return null;
   const d = Number(m[1]), mes = Number(m[2]) - 1, r = Number(m[3]);
+  // Rok mimo rozumny rozsah (napr. rozepsany "0202") by vyrobil neplatne datum a shodil stranku
+  if (r < 1900 || r > 2100) return null;
   const dt = new Date(Date.UTC(r, mes, d));
   if (dt.getUTCFullYear() !== r || dt.getUTCMonth() !== mes || dt.getUTCDate() !== d) return null;
   return naISO(r, mes, d);
