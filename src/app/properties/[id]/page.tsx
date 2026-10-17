@@ -408,33 +408,28 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
               hodnota={czkCompact(a.currentValue)}
               tone={a.valueGain >= 0 ? "good" : "bad"}
               doplnek={(() => {
-                // Z kolika nabídek odhad vznikl — bez toho je číslo neprůhledné
+                // Tri radky: za m² a odkud odhad je; median pro srovnani; zisk od koupe
                 const v = property.valuations[0];
                 const vzorek = v?.sampleSize ?? null;
-                return (<>
-                  {czk(a.currentValue / property.areaM2)}/m² · zdroj {valuationSourceLabel(a.valuationSource)}
-                  {v?.source === "VYBER" && odhadProdej && (
-                    <span className="block">vážený průměr · vážený medián {czkCompact(odhadProdej.median.hodnota)} ({czk(odhadProdej.median.perM2)}/m²)</span>
-                  )}
-                  {vzorek != null && (
-                    <> · z {vzorek} {vzorek === 1 ? "nabídky" : vzorek < 5 ? "nabídek" : "nabídek"}
-                      {v?.confidence === "RUCNI" && (
-                        <span className="ml-1.5 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">
-                          ručně upraveno
-                        </span>
-                      )}
-                      {v?.confidence === "KVALIFIKOVANY" && (
-                        <span className="ml-1.5 rounded bg-good/15 px-1.5 py-0.5 text-[10px] font-medium text-good"
-                          title="Všechny srovnatelné nabídky jsou přímo z této obce">
-                          kvalifikovaný odhad
-                        </span>
-                      )}
-                    </>
-                  )}
-                  <span className="ml-2 block font-medium text-ink-primary sm:ml-0 sm:mt-0.5">
-                    {a.valueGain >= 0 ? "+" : ""}{czkCompact(a.valueGain)} ({pct(a.valueGainPct)}) za {a.yearsHeld.toFixed(1)} roku
-                  </span>
-                </>);
+                const zNabidek = v?.source === "VYBER" && vzorek != null;
+                return (
+                  <div className="space-y-1.5">
+                    <div>
+                      {czk(a.currentValue / property.areaM2)}/m² · {zNabidek
+                        ? <>průměr z {vzorek} {vzorek === 1 ? "vybrané nabídky" : "vybraných nabídek"}</>
+                        : <>zdroj: {valuationSourceLabel(a.valuationSource).toLowerCase()}</>}
+                      {v?.confidence === "RUCNI" && <span className="ml-1.5 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-medium">ručně upraveno</span>}
+                    </div>
+                    {zNabidek && odhadProdej && (
+                      <div className="text-xs opacity-80" title="Vážený medián: polovina nabídek (podle váhy) je levnější, polovina dražší — méně ho ovlivní jedna extrémní nabídka">
+                        Medián {czkCompact(odhadProdej.median.hodnota)} ({czk(odhadProdej.median.perM2)}/m²)
+                      </div>
+                    )}
+                    <div className="font-semibold text-ink-primary">
+                      {a.valueGain >= 0 ? "+" : ""}{czkCompact(a.valueGain)} ({pct(a.valueGainPct)}) od koupě · {a.yearsHeld.toFixed(1).replace(".", ",")} roku
+                    </div>
+                  </div>
+                );
               })()}
               vedle={
                 <Link href={`/properties/${property.id}/trh`}
@@ -451,7 +446,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                 {nejnovejsiNajem ? <>{czk(nejnovejsiNajem.monthlyRent)}<span className="text-base font-normal text-ink-muted">/měs.</span></> : "—"}
               </div>
               {nejnovejsiNajem?.source === "VYBER" && odhadNajem && (
-                <div className="mt-1 text-xs text-ink-muted">vážený průměr · vážený medián {czk(odhadNajem.median.hodnota)}/měs.</div>
+                <div className="mt-1 text-xs text-ink-muted" title="Vážený medián vybraných nabídek nájmu">medián {czk(odhadNajem.median.hodnota)}/měs.</div>
               )}
               {nejnovejsiNajem ? (
                 <>
