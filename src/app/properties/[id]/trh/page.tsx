@@ -5,6 +5,7 @@ import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Card } from "@/components/Stat";
 import { ValuationManager } from "@/components/ValuationManager";
+import { RentHistory } from "@/components/RentHistory";
 import { HlavickaNemovitosti } from "@/components/HlavickaNemovitosti";
 import { TrhNemovitosti, type OdhadPanel, type RadekTrhu } from "@/components/TrhNemovitosti";
 import { prisma } from "@/lib/db";
@@ -152,6 +153,8 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
     }
   }
   const skenovatelne = !!NEMOVITOST_MAP.get(property.type)?.srealityCesta;
+  // Historie odhadu najmu (prodej ma vlastni historii oceneni)
+  const odhadyNajmu = await prisma.rentEstimate.findMany({ where: { propertyId: id }, orderBy: { date: "desc" } });
 
   return (
     <>
@@ -163,11 +166,17 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
         <TrhNemovitosti propertyId={id} pocatecniTyp={typ === "RENT" ? "RENT" : "SALE"} trhId={koren} klic={klic} obce={obce} typNemovitosti={property.type} zaKus={zaKus} vlastnosti={hodnotyZaznamu(profil, property)} canEdit={canEdit} sledovat={korenP?.sledovatTrh ?? false}
           propojeni={{ podle: koren !== id && korenP ? { id: korenP.id, name: korenP.name } : null, navazane, moznosti }} skenovatelne={skenovatelne}
           poloha={property.latitude != null && property.longitude != null ? { lat: property.latitude, lon: property.longitude } : null}
-          radky={radky} diag={diag} odhady={{ SALE: odhad("SALE"), RENT: odhad("RENT") }} />
-
-        <Card title="Historie ocenění">
-          <ValuationManager propertyId={id} valuations={property.valuations} areaM2={property.areaM2} canEdit={canEdit} vyrazene={[]} fotky={fotkyNabidek} snimky={snimkyNabidek} />
-        </Card>
+          radky={radky} diag={diag} odhady={{ SALE: odhad("SALE"), RENT: odhad("RENT") }}
+          historieProdej={
+            <Card title="Historie ocenění">
+              <ValuationManager propertyId={id} valuations={property.valuations} areaM2={property.areaM2} canEdit={canEdit} vyrazene={[]} fotky={fotkyNabidek} snimky={snimkyNabidek} />
+            </Card>
+          }
+          historieNajem={
+            <Card title="Historie odhadu nájmu">
+              <RentHistory odhady={odhadyNajmu} smluvniNajem={property.leases.find((l) => l.isActive)?.rentMonthly ?? 0} areaM2={property.areaM2} propertyId={id} canEdit={canEdit} />
+            </Card>
+          } />
       </main>
     </>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { nastavOceneniPodle, prepniVyloucenouObec, nastavVlastnostBytu, nastavVlastnostNabidky, nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, rozhodniShodu, type TrhState } from "@/lib/trhActions";
 import type { StatistikaNavrhu } from "@/lib/market/inzeraty";
@@ -76,8 +76,11 @@ function km(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
  * Sledovani trhu u jedne nemovitosti: zapnuti, navrhy ke kontrole, zarazene a vyrazene
  * nabidky, odhad ze zarazenych za posledni 2 mesice a jeho vyvoj v case.
  */
-export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", typNemovitosti, zaKus = false, trhId, propojeni, klic, obce = [], vlastnosti, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
+export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, pocatecniTyp = "SALE", typNemovitosti, zaKus = false, trhId, propojeni, klic, obce = [], vlastnosti, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
   diag?: StatistikaNavrhu;
+  /** Historie oceneni (prodej) a odhadu najmu — ukazuje se podle prepinace prodej / najem */
+  historieProdej?: ReactNode;
+  historieNajem?: ReactNode;
   /** Ktera zalozka (prodej / najem) se otevre */
   pocatecniTyp?: "SALE" | "RENT";
   propertyId: string;
@@ -590,6 +593,9 @@ export function TrhNemovitosti({ propertyId, pocatecniTyp = "SALE", typNemovitos
       )}
 
       {galerie && <Galerie polozky={galerie} onZavrit={() => setGalerie(null)} />}
+
+      {/* Historie podle prepinace: prodej = oceneni hodnoty, najem = odhady najmu */}
+      {najem ? historieNajem : historieProdej}
 
       {/* Rucni poloha */}
       {polohaPro && (
