@@ -38,6 +38,15 @@ async function main() {
       const est = (qs as any[]).find((q) => q.queryKey?.[0] === "estate")?.state?.data;
       console.log("estate klíče:", est ? Object.keys(est).join(", ") : "—");
       projdi(est, "estate", ven);
+      const prvni = est?.images?.[0]?.url as string | undefined;
+      if (prvni) {
+        const zaklad = (prvni.startsWith("//") ? "https:" : "") + prvni.split("?")[0];
+        for (const fl of ["", "?fl=res,1600,1600,1|jpg,85", "?fl=res,1200,1200,1|jpg,80", "?fl=res,1200,1200,1|wrm,/watermark/sreality.png,10", "?fl=res,2200,2200,1|wrm,/watermark/sreality.png,10", "?fl=res,800,800,1|shr,,20|webp,60"]) {
+          const r = await p.request.get(zaklad + fl).catch((e) => ({ status: () => String(e).slice(0, 60), headers: () => ({} as Record<string, string>), body: async () => Buffer.alloc(0) }));
+          const t = await r.body().catch(() => Buffer.alloc(0));
+          console.log(`  varianta ${fl || "(bez fl)"} -> ${r.status()} ${r.headers()["content-type"] ?? ""} ${t.length} B`);
+        }
+      }
       ven.slice(0, 25).forEach((r) => console.log("  ", r));
     }
     const img = await p.evaluate(() => Array.from(document.querySelectorAll("img")).map((im) => `${(im as HTMLImageElement).naturalWidth}x${(im as HTMLImageElement).naturalHeight} alt="${im.alt.slice(0, 40)}" ${(im.currentSrc || im.src).slice(0, 120)}`));
