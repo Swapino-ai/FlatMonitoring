@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./auth";
-import { aktualizujOdhad, navrhniProNemovitost } from "./market/inzeraty";
+import { aktualizujSkupinu, clenoveOceneni, korenOceneni, navrhniProNemovitost } from "./market/inzeraty";
 
 export interface TrhState { error?: string; success?: string }
 
@@ -34,15 +34,15 @@ export async function rozhodniInzeraty(propertyId: string, ids: string[], stav: 
   const auth = await majitel();
   if ("error" in auth) return auth;
   if (ids.length === 0) return { error: "Nic není vybrané." };
-  const zaznamy = await prisma.zarazeniInzeratu.findMany({ where: { propertyId, id: { in: ids } }, include: { inzerat: { select: { dealType: true } } } });
+  // Propojene oceneni: rozhoduje se u nemovitosti, ze ktere se odhad bere
+  const koren = await korenOceneni(propertyId);
+  const zaznamy = await prisma.zarazeniInzeratu.findMany({ where: { propertyId: koren, id: { in: ids } } });
   await prisma.zarazeniInzeratu.updateMany({
-    where: { propertyId, id: { in: zaznamy.map((z) => z.id) } },
+    where: { propertyId: koren, id: { in: zaznamy.map((z) => z.id) } },
     data: { stav, rozhodnutoAt: stav === "NAVRH" ? null : new Date() },
   });
-  for (const d of new Set(zaznamy.map((z) => z.inzerat.dealType))) {
-    await aktualizujOdhad(propertyId, d === "RENT" ? "RENT" : "SALE");
-  }
-  obnov(propertyId);
+  await aktualizujSkupinu(koren);
+  for (const id of await clenoveOceneni(koren)) obnov(id);
   const slovo = stav === "ZARAZENO" ? "Zařazeno" : stav === "VYRAZENO" ? "Vyřazeno" : "Vráceno do návrhů";
   return { success: `${slovo}: ${zaznamy.length}.` };
 }
@@ -64,4 +64,25 @@ export async function obnovNavrhy(propertyId: string): Promise<TrhState> {
   const st = await navrhniProNemovitost(propertyId);
   obnov(propertyId);
   return { success: st.novych ? `Přibylo ${st.novych} návrhů ke kontrole.` : "Nic nového k navržení." };
+}
+
+/**
+ * Propoji oceneni: nemovitost bude pouzivat zarazene nabidky jine (odhad = jeji median za m2 x vlastni plocha).
+ * Obe zustavaji samostatne nemovitosti; jen odhad maji spolecny. cilId = null propojeni zrusi.
+ */
+export async function nastavOceneniPodle(propertyId: string, cilId: string | null): Promise<TrhState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+  if (cilId) {
+    const koren = await korenOceneni(cilId);
+    if (koren === propertyId) return { error: "Nemovitost nemůže oceňovat sama podle sebe." };
+    const zavisle = await prisma.property.count({ where: { oceneniPodle: propertyId } });
+    if (zavisle > 0) return { error: "Podle této nemovitosti se už oceňují jiné. Propoj je raději opačně." };
+    await prisma.property.update({ where: { id: propertyId }, data: { oceneniPodle: koren } });
+  } else {
+    await prisma.property.update({ where: { id: propertyId }, data: { oceneniPodle: null } });
+  }
+  await aktualizujSkupinu(propertyId);
+  obnov(propertyId);
+  return { success: cilId ? "Ocenění propojeno." : "Propojení zrušeno, nemovitost má zase vlastní nabídky." };
 }

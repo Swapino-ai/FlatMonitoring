@@ -2,13 +2,14 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, type TrhState } from "@/lib/trhActions";
+import { nastavOceneniPodle, nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, type TrhState } from "@/lib/trhActions";
 import type { StatistikaNavrhu } from "@/lib/market/inzeraty";
 import { czk, dateCz } from "@/lib/format";
 import { Hlaska } from "./form";
 import { Badge } from "./Stat";
 import { Mapa, type BodOkoli } from "./Mapa";
 import { VyvojChart } from "./charts";
+import { SwipeNavrhy } from "./SwipeNavrhy";
 
 export interface RadekTrhu {
   id: string; // id zarazeni
@@ -54,9 +55,12 @@ function km(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
  * Sledovani trhu u jedne nemovitosti: zapnuti, navrhy ke kontrole, zarazene a vyrazene
  * nabidky, odhad z poslednich 10 zarazenych a jeho vyvoj v case.
  */
-export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
+export function TrhNemovitosti({ propertyId, trhId, propojeni, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
   diag?: StatistikaNavrhu;
   propertyId: string;
+  /** Nemovitost, jejiz nabidky se pouzivaji (pri propojenem oceneni jina nez propertyId) */
+  trhId?: string;
+  propojeni?: { podle: { id: string; name: string } | null; navazane: { id: string; name: string }[]; moznosti: { id: string; name: string }[] };
   canEdit: boolean;
   sledovat: boolean;
   skenovatelne: boolean;
@@ -74,6 +78,7 @@ export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, o
   const [vyrazeneOtevrene, setVyrazeneOtevrene] = useState(false);
   const [polohaPro, setPolohaPro] = useState<RadekTrhu | null>(null);
   const [sken, setSken] = useState("");
+  const [swipe, setSwipe] = useState(false);
 
   const proTyp = radky.filter((r) => r.dealType === typ);
   const navrhy = proTyp.filter((r) => r.stav === "NAVRH")
@@ -103,7 +108,7 @@ export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, o
       let novych = 0;
       for (const d of ["SALE", "RENT"] as const) {
         setSken(d === "SALE" ? "Skenuji prodej…" : "Skenuji pronájem…");
-        const r = await fetch("/api/market/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ propertyId, dealType: d }) });
+        const r = await fetch("/api/market/scan", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ propertyId: trhId ?? propertyId, dealType: d }) });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? "Sken selhal");
         const chyba = (j.results ?? []).find((x: { status: string; message?: string }) => x.status === "FAILED");
@@ -172,6 +177,30 @@ export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, o
     <div className="space-y-4">
       <Hlaska state={stav} />
 
+      {/* Propojene oceneni: dva byty, jeden odhad */}
+      {propojeni && (propojeni.podle || propojeni.navazane.length > 0 || (canEdit && propojeni.moznosti.length > 0)) && (
+        <div className={`flex flex-wrap items-center justify-between gap-3 rounded-card border p-4 ${propojeni.podle ? "border-accent/40 bg-accent-soft/40" : "border-line"}`}>
+          <div className="text-sm">
+            {propojeni.podle ? (
+              <>Oceňuje se stejně jako <a href={`/properties/${propojeni.podle.id}/trh`} className="font-semibold text-accent hover:underline">{propojeni.podle.name}</a>: sdílí jeho zařazené nabídky, odhad = medián za m² × plocha tohoto bytu. Rozhodnutí tady platí pro oba.</>
+            ) : propojeni.navazane.length > 0 ? (
+              <>Podle tohoto bytu se oceňuje i {propojeni.navazane.map((n) => n.name).join(", ")}. Zařazené nabídky platí pro všechny.</>
+            ) : (
+              <>Byt se dá oceňovat stejně jako jiný — sdílí zařazené nabídky, každý zůstává samostatný.</>
+            )}
+          </div>
+          {canEdit && (propojeni.podle
+            ? <button type="button" className="btn text-xs" disabled={bezi} onClick={() => akce(() => nastavOceneniPodle(propertyId, null))}>Zrušit propojení</button>
+            : propojeni.navazane.length === 0 && (
+              <select className="input w-auto py-1.5 text-sm" defaultValue="" disabled={bezi}
+                onChange={(e) => { const v = e.target.value; if (v) akce(() => nastavOceneniPodle(propertyId, v)); }}>
+                <option value="" disabled>Oceňovat stejně jako…</option>
+                {propojeni.moznosti.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            ))}
+        </div>
+      )}
+
       {/* Zapnuti sledovani */}
       <div className={`flex flex-wrap items-center justify-between gap-3 rounded-card border p-4 ${sledovat ? "border-good/40 bg-good/5" : "border-line"}`}>
         <div>
@@ -187,7 +216,7 @@ export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, o
           <div className="flex gap-2">
             {sledovat && <button type="button" className="btn" disabled={bezi || sken.startsWith("Skenuji")} onClick={skenovat}>Skenovat teď</button>}
             <button type="button" className={sledovat ? "btn" : "btn btn-primary"} disabled={bezi}
-              onClick={() => akce(() => nastavSledovani(propertyId, !sledovat))}>
+              onClick={() => akce(() => nastavSledovani(trhId ?? propertyId, !sledovat))}>
               {sledovat ? "Vypnout sledování" : "Sledovat trh"}
             </button>
           </div>
@@ -240,6 +269,7 @@ export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, o
           <h2 className="font-semibold">Návrhy ke kontrole <span className="text-ink-muted">({navrhy.length})</span></h2>
           {canEdit && navrhy.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
+              <button type="button" className="btn btn-primary text-xs" onClick={() => setSwipe(true)}>Procházet jeden po druhém</button>
               <button type="button" className="btn text-xs" onClick={() => setVybrane(new Set(navrhy.filter((r) => r.doporuceno).map((r) => r.id)))}>Vybrat doporučené</button>
               <button type="button" className="btn text-xs" onClick={() => setVybrane(new Set())}>Zrušit výběr</button>
               <button type="button" className="btn btn-primary text-xs" disabled={bezi || vybraneNavrhy.length === 0} onClick={() => rozhodni(vybraneNavrhy, "ZARAZENO")}>Zařadit vybrané ({vybraneNavrhy.length})</button>
@@ -261,7 +291,7 @@ export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, o
               </p>
             )}
             {canEdit && sledovat && diag && diag.novych > 0 && (
-              <button type="button" className="btn btn-primary mt-2 text-xs" disabled={bezi} onClick={() => akce(() => obnovNavrhy(propertyId))}>Navrhnout teď</button>
+              <button type="button" className="btn btn-primary mt-2 text-xs" disabled={bezi} onClick={() => akce(() => obnovNavrhy(trhId ?? propertyId))}>Navrhnout teď</button>
             )}
           </div>
         ) : (
@@ -339,6 +369,11 @@ export function TrhNemovitosti({ propertyId, canEdit, sledovat, poloha, radky, o
             </ul>
           )}
         </section>
+      )}
+
+      {swipe && (
+        <SwipeNavrhy propertyId={propertyId} navrhy={navrhy} najem={najem} vzdalenost={vzdalenost}
+          onKonec={(zmeneno) => { setSwipe(false); if (zmeneno) router.refresh(); }} />
       )}
 
       {/* Rucni poloha */}

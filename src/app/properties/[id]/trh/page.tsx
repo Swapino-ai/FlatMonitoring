@@ -11,7 +11,7 @@ import { loadProperty } from "@/lib/portfolio";
 import { NEMOVITOST_MAP, nazevNemovitosti } from "@/lib/catalogs";
 import { denISO } from "@/lib/format";
 import { odhadZeZarazenych } from "@/lib/market/zarazeni";
-import { OKNO_ODHADU, navrhniProNemovitost } from "@/lib/market/inzeraty";
+import { OKNO_ODHADU, navrhniProNemovitost, korenOceneni } from "@/lib/market/inzeraty";
 import { presunSnimkyNaDisk } from "@/lib/market/snimky";
 
 export const dynamic = "force-dynamic";
@@ -29,11 +29,21 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
   // Snimky porizene nocnim skenem se presouvaji na Google Disk postupne
   await presunSnimkyNaDisk(3).catch(() => 0);
 
+  // Propojene oceneni: nabidky a rozhodovani patri nemovitosti, podle ktere se oceňuje
+  const koren = await korenOceneni(id);
+  const korenP = koren === id ? property : await prisma.property.findUnique({ where: { id: koren } });
+  const [navazane, moznosti] = await Promise.all([
+    prisma.property.findMany({ where: { oceneniPodle: id }, select: { id: true, name: true } }),
+    prisma.property.findMany({
+      where: { id: { not: id }, type: property.type, status: { not: "SOLD" }, oceneniPodle: null },
+      select: { id: true, name: true }, orderBy: { name: "asc" },
+    }),
+  ]);
   // Proc co (ne)prislo do navrhu — bez zapisu
-  const diag = await navrhniProNemovitost(id, { zapsat: false });
+  const diag = await navrhniProNemovitost(koren, { zapsat: false });
 
   const zaznamy = await prisma.zarazeniInzeratu.findMany({
-    where: { propertyId: id },
+    where: { propertyId: koren },
     include: {
       inzerat: {
         include: {
@@ -81,7 +91,8 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
           </p>
         </div>
 
-        <TrhNemovitosti propertyId={id} canEdit={canEdit} sledovat={property.sledovatTrh} skenovatelne={skenovatelne}
+        <TrhNemovitosti propertyId={id} trhId={koren} canEdit={canEdit} sledovat={korenP?.sledovatTrh ?? false}
+          propojeni={{ podle: koren !== id && korenP ? { id: korenP.id, name: korenP.name } : null, navazane, moznosti }} skenovatelne={skenovatelne}
           poloha={property.latitude != null && property.longitude != null ? { lat: property.latitude, lon: property.longitude } : null}
           radky={radky} diag={diag} odhady={{ SALE: odhad("SALE"), RENT: odhad("RENT") }} />
 

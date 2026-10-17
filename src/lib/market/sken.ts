@@ -5,7 +5,7 @@
  */
 import { prisma } from "../db";
 import { srealitySource } from "./sreality";
-import { ulozInzeraty, navrhniProNemovitost, aktualizujOdhad, type StatistikaNavrhu } from "./inzeraty";
+import { ulozInzeraty, navrhniProNemovitost, aktualizujSkupinu, type StatistikaNavrhu } from "./inzeraty";
 import { zacniBeh, ukonciBeh, type Spoust } from "../scanLog";
 import { okruhyProTyp } from "../geo";
 
@@ -50,7 +50,6 @@ export async function skenujNemovitost(
 
   const statistika = await navrhniProNemovitost(p.id, { ids: nalezeneIds });
   // Ceny zarazenych se mohly zmenit — odhad se prepocita jen z nich
-  await aktualizujOdhad(p.id, "SALE");
-  await aktualizujOdhad(p.id, "RENT");
+  await aktualizujSkupinu(p.id);
   return { vysledky, navrhu: statistika.novych, statistika };
 }

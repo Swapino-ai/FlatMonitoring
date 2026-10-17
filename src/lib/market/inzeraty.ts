@@ -12,6 +12,26 @@ import { odhadZeZarazenych, ohodnot, median } from "./zarazeni";
 
 export const OKNO_ODHADU = 10;
 
+/** Nemovitost, jejiz zarazene nabidky se pouzivaji (propojene oceneni), jinak ona sama. */
+export async function korenOceneni(propertyId: string): Promise<string> {
+  const p = await prisma.property.findUnique({ where: { id: propertyId }, select: { oceneniPodle: true } });
+  return p?.oceneniPodle ?? propertyId;
+}
+
+/** Vsechny nemovitosti oceňované spolecne s korenem (vcetne nej). */
+export async function clenoveOceneni(koren: string): Promise<string[]> {
+  const navazane = await prisma.property.findMany({ where: { oceneniPodle: koren }, select: { id: true } });
+  return [koren, ...navazane.map((p) => p.id)];
+}
+
+/** Prepocita odhad prodeje i najmu u vsech propojenych nemovitosti. */
+export async function aktualizujSkupinu(propertyId: string) {
+  for (const id of await clenoveOceneni(await korenOceneni(propertyId))) {
+    await aktualizujOdhad(id, "SALE");
+    await aktualizujOdhad(id, "RENT");
+  }
+}
+
 /** Ulozi vysledky skenu: novy inzerat zalozi, znamy aktualizuje (cena jen pri zmene). Vraci pocet novych. */
 export async function ulozInzeraty(listings: ScrapedListing[], region?: string | null): Promise<{ novych: number; zmenCeny: number; ids: string[] }> {
   const ids: string[] = [];
@@ -134,8 +154,10 @@ function snimekNabidek(inzeraty: { source: string; externalId: string; dispositi
 export async function aktualizujOdhad(propertyId: string, dealType: "SALE" | "RENT") {
   const p = await prisma.property.findUnique({ where: { id: propertyId }, select: { areaM2: true } });
   if (!p) return null;
+  // Propojene oceneni: nabidky se berou od korene, plocha je vlastni
+  const zdroj = await korenOceneni(propertyId);
   const zarazene = await prisma.zarazeniInzeratu.findMany({
-    where: { propertyId, stav: "ZARAZENO", inzerat: { dealType } }, include: { inzerat: true },
+    where: { propertyId: zdroj, stav: "ZARAZENO", inzerat: { dealType } }, include: { inzerat: true },
   });
   const body = zarazene.map((z) => ({ datum: denISO(z.inzerat.firstSeenAt), pricePerM2: z.inzerat.pricePerM2 ?? 0, i: z.inzerat }));
   const odhad = odhadZeZarazenych(body, p.areaM2, OKNO_ODHADU);

@@ -103,6 +103,8 @@ model Property {
   excludedCities String?
   /// Vstupuje nemovitost do sledovani trhu? Bez toho ji nocni sken preskoci.
   sledovatTrh    Boolean @default(false)
+  /// Ocenuje se stejne jako jina nemovitost: sdili jeji zarazene nabidky (odhad = median za m2 x vlastni plocha)
+  oceneniPodle   String?
 
   // --- Porizeni ---
   purchaseDate     DateTime

@@ -17,7 +17,7 @@ import { NEMOVITOST_MAP } from "../src/lib/catalogs";
 import { doplnPolohu } from "../src/lib/geokodovani";
 import { uklidDenik } from "../src/lib/scanLog";
 import { skenujNemovitost } from "../src/lib/market/sken";
-import { aktualizujOdhad } from "../src/lib/market/inzeraty";
+import { aktualizujSkupinu } from "../src/lib/market/inzeraty";
 import { presunSnimkyNaDisk } from "../src/lib/market/snimky";
 import { HLAVICKY_PROHLIZECE, sleep } from "../src/lib/market/util";
 
@@ -84,7 +84,7 @@ async function main() {
   const zacatek = new Date();
   console.log(`[${zacatek.toISOString()}] Noční sken trhu`);
 
-  const sledovane = (await prisma.property.findMany({ where: { status: { not: "SOLD" }, sledovatTrh: true } }))
+  const sledovane = (await prisma.property.findMany({ where: { status: { not: "SOLD" }, sledovatTrh: true, oceneniPodle: null } }))
     .filter((p) => NEMOVITOST_MAP.get(p.type)?.srealityCesta);
   console.log(`${sledovane.length} nemovitostí se sleduje.`);
 
@@ -104,8 +104,7 @@ async function main() {
   await zarazeneInzeraty();
   // Zmizele inzeraty v odhadu zustavaji (byly to skutecne nabidky), jen se prepocita
   for (const p of sledovane) {
-    await aktualizujOdhad(p.id, "SALE");
-    await aktualizujOdhad(p.id, "RENT");
+    await aktualizujSkupinu(p.id);
   }
   const presunuto = await presunSnimkyNaDisk(50).catch(() => 0);
   if (presunuto) console.log(`Na Google Disk přesunuto ${presunuto} snímků.`);
