@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { nastavOceneniPodle, nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, type TrhState } from "@/lib/trhActions";
+import { nastavOceneniPodle, prepniVyloucenouObec, nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, type TrhState } from "@/lib/trhActions";
 import type { StatistikaNavrhu } from "@/lib/market/inzeraty";
 import { czk, dateCz } from "@/lib/format";
 import { Hlaska } from "./form";
@@ -57,11 +57,15 @@ function km(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
  * Sledovani trhu u jedne nemovitosti: zapnuti, navrhy ke kontrole, zarazene a vyrazene
  * nabidky, odhad ze zarazenych za posledni 2 mesice a jeho vyvoj v case.
  */
-export function TrhNemovitosti({ propertyId, trhId, propojeni, canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
+export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], canEdit, sledovat, poloha, radky, odhady, skenovatelne, stareVyrazene = [], diag }: {
   diag?: StatistikaNavrhu;
   propertyId: string;
   /** Nemovitost, jejiz nabidky se pouzivaji (pri propojenem oceneni jina nez propertyId) */
   trhId?: string;
+  /** Popis, podle ceho se hleda (klic) */
+  klic?: string;
+  /** Obce, ze kterych nabidky prisly; klikem vyloucit/vratit */
+  obce?: { nazev: string; pocet: number; km: number | null; vyloucena: boolean }[];
   propojeni?: { podle: { id: string; name: string } | null; navazane: { id: string; name: string }[]; moznosti: { id: string; name: string }[] };
   canEdit: boolean;
   sledovat: boolean;
@@ -207,6 +211,31 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, canEdit, sledovat
                 {propojeni.moznosti.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             ))}
+        </div>
+      )}
+
+      {/* Klic: podle ceho se hleda */}
+      {klic && (
+        <div className="rounded-card border border-line bg-surface-sunken/50 p-4 text-sm">
+          <div className="label mb-1">Klíč hledání</div>
+          <p className="text-ink-secondary">{klic}</p>
+          {obce.length > 0 && (
+            <div className="mt-3">
+              <div className="mb-1.5 text-xs text-ink-muted">Obce, ze kterých nabídky přišly{canEdit ? " — klikem vyloučíš nebo vrátíš" : ""}:</div>
+              <div className="flex flex-wrap gap-1.5">
+                {obce.map((o) => (
+                  <button key={o.nazev} type="button" disabled={!canEdit || bezi}
+                    onClick={() => akce(() => prepniVyloucenouObec(propertyId, o.nazev))}
+                    title={o.vyloucena ? "Vyloučená — klikem vrátit" : "Klikem vyloučit"}
+                    className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${o.vyloucena
+                      ? "border-bad/40 bg-bad/10 text-bad line-through"
+                      : "border-line bg-surface-card text-ink-secondary hover:border-bad hover:text-bad"}`}>
+                    {o.vyloucena ? "✕ " : ""}{o.nazev}{!o.vyloucena && <span className="text-ink-muted"> · {o.pocet}{o.km != null ? ` · ${String(o.km).replace(".", ",")} km` : ""}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -11,7 +11,8 @@ import { loadProperty } from "@/lib/portfolio";
 import { NEMOVITOST_MAP, nazevNemovitosti } from "@/lib/catalogs";
 import { denISO } from "@/lib/format";
 import { odhadZeZarazenych } from "@/lib/market/zarazeni";
-import { OKNO_ODHADU, navrhniProNemovitost, korenOceneni } from "@/lib/market/inzeraty";
+import { OKNO_ODHADU, navrhniProNemovitost, korenOceneni, okruhNemovitosti } from "@/lib/market/inzeraty";
+import { vzdalenost } from "@/lib/market/zarazeni";
 import { presunSnimkyNaDisk } from "@/lib/market/snimky";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +57,33 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
     },
   });
 
+  // Klic: jak se hleda, popsane vetou
+  const zdroj = korenP ?? property;
+  const okruh = okruhNemovitosti(zdroj);
+  const vyloucene = (zdroj.excludedCities ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+  const plochaOd = Math.round(zdroj.areaM2 * 0.75), plochaDo = Math.round(zdroj.areaM2 * 1.25);
+  const klic = [
+    `Prodej i nájem: ${nazevNemovitosti(zdroj.type).toLowerCase()}${zdroj.disposition ? ` ${zdroj.disposition} (jen stejná dispozice)` : ""}, ${plochaOd}–${plochaDo} m²`,
+    `do ${okruh.zaklad} km od obce ${zdroj.city}${okruh.pevny ? " (pevný okruh)" : `, při málo nabídkách až ${okruh.max} km`}; nabídka bez polohy jen ze stejné obce.`,
+    vyloucene.length ? `Nezahrnuje se: ${vyloucene.join(", ")}.` : "",
+    `Odhad = medián Kč/m² ze zařazených nabídek, které se objevily za poslední 2 měsíce, × ${property.areaM2} m²${koren !== id && korenP ? ` (nabídky sdílené s ${korenP.name})` : ""}.`,
+  ].filter(Boolean).join(" ");
+
+  // Obce, ze kterych nabidky prisly: klikem je jde vyloucit
+  const obceMapa = new Map<string, { pocet: number; km: number | null }>();
+  for (const z of zaznamy) {
+    const i = z.inzerat;
+    const km = zdroj.latitude != null && zdroj.longitude != null && i.latitude != null && i.longitude != null
+      ? vzdalenost({ lat: zdroj.latitude, lon: zdroj.longitude }, { lat: i.latitude, lon: i.longitude }) : null;
+    const o = obceMapa.get(i.city) ?? { pocet: 0, km: null };
+    obceMapa.set(i.city, { pocet: o.pocet + 1, km: km == null ? o.km : o.km == null ? km : Math.min(o.km, km) });
+  }
+  const obce = [
+    ...[...obceMapa.entries()].filter(([n]) => !vyloucene.some((v) => n.toLowerCase().includes(v.toLowerCase())))
+      .map(([nazev, o]) => ({ nazev, pocet: o.pocet, km: o.km == null ? null : Math.round(o.km * 10) / 10, vyloucena: false })),
+    ...vyloucene.map((nazev) => ({ nazev, pocet: 0, km: null, vyloucena: true })),
+  ].sort((a, b) => Number(a.vyloucena) - Number(b.vyloucena) || (a.km ?? 99) - (b.km ?? 99));
+
   const radky: RadekTrhu[] = zaznamy.map((z) => {
     const i = z.inzerat;
     return {
@@ -94,7 +122,7 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
           </p>
         </div>
 
-        <TrhNemovitosti propertyId={id} trhId={koren} canEdit={canEdit} sledovat={korenP?.sledovatTrh ?? false}
+        <TrhNemovitosti propertyId={id} trhId={koren} klic={klic} obce={obce} canEdit={canEdit} sledovat={korenP?.sledovatTrh ?? false}
           propojeni={{ podle: koren !== id && korenP ? { id: korenP.id, name: korenP.name } : null, navazane, moznosti }} skenovatelne={skenovatelne}
           poloha={property.latitude != null && property.longitude != null ? { lat: property.latitude, lon: property.longitude } : null}
           radky={radky} diag={diag} odhady={{ SALE: odhad("SALE"), RENT: odhad("RENT") }} />

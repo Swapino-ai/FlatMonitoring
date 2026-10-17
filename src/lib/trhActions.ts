@@ -47,6 +47,21 @@ export async function rozhodniInzeraty(propertyId: string, ids: string[], stav: 
   return { success: `${slovo}: ${zaznamy.length}.` };
 }
 
+/** Vyloucit / vratit obec (klikaci filtr). Vyloucena obec se uz nenavrhuje a jeji navrhy zmizi. */
+export async function prepniVyloucenouObec(propertyId: string, obec: string): Promise<TrhState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+  const koren = await korenOceneni(propertyId);
+  const p = await prisma.property.findUnique({ where: { id: koren }, select: { excludedCities: true } });
+  const seznam = (p?.excludedCities ?? "").split(",").map((m) => m.trim()).filter(Boolean);
+  const je = seznam.some((m) => m.toLowerCase() === obec.toLowerCase());
+  const novy = je ? seznam.filter((m) => m.toLowerCase() !== obec.toLowerCase()) : [...seznam, obec];
+  await prisma.property.update({ where: { id: koren }, data: { excludedCities: novy.join(", ") || null } });
+  await navrhniProNemovitost(koren);
+  for (const id of await clenoveOceneni(koren)) obnov(id);
+  return { success: je ? `${obec} se zase započítává.` : `${obec} vyloučena, její návrhy zmizely.` };
+}
+
 /** Rucne urcena poloha inzeratu (sken ji pak neprepisuje). */
 export async function nastavPolohuInzeratu(propertyId: string, inzeratId: string, lat: number, lon: number): Promise<TrhState> {
   const auth = await majitel();
