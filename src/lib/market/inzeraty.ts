@@ -269,12 +269,17 @@ function proShodu(i: { category: string; disposition: string | null; areaM2: num
 }
 
 /**
- * Hleda, jestli se navrzene nebo zarazene nabidky uz nekdy neobjevily jako jiny inzerat
- * (stejny byt). Porovnava se vsemi inzeraty v databazi, i zmizelymi. Nove pravdepodobne
- * shody ulozi jako navrh ke schvaleni; o jednou rozhodnutych parech uz znovu nenavrhuje.
+ * Hleda, jestli navrzena nebo zarazena nabidka neni stejny byt jako drivejsi, uz smazany
+ * inzerat, ktery byl zarazeny do odhadu (urcoval cenu). Jen takove shody maji smysl:
+ * ukazi, za kolik se ten byt nabizel driv. Pravdepodobne shody ulozi jako navrh ke
+ * schvaleni; o jednou rozhodnutych parech uz znovu nenavrhuje.
  */
-export async function najdiShody(): Promise<{ porovnano: number; novych: number }> {
-  const sledovane = await prisma.inzerat.findMany({ where: { zarazeni: { some: { stav: { in: ["NAVRH", "ZARAZENO"] } } }, areaM2: { not: null } } });
+export async function najdiShody(): Promise<{ porovnano: number; novych: number; odebrano: number }> {
+  // Drivejsi = zmizely z trhu a byl zarazeny do odhadu
+  const drivejsiPodminka = { zmizelAt: { not: null }, zarazeni: { some: { stav: "ZARAZENO" } } };
+  // Navrhy z drivejsich pravidel, ktere tomu neodpovidaji, zmizi (rozhodnute zustavaji)
+  const odebrano = (await prisma.shodaInzeratu.deleteMany({ where: { stav: "NAVRH", NOT: { drivejsi: drivejsiPodminka } } })).count;
+  const sledovane = await prisma.inzerat.findMany({ where: { zmizelAt: null, zarazeni: { some: { stav: { in: ["NAVRH", "ZARAZENO"] } } }, areaM2: { not: null } } });
   const znamePary = new Set((await prisma.shodaInzeratu.findMany({ select: { inzeratId: true, drivejsiId: true } }))
     .flatMap((s) => [`${s.inzeratId}|${s.drivejsiId}`, `${s.drivejsiId}|${s.inzeratId}`]));
   let porovnano = 0, novych = 0;
@@ -282,7 +287,7 @@ export async function najdiShody(): Promise<{ porovnano: number; novych: number 
     const plocha = a.areaM2!;
     const kandidati = await prisma.inzerat.findMany({
       where: {
-        id: { not: a.id }, category: a.category,
+        id: { not: a.id }, category: a.category, ...drivejsiPodminka,
         ...(a.disposition ? { OR: [{ disposition: a.disposition }, { disposition: null }] } : {}),
         areaM2: { gte: plocha * 0.96, lte: plocha * 1.04 },
         AND: [{
@@ -300,12 +305,10 @@ export async function najdiShody(): Promise<{ porovnano: number; novych: number 
       porovnano++;
       const s = podobnostBytu(proShodu(a), proShodu(b));
       if (!s || s.skore < PRAH_SHODY) continue;
-      // "Drivejsi" je ten, ktery se na trhu objevil driv
-      const [novy, drivejsi] = a.firstSeenAt >= b.firstSeenAt ? [a, b] : [b, a];
-      await prisma.shodaInzeratu.create({ data: { inzeratId: novy.id, drivejsiId: drivejsi.id, skore: s.skore, duvod: s.duvod } });
+      await prisma.shodaInzeratu.create({ data: { inzeratId: a.id, drivejsiId: b.id, skore: s.skore, duvod: s.duvod } });
       znamePary.add(`${a.id}|${b.id}`); znamePary.add(`${b.id}|${a.id}`);
       novych++;
     }
   }
-  return { porovnano, novych };
+  return { porovnano, novych, odebrano };
 }

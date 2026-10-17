@@ -65,7 +65,7 @@ export function CenyAShody({ ceny, najem, shody = [], canEdit, onRozhodni }: {
 
       {viditelne.map((s) => {
         const j = s.jiny;
-        const popis = <>{s.drivejsi ? "dřívější" : "novější"} inzerát {j.najem ? "(pronájem)" : ""} {dateCz(j.od)}–{j.zmizel ? dateCz(j.do) : "dosud"}: <strong>{j.najem ? `${czk(j.price)}/měs.` : czk(j.price)}</strong>
+        const popis = <>{s.drivejsi ? "dřívější smazaný inzerát, který byl v odhadu," : "novější inzerát"} {j.najem ? "(pronájem)" : ""} {dateCz(j.od)}–{j.zmizel ? dateCz(j.do) : "dosud"}: <strong>{j.najem ? `${czk(j.price)}/měs.` : czk(j.price)}</strong>
           {j.ceny.length > 1 && <> (začínal na {j.najem ? `${czk(j.ceny[0].price)}/měs.` : czk(j.ceny[0].price)})</>}</>;
         return s.stav === "NAVRH" ? (
           <div key={s.id} className="rounded-lg border border-warn/40 bg-warn/10 px-2.5 py-1.5 text-xs">

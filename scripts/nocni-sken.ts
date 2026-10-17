@@ -164,7 +164,7 @@ async function main() {
   await doplnParametry(prisma, 150).catch((e) => console.log("AI parametry selhaly:", e instanceof Error ? e.message : e));
   // Stejny byt v jinem (i drivejsim) inzeratu — navrhy ke schvaleni
   const shody = await najdiShody().catch((e) => { console.log("Hledání stejných bytů selhalo:", e instanceof Error ? e.message : e); return null; });
-  if (shody) console.log(`Stejný byt: porovnáno ${shody.porovnano} dvojic, nových možných shod ${shody.novych}.`);
+  if (shody) console.log(`Stejný byt: porovnáno ${shody.porovnano} dvojic, nových možných shod ${shody.novych}, odebráno neplatných ${shody.odebrano}.`);
   // Zmizele inzeraty v odhadu zustavaji (byly to skutecne nabidky), jen se prepocita
   for (const p of sledovane) {
     await aktualizujSkupinu(p.id);

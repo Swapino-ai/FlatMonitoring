@@ -116,7 +116,7 @@ if (process.argv[1]?.endsWith("ai-parametry.ts")) {
     .then(async () => {
       const { najdiShody } = await import("../src/lib/market/inzeraty");
       const r = await najdiShody();
-      console.log(`Stejný byt: porovnáno ${r.porovnano} dvojic, nových možných shod ${r.novych}.`);
+      console.log(`Stejný byt: porovnáno ${r.porovnano} dvojic, nových možných shod ${r.novych}, odebráno neplatných ${r.odebrano}.`);
     })
     .catch((e) => { console.error("AI parametry selhaly:", e); process.exitCode = 1; })
     .finally(() => prisma.$disconnect());
