@@ -21,7 +21,7 @@ import { aktualizujSkupinu } from "../src/lib/market/inzeraty";
 import { presunSnimkyNaDisk } from "../src/lib/market/snimky";
 import { jeNastaveno } from "../src/lib/googleDrive";
 import { doplnParametry } from "./ai-parametry";
-import { nactiDetail } from "./sreality-detail";
+import { nactiDetail, uklidStranku } from "./sreality-detail";
 import { HLAVICKY_PROHLIZECE, sleep } from "../src/lib/market/util";
 
 const prisma = new PrismaClient();
@@ -101,6 +101,9 @@ async function zarazeneInzeraty() {
             }
             if (d.fotky.length) await prisma.inzerat.update({ where: { id: i.id }, data: { fotkyUrl: d.fotky } });
             if (potrebaSnimek) {
+              // Okna, ktera vyskocila az po nacteni, jeste jednou zavrit
+              await stranka.waitForTimeout(1500);
+              await uklidStranku(stranka);
               const data = await stranka.screenshot({ type: "jpeg", quality: 65 });
               await prisma.inzeratSnimek.create({ data: { inzeratId: i.id, price: i.price, data: new Uint8Array(data) } });
               snimku++;

@@ -76,6 +76,12 @@ export async function nactiDetail(stranka: Page, url: string, externalId: string
  * aby screenshot ukazoval inzerat. Reklamni ramecky Seznamu taky schova.
  */
 export async function uklidStranku(stranka: Page): Promise<void> {
+  // Trvale: okna (MUI dialogy) se casto otevrou az se zpozdenim, styl je skryje i pak
+  await stranka.addStyleTag({ content: `
+    .MuiDialog-root, .MuiModal-root[role="presentation"], .MuiBackdrop-root, [role="dialog"], [aria-modal="true"],
+    iframe[src*="ssp.seznam"], iframe[src*="sklik"], [id^="ssp-"] { display: none !important; }
+    html, body { overflow: auto !important; }
+  ` }).catch(() => undefined);
   for (let k = 0; k < 3; k++) {
     const tlacitko = stranka.getByRole("button", { name: /^(pokračovat|zavřít|ne,? děkuji|teď ne|později|rozumím)$/i }).first();
     if (!(await tlacitko.isVisible({ timeout: 800 }).catch(() => false))) break;

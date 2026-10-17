@@ -5,7 +5,7 @@
 import { PrismaClient } from "@prisma/client";
 import { chromium } from "playwright";
 import { HLAVICKY_PROHLIZECE } from "../src/lib/market/util";
-import { nactiDetail } from "./sreality-detail";
+import { nactiDetail, uklidStranku } from "./sreality-detail";
 
 const prisma = new PrismaClient();
 
@@ -16,12 +16,14 @@ async function main() {
   for (const i of inz) {
     const p = await ctx.newPage();
     const d = await nactiDetail(p, i.url!, i.externalId);
+    await p.waitForTimeout(1500);
+    await uklidStranku(p);
     // Jako retezec: tsx by do funkce vlozil pomocnou __name, kterou prohlizec nezna
     const zbytek = await p.evaluate(`(() => {
       const plocha = window.innerWidth * window.innerHeight;
       const prekryvy = Array.from(document.querySelectorAll("body *")).filter((el) => {
         const st = getComputedStyle(el); const r = el.getBoundingClientRect();
-        return st.display !== "none" && st.visibility !== "hidden" && st.position === "fixed" && r.width * r.height > plocha * 0.2;
+        return el.offsetParent !== null && st.display !== "none" && st.visibility !== "hidden" && st.position === "fixed" && r.width * r.height > plocha * 0.2;
       }).map((el) => el.tagName + "." + String(el.className).slice(0, 40));
       return { prekryvy: prekryvy.slice(0, 5), premium: /Premium je tu/.test(document.body.innerText) };
     })()`) as { prekryvy: string[]; premium: boolean };
