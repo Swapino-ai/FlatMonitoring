@@ -49,16 +49,15 @@ async function main() {
 
   console.log("\n== Výpisy ==");
   const b = "https://www.sreality.cz/hledani/prodej/byty";
-  await zkus("obec velemin", `${b}/velemin`);
-  await zkus("obec velemin-oparno", `${b}/velemin-oparno`);
-  await zkus("okres litomerice", `${b}/okres-litomerice`);
-  await zkus("litomerice", `${b}/litomerice`);
-  await zkus("okres param", `${b}?okresy=litomerice`);
-  await zkus("region query", `${b}?region=Velem%C3%ADn&region-typ=municipality`);
-  await zkus("bbox lat/lon", `${b}?lat-max=50.56&lat-min=50.50&lon-max=14.00&lon-min=13.90`);
-  await zkus("bbox lat/lng", `${b}?lat_max=50.56&lat_min=50.50&lng_max=14.00&lng_min=13.90`);
-  await zkus("kraj", `${b}/ustecky-kraj`);
-  await zkus("kraj řazeno nejnovější", `${b}/ustecky-kraj?razeni=nejnovejsi`);
+  await zkus("obec param Velemín", `${b}?region=Velem%C3%ADn&region-typ=municipality`);
+  await zkus("okres param district", `${b}?region=Litom%C4%9B%C5%99ice&region-typ=district`);
+  await zkus("okres param okres", `${b}?region=okres%20Litom%C4%9B%C5%99ice&region-typ=district`);
+  await zkus("obec Litoměřice param", `${b}?region=Litom%C4%9B%C5%99ice&region-typ=municipality`);
+  await zkus("slug litomerice str.2", `${b}/litomerice?strana=2`);
+  await zkus("obec param + strana 2", `${b}?region=Litom%C4%9B%C5%99ice&region-typ=municipality&strana=2`);
+  await zkus("pronájem obec param", `https://www.sreality.cz/hledani/pronajem/byty?region=Velem%C3%ADn&region-typ=municipality`);
+  await zkus("okres param + vzdálenost", `${b}?region=Velem%C3%ADn&region-typ=municipality&vzdalenost=10`);
+  await zkus("okres param + vzdalenost 5", `${b}?region=Velem%C3%ADn&region-typ=municipality&vzdalenost=5`);
 }
 
 main();
