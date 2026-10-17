@@ -1,0 +1,20 @@
+# Sonda: kde má detail inzerátu na Sreality seznam fotek. Jen čte, nic nemění.
+name: Sonda fotek
+on:
+  workflow_dispatch:
+jobs:
+  sonda:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx tsx scripts/sonda-fotky.ts
