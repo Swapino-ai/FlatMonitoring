@@ -14,7 +14,6 @@ import { nahledAi } from "@/lib/market/aiNahled";
 import { odhadZeZarazenych } from "@/lib/market/zarazeni";
 import { OKNO_ODHADU, navrhniProNemovitost, korenOceneni, okruhNemovitosti } from "@/lib/market/inzeraty";
 import { polohaNabidky, vahaZarazeni, vzdalenost } from "@/lib/market/zarazeni";
-import { presunSnimkyNaDisk } from "@/lib/market/snimky";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +27,8 @@ export default async function TrhPage({ params }: { params: Promise<{ id: string
   const property = await loadProperty(id);
   if (!property) notFound();
 
-  // Snimky porizene nocnim skenem se presouvaji na Google Disk postupne
-  await presunSnimkyNaDisk(3).catch(() => 0);
-
+  // Snimky na Google Disk presouva nocni sken; tady by kazde nacteni (i po kazde zmene
+  // na strance) cekalo na nahravani souboru
   // Propojene oceneni: nabidky a rozhodovani patri nemovitosti, podle ktere se oceňuje
   const koren = await korenOceneni(id);
   const korenP = koren === id ? property : await prisma.property.findUnique({ where: { id: koren } });

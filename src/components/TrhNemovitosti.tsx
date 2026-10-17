@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { nastavOceneniPodle, prepniVyloucenouObec, nastavVlastnostBytu, nastavVlastnostNabidky, nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, type TrhState } from "@/lib/trhActions";
 import type { StatistikaNavrhu } from "@/lib/market/inzeraty";
@@ -128,6 +128,19 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
     setStav(r);
     router.refresh();
   });
+  // Typ domu, stav a vaha: zmena se ukaze hned, ulozeni a prepocet odhadu bezi na pozadi
+  // (revalidace po akci prinese nova data sama, bez dalsiho router.refresh)
+  type Uprava = Partial<Pick<RadekTrhu, "typDomu" | "stavBytu" | "vahaRucne">>;
+  const [upravy, setUpravy] = useState<Record<string, Uprava>>({});
+  const [, ukladej] = useTransition();
+  useEffect(() => { setUpravy({}); }, [radky]);
+  const uprav = (r: RadekTrhu, data: Uprava) => {
+    setUpravy((u) => ({ ...u, [r.id]: { ...u[r.id], ...data } }));
+    ukladej(async () => {
+      const v = await nastavVlastnostNabidky(propertyId, r.id, data);
+      if (v.error) setStav(v);
+    });
+  };
   const rozhodni = (ids: string[], novy: "ZARAZENO" | "VYRAZENO" | "NAVRH") => {
     akce(() => rozhodniInzeraty(propertyId, ids, novy));
     setVybrane((v) => { const n = new Set(v); ids.forEach((i) => n.delete(i)); return n; });
@@ -424,7 +437,7 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
           <p className="py-3 text-center text-sm text-ink-muted">Zatím nic. Zařaď nabídky z návrhů a vznikne odhad.</p>
         ) : (
           <ul className="divide-y divide-line/70 rounded-xl border border-line">
-            {zarazene.map((r) => { const k = r.firstSeen > hraniceOkna ? 0 : 99; return (
+            {zarazene.map((puvodni) => { const r = { ...puvodni, ...upravy[puvodni.id] }; const k = r.firstSeen > hraniceOkna ? 0 : 99; return (
               <li key={r.id} className={`flex gap-3 px-3 py-3 ${r.zmizel ? "opacity-70" : ""}`}>
                 {/* Nahled: prvni fotka, klik otevre galerii */}
                 {(() => {
@@ -474,8 +487,8 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
                         <label key={pole} className="flex items-center gap-1" title={duvod ? `AI: ${duvod}` : undefined}>
                           <span className="text-ink-muted">{nazev}</span>
                           <select className={`rounded-md border bg-surface-card px-1.5 py-0.5 ${rucne ? "border-line font-medium" : aiNazev ? "border-dashed border-accent text-accent" : "border-line text-ink-muted"}`}
-                            value={rucne ?? ""} disabled={!canEdit || bezi}
-                            onChange={(e) => akce(() => nastavVlastnostNabidky(propertyId, r.id, { [pole]: e.target.value || null }))}>
+                            value={rucne ?? ""} disabled={!canEdit}
+                            onChange={(e) => uprav(r, { [pole]: e.target.value || null })}>
                             <option value="">{aiNazev ? `${aiNazev} (AI)` : "neurčeno"}</option>
                             {Object.entries(volby).map(([kl, n]) => <option key={kl} value={kl}>{n}</option>)}
                           </select>
@@ -493,8 +506,8 @@ export function TrhNemovitosti({ propertyId, trhId, propojeni, klic, obce = [], 
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold tabular-nums text-ink-secondary" title="Jak moc nabídka určuje odhad (podobnost plochy, typu domu, stavu a polohy)">váha {String(r.vaha ?? 1).replace(".", ",")}×</span>
                     {canEdit && (
-                      <select className="rounded-md border border-line bg-surface-card px-1 py-0.5" value={r.vahaRucne ?? ""} disabled={bezi} title="Ruční váha"
-                        onChange={(e) => akce(() => nastavVlastnostNabidky(propertyId, r.id, { vahaRucne: e.target.value === "" ? null : Number(e.target.value) }))}>
+                      <select className="rounded-md border border-line bg-surface-card px-1 py-0.5" value={r.vahaRucne ?? ""} title="Ruční váha"
+                        onChange={(e) => uprav(r, { vahaRucne: e.target.value === "" ? null : Number(e.target.value) })}>
                         <option value="">auto</option>
                         {[0.5, 1, 2, 3, 5].map((v) => <option key={v} value={v}>{String(v).replace(".", ",")}×</option>)}
                       </select>

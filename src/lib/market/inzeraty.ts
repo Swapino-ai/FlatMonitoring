@@ -27,10 +27,9 @@ export async function clenoveOceneni(koren: string): Promise<string[]> {
 
 /** Prepocita odhad prodeje i najmu u vsech propojenych nemovitosti. */
 export async function aktualizujSkupinu(propertyId: string) {
-  for (const id of await clenoveOceneni(await korenOceneni(propertyId))) {
-    await aktualizujOdhad(id, "SALE");
-    await aktualizujOdhad(id, "RENT");
-  }
+  // Kazda nemovitost a typ nabidky nezavisle — soubezne, at uprava na strance neceka
+  const clenove = await clenoveOceneni(await korenOceneni(propertyId));
+  await Promise.all(clenove.flatMap((id) => [aktualizujOdhad(id, "SALE"), aktualizujOdhad(id, "RENT")]));
 }
 
 /** Ulozi vysledky skenu: novy inzerat zalozi, znamy aktualizuje (cena jen pri zmene). Vraci pocet novych. */
