@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useState } from "react";
 import {
-  deleteSettlement, saveSettlement, saveSettlementSkupina, type VyuctovaniFormState,
+  deleteSettlement, saveSettlement, saveSettlementSkupina, zaplacenoDodavateli, type VyuctovaniFormState, type ZaplacenoSluzbe,
 } from "@/lib/vyuctovaniActions";
 import {
   pridejDny, prunik, rozuctuj, vyuctovaniNajemce,
@@ -235,48 +235,160 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
   );
 }
 
+/**
+ * Pruvodce spolecnym vyuctovanim: 1) sluzby, 2) obdobi, 3) castky. Zalohy, ktere se
+ * dodavateli za obdobi zaplatily, dopocita sam z mesicnich plateb sluzeb.
+ */
 function SkupinaFormular({ services, typy, action, pending }: {
   services: SluzbaRadek[]; typy: TypySluzeb;
   action: (payload: FormData) => void; pending: boolean;
 }) {
+  const [krok, setKrok] = useState<1 | 2 | 3>(1);
   const [vybrane, setVybrane] = useState<Set<string>>(new Set());
+  const [od, setOd] = useState<string | null>(null);
+  const [doDne, setDoDne] = useState<string | null>(null);
+  const [zaplaceno, setZaplaceno] = useState<ZaplacenoSluzbe[] | null>(null);
+  const [zalohy, setZalohy] = useState<Record<string, string>>({});
+  const [naklad, setNaklad] = useState("");
+  const [nacitam, setNacitam] = useState(false);
+  const [chyba, setChyba] = useState("");
+
   const skupiny = [...new Set(services.map((s) => s.groupName).filter((g): g is string => !!g))].sort();
   const prepni = (id: string) => setVybrane((v) => { const n = new Set(v); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const vyberSkupinu = (g: string) => setVybrane(new Set(services.filter((s) => s.groupName === g).map((s) => s.id)));
+  const nazev = (id: string) => { const s = services.find((x) => x.id === id); return s ? `${nazevDruhu(typy, s.type)} · ${s.provider}` : id; };
+
+  async function dalKCastkam() {
+    if (!od || !doDne || od > doDne) { setChyba("Zadej platné období od–do."); return; }
+    setChyba("");
+    setNacitam(true);
+    const r = await zaplacenoDodavateli([...vybrane], od, doDne);
+    setNacitam(false);
+    if (r.error) { setChyba(r.error); return; }
+    setZaplaceno(r.sluzby ?? []);
+    setZalohy(Object.fromEntries((r.sluzby ?? []).map((x) => [x.id, String(x.zaplaceno)])));
+    setKrok(3);
+  }
+
+  const soucetZaloh = Object.values(zalohy).reduce((a, v) => a + (cislo(v) || 0), 0);
+  const nakladCislo = cislo(naklad);
+  const vysledek = Number.isFinite(nakladCislo) && naklad !== "" ? soucetZaloh - nakladCislo : null;
+
+  const kroky = ["Služby", "Období", "Částky"];
   return (
-    <form action={action} className="grid gap-3 sm:grid-cols-2">
-      <div className="sm:col-span-2">
-        <div className="label mb-1.5">Služby na jednom dokladu</div>
-        {skupiny.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {skupiny.map((g) => (
-              <button key={g} type="button" className="btn px-2.5 py-1 text-xs" onClick={() => vyberSkupinu(g)}>Celá skupina: {g}</button>
+    <form action={action} className="space-y-4">
+      {/* Ukazatel kroku */}
+      <ol className="flex flex-wrap items-center gap-2 text-xs">
+        {kroky.map((k, i) => (
+          <li key={k} className={`flex items-center gap-1.5 rounded-full px-3 py-1 ${krok === i + 1 ? "bg-accent text-white" : krok > i + 1 ? "bg-good/15 text-good" : "bg-surface-sunken text-ink-muted"}`}>
+            <span className="font-semibold">{i + 1}</span> {k}
+          </li>
+        ))}
+      </ol>
+      {chyba && <p className="rounded-lg bg-bad/10 px-3 py-2 text-sm text-bad">{chyba}</p>}
+
+      {krok === 1 && (
+        <div>
+          <div className="label mb-1.5">Které služby jsou na jednom dokladu?</div>
+          {skupiny.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {skupiny.map((g) => (
+                <button key={g} type="button" className="btn px-2.5 py-1 text-xs" onClick={() => vyberSkupinu(g)}>Celá skupina: {g}</button>
+              ))}
+            </div>
+          )}
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            {services.map((s) => (
+              <label key={s.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm">
+                <input type="checkbox" checked={vybrane.has(s.id)} onChange={() => prepni(s.id)} className="h-4 w-4 accent-accent" />
+                <span className="min-w-0 flex-1 truncate">{nazevDruhu(typy, s.type)} · {s.provider}</span>
+                {s.groupName && <span className="text-xs text-ink-muted">{s.groupName}</span>}
+              </label>
             ))}
           </div>
-        )}
-        <div className="grid gap-1.5 sm:grid-cols-2">
-          {services.map((s) => (
-            <label key={s.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm">
-              <input type="checkbox" checked={vybrane.has(s.id)} onChange={() => prepni(s.id)} className="h-4 w-4 accent-accent" />
-              <span className="min-w-0 flex-1 truncate">{nazevDruhu(typy, s.type)} · {s.provider}</span>
-              {s.groupName && <span className="text-xs text-ink-muted">{s.groupName}</span>}
-            </label>
-          ))}
+          <div className="mt-3 flex justify-end">
+            <button type="button" className="btn btn-primary" disabled={vybrane.size < 2} onClick={() => setKrok(2)}>
+              Dál: období ({vybrane.size} služeb)
+            </button>
+          </div>
         </div>
-        {[...vybrane].map((id) => <input key={id} type="hidden" name="serviceId" value={id} />)}
-        <p className="mt-1 text-xs text-ink-muted">Doklad se rozdělí mezi vybrané služby podle jejich měsíčních nákladů a uloží se jako vyúčtování každé z nich.</p>
-      </div>
-      <Pole label="Období od" name="periodFrom" type="date" required />
-      <Pole label="Období do" name="periodTo" type="date" required />
-      <Pole label="Skutečný náklad celkem (Kč)" name="totalCost" type="number" step="0.01" required />
-      <Pole label="Zálohy zaplacené dodavateli celkem (Kč)" name="supplierAdvances" type="number" step="0.01" defaultValue={0} />
-      <Pole label="Číslo dokladu" name="invoiceNo" placeholder="nepovinné" />
-      <TextPole label="Poznámka" name="notes" />
-      <div className="sm:col-span-2">
-        <button type="submit" disabled={pending || vybrane.size < 2} className="btn btn-primary">
-          {pending ? "Ukládám…" : `Uložit společné vyúčtování (${vybrane.size} služeb)`}
-        </button>
-      </div>
+      )}
+
+      {krok === 2 && (
+        <div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <DatumPole label="Období od" name="obdobi-od" hodnota={od} defaultValue={od ?? ""} onChange={setOd} />
+            <DatumPole label="Období do" name="obdobi-do" hodnota={doDne} defaultValue={doDne ?? ""} onChange={setDoDne} />
+          </div>
+          <p className="mt-2 text-xs text-ink-muted">Za toto období spočítám, kolik se dodavateli na zálohách zaplatilo.</p>
+          <div className="mt-3 flex justify-between">
+            <button type="button" className="btn" onClick={() => setKrok(1)}>Zpět</button>
+            <button type="button" className="btn btn-primary" disabled={!od || !doDne || nacitam} onClick={dalKCastkam}>
+              {nacitam ? "Počítám zálohy…" : "Dál: částky"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {krok === 3 && zaplaceno && (
+        <div className="space-y-3">
+          <p className="text-sm text-ink-secondary">Období {od && doDne ? obdobi(od, doDne) : ""}</p>
+          <div className="rounded-xl border border-line">
+            <div className="border-b border-line px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Zálohy zaplacené dodavateli</div>
+            <ul className="divide-y divide-line/60">
+              {zaplaceno.map((x) => (
+                <li key={x.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
+                  <span className="min-w-0 flex-1">
+                    {nazev(x.id)}
+                    <span className="block text-xs text-ink-muted">
+                      {x.mesicu === 0 ? "v evidenci nejsou měsíční platby za toto období"
+                        : `${x.mesicu} měs. · podle předpisu ${czk(x.predpis)}${x.zaplacenychMesicu ? ` · ${x.zaplacenychMesicu} měs. označeno jako zaplaceno` : " · zaplacení neoznačeno, bere se předpis"}`}
+                    </span>
+                  </span>
+                  <input type="text" inputMode="decimal" aria-label={`Zálohy: ${nazev(x.id)}`} className="input w-32 py-1 text-right tabular-nums"
+                    value={zalohy[x.id] ?? ""} onChange={(e) => setZalohy((z) => ({ ...z, [x.id]: e.target.value }))} />
+                  <span className="text-xs text-ink-muted">Kč</span>
+                </li>
+              ))}
+              <li className="flex items-center gap-3 px-3 py-2 text-sm font-semibold">
+                <span className="flex-1">Zálohy celkem</span>
+                <span className="tabular-nums">{czk(soucetZaloh)}</span>
+              </li>
+            </ul>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="label mb-1.5 block" htmlFor="pruvodce-naklad">Skutečný náklad podle dokladu (Kč)</label>
+              <input id="pruvodce-naklad" type="text" inputMode="decimal" required className="input text-right tabular-nums"
+                value={naklad} onChange={(e) => setNaklad(e.target.value)} />
+            </div>
+            <div className="flex items-end">
+              {vysledek != null && (
+                <p className={`w-full rounded-lg px-3 py-2 text-sm font-semibold ${vysledek >= 0 ? "bg-good/10 text-good" : "bg-bad/10 text-bad"}`}>
+                  {vysledek >= 0 ? "Přeplatek" : "Nedoplatek"} {czk(Math.abs(vysledek))}
+                </p>
+              )}
+            </div>
+            <Pole label="Číslo dokladu" name="invoiceNo" placeholder="nepovinné" />
+            <TextPole label="Poznámka" name="notes" />
+          </div>
+          <p className="text-xs text-ink-muted">Náklad se rozdělí mezi služby podle jejich měsíčních nákladů, zálohy podle částek výše.</p>
+
+          {[...vybrane].map((id) => <input key={id} type="hidden" name="serviceId" value={id} />)}
+          <input type="hidden" name="periodFrom" value={od ?? ""} />
+          <input type="hidden" name="periodTo" value={doDne ?? ""} />
+          <input type="hidden" name="totalCost" value={Number.isFinite(nakladCislo) ? String(nakladCislo) : ""} />
+          <input type="hidden" name="supplierAdvances" value={String(soucetZaloh)} />
+          <input type="hidden" name="zalohyPoSluzbach" value={JSON.stringify(Object.fromEntries(Object.entries(zalohy).map(([k, v]) => [k, cislo(v) || 0])))} />
+
+          <div className="flex justify-between">
+            <button type="button" className="btn" onClick={() => setKrok(2)}>Zpět</button>
+            <button type="submit" disabled={pending || naklad === "" || !Number.isFinite(nakladCislo)} className="btn btn-primary">
+              {pending ? "Ukládám…" : "Uložit společné vyúčtování"}
+            </button>
+          </div>
+        </div>
+      )}
     </form>
   );
 }

@@ -5,6 +5,7 @@ import { prisma } from "./db";
 import { getSession } from "./auth";
 import { prunik, dnuVObdobi, rozdelPodleVah } from "./vyuctovani";
 import { mesicniNaklad, sluzbaKDatu } from "./zalohy";
+import { nactiNavrhPlatby } from "./pravidelnePlatbyData";
 
 export interface VyuctovaniFormState {
   error?: string;
@@ -175,7 +176,14 @@ export async function saveSettlementSkupina(
     return mesicniNaklad(k) || mesicniNaklad(s);
   });
   const naklady = rozdelPodleVah(naklad, vahy);
-  const zalohyCasti = rozdelPodleVah(zalohy, vahy);
+  // Zalohy po sluzbach z pruvodce (kolik se kazde sluzbe skutecne zaplatilo); jinak rozdeleni podle vah
+  let zalohyCasti = rozdelPodleVah(zalohy, vahy);
+  try {
+    const poSluzbach = JSON.parse(String(formData.get("zalohyPoSluzbach") ?? "null")) as Record<string, number> | null;
+    if (poSluzbach && sluzby.every((sl) => Number.isFinite(Number(poSluzbach[sl.id])))) {
+      zalohyCasti = sluzby.map((sl) => Math.round(Number(poSluzbach[sl.id]) * 100) / 100);
+    }
+  } catch { /* neplatny JSON: zustane rozdeleni podle vah */ }
   const batchId = crypto.randomUUID();
   const faktura = text(formData.get("invoiceNo"));
   const poznamka = text(formData.get("notes"));
@@ -190,4 +198,54 @@ export async function saveSettlementSkupina(
 
   obnov(sluzby[0].propertyId);
   return { success: `Společné vyúčtování uloženo u ${sluzby.length} služeb (${dnuVObdobi(od, doDne)} dní).` };
+}
+
+export interface ZaplacenoSluzbe {
+  id: string;
+  /** Kolik se za obdobi podle evidence skutecne zaplatilo (u nezaplacenych mesicu predpis) */
+  zaplaceno: number;
+  /** Podle predpisu (mesicni platby sluzby) */
+  predpis: number;
+  /** Kolik mesicu z obdobi je opravdu oznacenych jako zaplacene */
+  zaplacenychMesicu: number;
+  mesicu: number;
+}
+
+/**
+ * Kolik se dodavateli za obdobi zaplatilo na zalohach u vybranych sluzeb.
+ * Bere mesicni platby sluzeb z Pravidelnych plateb: zaplacene skutecnou castkou, ostatni predpisem.
+ * Krajni mesice se kraceji podle dnu, ktere do obdobi spadaji.
+ */
+export async function zaplacenoDodavateli(serviceIds: string[], od: string, doDne: string): Promise<{ error?: string; sluzby?: ZaplacenoSluzbe[] }> {
+  const user = await getSession();
+  if (!user) return { error: "Nejsi přihlášen." };
+  if (!ISO.test(od) || !ISO.test(doDne) || od > doDne) return { error: "Zadej platné období." };
+  const sluzby = await prisma.service.findMany({ where: { id: { in: serviceIds } }, select: { id: true, propertyId: true } });
+  if (sluzby.length === 0) return { sluzby: [] };
+  const navrh = await nactiNavrhPlatby(sluzby[0].propertyId);
+
+  const dnuMesice = (mesic: string) => new Date(Date.UTC(Number(mesic.slice(0, 4)), Number(mesic.slice(5, 7)), 0)).getUTCDate();
+  const podilMesice = (mesic: string) => {
+    const prvni = `${mesic}-01`;
+    const posledni = `${mesic}-${String(dnuMesice(mesic)).padStart(2, "0")}`;
+    const p = prunik(od, doDne, prvni, posledni);
+    return p ? dnuVObdobi(p[0], p[1]) / dnuMesice(mesic) : 0;
+  };
+
+  return {
+    sluzby: sluzby.map((sl) => {
+      const polozky = navrh.filter((x) => x.klic.startsWith(`sluzba:${sl.id}:`) && podilMesice(x.mesic) > 0);
+      let zaplaceno = 0;
+      let predpis = 0;
+      let zaplacenychMesicu = 0;
+      for (const x of polozky) {
+        const podil = podilMesice(x.mesic);
+        predpis += Math.abs(x.castka) * podil;
+        if (x.zaplaceno) { zaplaceno += x.zaplaceno.castka * podil; zaplacenychMesicu++; }
+        else zaplaceno += Math.abs(x.castka) * podil;
+      }
+      const r = (n: number) => Math.round(n * 100) / 100;
+      return { id: sl.id, zaplaceno: r(zaplaceno), predpis: r(predpis), zaplacenychMesicu, mesicu: polozky.length };
+    }),
+  };
 }
