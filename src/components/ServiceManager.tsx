@@ -68,8 +68,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   };
   const [ukonceneOtevrene, setUkonceneOtevrene] = useState(false);
   type Polozka = { typ: "skupina"; nazev: string; sluzby: Row[]; otevrena: boolean }
-    | { typ: "sluzba"; s: Row; vSkupine: boolean; ukoncena?: boolean }
-    | { typ: "ukoncene"; sluzby: Row[]; otevrena: boolean };
+    | { typ: "sluzba"; s: Row; vSkupine: boolean; ukoncena?: boolean };
   const poradi: Polozka[] = [];
   for (const sl of aktivni.filter((x) => !x.groupName)) poradi.push({ typ: "sluzba", s: sl, vSkupine: false });
   for (const g of skupinyAktivni) {
@@ -78,12 +77,6 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
     const otevrena = skupinyOtevrene.has(g) || clenove.some((x) => x.id === upravaId || x.id === poplatekId);
     poradi.push({ typ: "skupina", nazev: g, sluzby: clenove, otevrena });
     if (otevrena) for (const sl of clenove) poradi.push({ typ: "sluzba", s: sl, vSkupine: true });
-  }
-  if (ukoncene.length > 0) {
-    // Rozeditovana ukoncena sluzba nesmi zustat schovana
-    const otevrena = ukonceneOtevrene || ukoncene.some((x) => x.id === upravaId || x.id === poplatekId);
-    poradi.push({ typ: "ukoncene", sluzby: ukoncene, otevrena });
-    if (otevrena) for (const sl of ukoncene) poradi.push({ typ: "sluzba", s: sl, vSkupine: false, ukoncena: true });
   }
 
   // Celkem jen za sluzby, ktere plati
@@ -143,25 +136,6 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                       <td className="num font-semibold">{czk(soucet)}</td>
                       <td className="hidden sm:table-cell" />
                       {canEdit && <td />}
-                    </tr>
-                  );
-                }
-                if (pol.typ === "ukoncene") {
-                  return (
-                    <tr key="ukoncene" className="border-t-2 border-line bg-surface-sunken">
-                      <td colSpan={canEdit ? 5 : 4} className="!py-2">
-                        <button type="button" onClick={() => setUkonceneOtevrene((x) => !x)} aria-expanded={pol.otevrena}
-                          className="flex w-full items-center gap-3 text-left text-ink-secondary">
-                          <svg viewBox="0 0 20 20" className={`h-4 w-4 shrink-0 text-ink-muted transition-transform ${pol.otevrena ? "rotate-90" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M8 5l5 5-5 5" /></svg>
-                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-line/60 text-ink-muted">
-                            <Ikona nazev="historie" />
-                          </span>
-                          <span>
-                            <span className="block font-semibold leading-tight">Ukončené služby</span>
-                            <span className="block text-xs text-ink-muted">{pol.sluzby.length} {pol.sluzby.length === 1 ? "služba" : pol.sluzby.length < 5 ? "služby" : "služeb"} · už se nepočítají do nákladů</span>
-                          </span>
-                        </button>
-                      </td>
                     </tr>
                   );
                 }
@@ -288,6 +262,40 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
               </tr>
             </tfoot>
           </table>
+        </div>
+      )}
+
+      {/* Ukoncene sluzby: mimo tabulku a jen jako nenápadný odkaz, ať je jasné, že už k platným nepatří */}
+      {ukoncene.length > 0 && (
+        <div className="mt-3">
+          <button type="button" onClick={() => setUkonceneOtevrene((x) => !x)} aria-expanded={ukonceneOtevrene || ukoncene.some((x) => x.id === upravaId)}
+            className="flex items-center gap-1.5 text-xs text-ink-muted hover:text-ink-secondary">
+            <svg viewBox="0 0 20 20" className={`h-3.5 w-3.5 transition-transform ${(ukonceneOtevrene || ukoncene.some((x) => x.id === upravaId)) ? "rotate-90" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M8 5l5 5-5 5" /></svg>
+            Ukončené služby ({ukoncene.length})
+          </button>
+          {(ukonceneOtevrene || ukoncene.some((x) => x.id === upravaId)) && (
+            <ul className="mt-2 divide-y divide-line/60 rounded-lg border border-dashed border-line text-sm text-ink-muted">
+              {ukoncene.map((x) => (
+                <li key={x.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="font-medium text-ink-secondary">{nazevDruhu(typy, x.type)}</span> · {x.provider}
+                    <span className="block text-xs">
+                      {x.contractStart ? dateCz(x.contractStart) : "—"} – {x.activeTo ? dateCz(x.activeTo) : "—"}
+                    </span>
+                  </span>
+                  <span className="tabular-nums">{czk(vyseSluzby(x))}/měs.</span>
+                  {canEdit && (
+                    <span className="flex items-center gap-0.5">
+                      <UpravitTlacitko aktivni={upravaId === x.id}
+                        onClick={() => { setPoplatekId(null); setUpravaId(upravaId === x.id ? null : x.id); }} />
+                      <SmazatTlacitko action={delAction} id={x.id}
+                        potvrzeni={`Opravdu smazat ${nazevDruhu(typy, x.type)} od ${x.provider}?`} />
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
