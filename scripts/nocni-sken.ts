@@ -68,6 +68,7 @@ async function zarazeneInzeraty() {
   let zmizelo = 0;
   let vraceno = 0;
   let neovereno = 0;
+  let fotekChyba = 0;
   for (const i of inzeraty) {
     const potrebaFotky = i._count.snimky === 0;
     const potrebaSnimek = potrebaFotky || !i.snimky[0] || (i.snimky[0].price != null && Math.abs(i.snimky[0].price - i.price) >= 1);
@@ -111,9 +112,9 @@ async function zarazeneInzeraty() {
                 try {
                   const odp = await stranka.request.get(u);
                   const typ = odp.headers()["content-type"] ?? "image/jpeg";
-                  if (!odp.ok() || !typ.startsWith("image/")) continue;
+                  if (!odp.ok() || !typ.startsWith("image/")) { fotekChyba++; continue; }
                   await prisma.inzeratSnimek.create({ data: { inzeratId: i.id, druh: "FOTO", poradi: poradi++, mime: typ.split(";")[0], data: new Uint8Array(await odp.body()) } });
-                } catch { /* jedna fotka nesmi shodit zbytek */ }
+                } catch { fotekChyba++; /* jedna fotka nesmi shodit zbytek */ }
               }
               fotek += poradi;
             }
@@ -128,7 +129,7 @@ async function zarazeneInzeraty() {
     await sleep(1500);
   }
   await prohlizec?.close();
-  console.log(`Zařazené inzeráty: ${inzeraty.length}, nových screenshotů ${snimku}, fotografií ${fotek}, zmizelo z trhu ${zmizelo}, chybně označených vráceno ${vraceno}, existenci nešlo ověřit ${neovereno}.`);
+  console.log(`Zařazené inzeráty: ${inzeraty.length}, nových screenshotů ${snimku}, fotografií ${fotek}${fotekChyba ? ` (nestaženo ${fotekChyba})` : ""}, zmizelo z trhu ${zmizelo}, chybně označených vráceno ${vraceno}, existenci nešlo ověřit ${neovereno}.`);
 }
 
 async function main() {

@@ -18,8 +18,12 @@ export interface DetailInzeratu {
   fotky: string[];
 }
 
-/** Velikost fotek, ktere se ukladaji a ukazuji v aplikaci */
-const FORMAT_FOTKY = "?fl=res,1600,1600,1|jpg,85";
+/**
+ * Obrazkovy server Sreality vyda fotku jen s parametrem "fl" v presne podobe, jakou pouziva
+ * stranka (jinak 400). Bere se proto nejvetsi varianta, kterou stranka u fotek galerie
+ * pouzila; tahle je overena jako zaloha.
+ */
+const ZALOZNI_FORMAT = "?fl=res,800,800,1|shr,,20|webp,60";
 
 const NEEXISTUJE = /inzerát (již |už )?neexistuje|inzerát nebyl nalezen|inzerát byl (smazán|odstraněn|stažen)|stránka nebyla nalezena|tato nabídka již není/i;
 
@@ -46,9 +50,22 @@ export async function nactiDetail(stranka: Page, url: string, externalId: string
   }
   if (!naDetailu || !estate) return { stav: "NEVIM", text, fotky: [] };
 
-  const fotky = (estate.images ?? [])
+  const galerie = (estate.images ?? [])
     .filter((im) => typeof im.url === "string" && im.url.includes("sdn.cz"))
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .map((im) => `${im.url!.startsWith("//") ? "https:" : ""}${im.url!.split("?")[0]}${FORMAT_FOTKY}`);
+    .map((im) => `${im.url!.startsWith("//") ? "https:" : ""}${im.url!.split("?")[0]}`);
+  // Formaty, se kterymi stranka fotky galerie nacetla; vybere se ten s nejvetsim rozlisenim
+  const vDom: string[] = await stranka.evaluate(() => Array.from(document.querySelectorAll("img"))
+    // srcset se nerozklada: parametr fl sam obsahuje carky
+    .flatMap((im) => [(im as HTMLImageElement).currentSrc, (im as HTMLImageElement).src])
+    .filter(Boolean)).catch(() => []);
+  const cesty = new Set(galerie.map((u) => u.replace(/^https:/, "")));
+  const formaty = vDom
+    .filter((u) => cesty.has(u.split("?")[0].replace(/^https:/, "")) && u.includes("?fl="))
+    .map((u) => u.slice(u.indexOf("?")))
+    .map((f) => ({ f, res: Number(/res,(\d+)/.exec(f)?.[1] ?? 0) }))
+    .sort((a, b) => b.res - a.res);
+  const format = formaty[0] && formaty[0].res >= 800 ? formaty[0].f : ZALOZNI_FORMAT;
+  const fotky = galerie.map((u) => u + format);
   return { stav: "OK", text, fotky: [...new Set(fotky)] };
 }

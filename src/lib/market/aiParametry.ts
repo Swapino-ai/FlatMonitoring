@@ -13,8 +13,10 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 export const AI_MODEL = process.env.AI_MODEL || "claude-haiku-5-5";
 
 const Parametry = z.object({
-  typDomu: z.enum(["PANEL", "CIHLA", "NOVOSTAVBA", "JINY"]).nullable()
-    .describe("Typ domu. Novostavba = dum postaveny nebo dokonceny v poslednich ~5 letech. Smisena, skeletova, drevostavba apod. = JINY."),
+  // Volny text misto vyctu: model obcas vrati jinou hodnotu (napr. SMISENA) a cely inzerat by
+  // propadl; neznama hodnota se pak bere jako JINY (viz normalizace nize)
+  typDomu: z.string().nullable()
+    .describe("Typ domu: PANEL, CIHLA, NOVOSTAVBA (dum postaveny nebo dokonceny v poslednich ~5 letech), nebo JINY (smisena, skeletova, drevostavba...)."),
   typDomuDuvod: z.string().describe("Kratka citace nebo zduvodneni z textu (cesky, do 120 znaku)."),
   stavBytu: z.enum(["PRED_REKONSTRUKCI", "CASTECNA_REKONSTRUKCE", "PO_REKONSTRUKCI", "NOVOSTAVBA"]).nullable()
     .describe("Skutecny stav BYTU (ne domu): puvodni stav / nutna rekonstrukce = PRED_REKONSTRUKCI; jen neco nove (kuchyn nebo koupelna nebo okna) = CASTECNA_REKONSTRUKCE; kompletne zrekonstruovano = PO_REKONSTRUKCI; novy byt = NOVOSTAVBA. Kdyz text nerika nic konkretniho, null."),
@@ -53,7 +55,10 @@ export async function vytahniParametry(textStranky: string, client = new Anthrop
   });
   if (odpoved.stop_reason === "refusal") throw new Error("AI odmítla zpracovat text");
   if (!odpoved.parsed_output) throw new Error(`AI nevrátila parametry (${odpoved.stop_reason})`);
-  return { parametry: odpoved.parsed_output, vstup: odpoved.usage.input_tokens, vystup: odpoved.usage.output_tokens };
+  const p = odpoved.parsed_output;
+  const typ = p.typDomu?.toUpperCase() ?? null;
+  p.typDomu = typ == null ? null : ["PANEL", "CIHLA", "NOVOSTAVBA"].includes(typ) ? typ : "JINY";
+  return { parametry: p, vstup: odpoved.usage.input_tokens, vystup: odpoved.usage.output_tokens };
 }
 
 /** Cena za milion tokenu (vstup, vystup) v USD pro odhad nakladu v logu. */
