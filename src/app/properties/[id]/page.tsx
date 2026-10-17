@@ -506,6 +506,20 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                       ? "Zatím z pohybů za neúplný první měsíc."
                       : `Průměr za posledních ${skutecnyCashflow.mesicu} dokončených měsíců: nájem, zálohy, platby za služby a ostatní pohyby. U plateb se bere předpis, u zaplacených skutečná částka.`}
                 </p>
+                {skutecnyCashflow?.rozpad && (
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    {([["NAJEM", "Nájem"], ["ZALOHA", "Zálohy od nájemce"], ["SLUZBA", "Služby dodavatelům"], ["UVER", "Splátky úvěru"], ["VYUCTOVANI", "Vyúčtování"], ["POHYB", "Ostatní pohyby"]] as const)
+                      .filter(([k]) => Math.abs(skutecnyCashflow.rozpad![k] ?? 0) >= 1)
+                      .map(([k, n]) => {
+                        const v = skutecnyCashflow.rozpad![k] * podil;
+                        return (
+                          <span key={k} className="rounded-full bg-surface-card/70 px-2.5 py-1">
+                            {n}: <strong className={v >= 0 ? "text-good" : "text-bad"}>{v > 0 ? "+" : ""}{czk(v)}</strong>
+                          </span>
+                        );
+                      })}
+                  </div>
+                )}
               </div>
             );
           })()}

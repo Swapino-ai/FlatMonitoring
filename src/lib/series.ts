@@ -50,7 +50,7 @@ export function equitySeries(properties: PropertyWithRelations[], asOf = new Dat
 }
 
 /** Jeden skutecny penezni tok majitele (+ prijem, - vydaj). */
-export interface Tok { datum: string; castka: number; kategorie: string }
+export interface Tok { datum: string; castka: number; kategorie: string; /** Zdroj: NAJEM, ZALOHA, SLUZBA, UVER, VYUCTOVANI nebo POHYB */ druh?: string }
 
 /**
  * Skutecny cash flow nemovitosti: pravidelne platby (najem a zalohy od najemce, platby
@@ -67,16 +67,17 @@ export function tokyNemovitosti(
   return [
     ...navrh.filter((p) => p.kategorie !== "DEPOSIT").map((p) => ({
       datum: p.zaplaceno ? p.zaplaceno.datum : p.datum,
+      druh: p.druh as string,
       castka: p.zaplaceno ? (p.castka >= 0 ? 1 : -1) * p.zaplaceno.castka : p.castka,
       kategorie: p.kategorie,
     })),
     ...transakce
       .filter((t) => t.category !== "DEPOSIT" && !(t.sourceKey && klice.has(t.sourceKey)))
-      .map((t) => ({ datum: denISO(t.date), castka: t.amount, kategorie: t.category })),
+      .map((t) => ({ datum: denISO(t.date), castka: t.amount, kategorie: t.category, druh: "POHYB" })),
   ];
 }
 
-export interface PrumernyTok { mesicne: number; mesicu: number; neuplny: boolean }
+export interface PrumernyTok { mesicne: number; mesicu: number; neuplny: boolean; /** Mesicni prumer po zdrojich (NAJEM, ZALOHA, SLUZBA, UVER, VYUCTOVANI, POHYB) */ rozpad?: Record<string, number> }
 
 /**
  * Prumerny mesicni cash flow z poslednich (max. 12) dokoncenych mesicu. Rozbehnuty
@@ -93,7 +94,9 @@ export function prumernyMesicniTok(toky: Tok[], asOf = new Date()): PrumernyTok 
   if (mesicu < 1) return { mesicne: toky.reduce((a, x) => a + x.castka, 0), mesicu: 1, neuplny: true };
   const odISO = od.toISOString().slice(0, 10), doISO = konec.toISOString().slice(0, 10);
   const soucet = toky.filter((x) => x.datum >= odISO && x.datum < doISO).reduce((a, x) => a + x.castka, 0);
-  return { mesicne: soucet / mesicu, mesicu, neuplny: false };
+  const rozpad: Record<string, number> = {};
+  for (const x of toky.filter((x) => x.datum >= odISO && x.datum < doISO)) rozpad[x.druh ?? "POHYB"] = (rozpad[x.druh ?? "POHYB"] ?? 0) + x.castka / mesicu;
+  return { mesicne: soucet / mesicu, mesicu, neuplny: false, rozpad };
 }
 
 function tokyPortfolia(properties: PropertyWithRelations[], navrhy: Map<string, NavrzenaPlatba[]>): Tok[] {
