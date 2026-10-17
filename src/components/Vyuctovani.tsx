@@ -102,11 +102,43 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
                           <div className="text-sm font-semibold tabular-nums">{czk(naklad)}</div>
                           <div className={`text-xs tabular-nums ${vysl >= 0 ? "text-good" : "text-bad"}`}>{vysl >= 0 ? "přeplatek" : "nedoplatek"} {czk(Math.abs(vysl))}</div>
                         </div>
+                        {(() => {
+                          const pocet = casti.reduce((a, v) => a + (dokumenty[v.id] ?? []).length, 0);
+                          return (
+                            <button type="button" onClick={() => prepniPrilohy(`d:${id}`)} aria-expanded={prilohy.has(`d:${id}`)}
+                              title={`Soubory k vyúčtování (${pocet})`} aria-label="Soubory k vyúčtování"
+                              className={`relative inline-flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+                                prilohy.has(`d:${id}`) ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-accent-soft hover:text-accent"}`}>
+                              <Ikona nazev="sponka" />
+                              {pocet > 0 && (
+                                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">{pocet}</span>
+                              )}
+                            </button>
+                          );
+                        })()}
                         {canEdit && (
                           <SmazatTlacitko action={delAction} id={prvni.id}
                             potvrzeni={`Smazat společné vyúčtování ${obdobi(prvni.od, prvni.do)} u všech ${casti.length} služeb?`} />
                         )}
                       </div>
+                      {prilohy.has(`d:${id}`) && (
+                        <div className="border-t border-line/70 px-3.5 py-3">
+                          {diskPripojen || casti.some((v) => (dokumenty[v.id] ?? []).length > 0) ? (
+                            // Soubory celeho dokladu se drzi u prvni casti; zobrazi se i ty, ktere byly nahrane k jine
+                            <Dokumenty
+                              kontext={{ kategorie: "SLUZBA_VYUCTOVANI", sluzbaId: prvni.serviceId, settlementId: prvni.id, rok: Number(prvni.do.slice(0, 4)) }}
+                              dokumenty={casti.flatMap((v) => dokumenty[v.id] ?? [])} canEdit={canEdit && diskPripojen}
+                              nadpis="Přidat soubor ke společnému vyúčtování"
+                              popis="Přetáhni sem fakturu nebo vyúčtování od dodavatele (PDF, sken, foto)."
+                              prazdne="K tomuto vyúčtování zatím není žádný soubor." />
+                          ) : (
+                            <p className="text-sm text-ink-secondary">
+                              Google Disk zatím není připojený, soubory nejde nahrát. Připoj ho ve{" "}
+                              <a href="/sprava" className="text-accent hover:underline">Správě</a>.
+                            </p>
+                          )}
+                        </div>
+                      )}
                       {otevrene && (
                         <table className="w-full border-t border-line/60 bg-surface-sunken/40 text-sm">
                           <thead>
