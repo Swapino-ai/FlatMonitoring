@@ -10,11 +10,12 @@
 import { denISO } from "./format";
 
 export const DRUHY_MERAKU = [
-  { klic: "ELEKTRINA", nazev: "Elektřina", jednotka: "kWh", ikona: "⚡" },
-  { klic: "PLYN", nazev: "Plyn", jednotka: "m³", ikona: "🔥" },
-  { klic: "VODA_STUDENA", nazev: "Studená voda", jednotka: "m³", ikona: "💧" },
-  { klic: "VODA_TEPLA", nazev: "Teplá voda", jednotka: "m³", ikona: "♨️" },
-  { klic: "RADIATOR", nazev: "Radiátor", jednotka: "dílků", ikona: "🌡️" },
+  // ikona = nazev z components/Ikony (stejne jako u sluzeb)
+  { klic: "ELEKTRINA", nazev: "Elektřina", jednotka: "kWh", ikona: "blesk" },
+  { klic: "PLYN", nazev: "Plyn", jednotka: "m³", ikona: "plamen" },
+  { klic: "VODA_STUDENA", nazev: "Studená voda", jednotka: "m³", ikona: "kapka" },
+  { klic: "VODA_TEPLA", nazev: "Teplá voda", jednotka: "m³", ikona: "kohoutek" },
+  { klic: "RADIATOR", nazev: "Radiátor", jednotka: "dílků", ikona: "radiator" },
 ] as const;
 
 export type DruhMeraku = (typeof DRUHY_MERAKU)[number]["klic"];

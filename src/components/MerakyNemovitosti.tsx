@@ -5,6 +5,8 @@ import { DRUHY_MERAKU, DRUH_MERAKU_MAP, type UdalostNajmu } from "@/lib/meraky";
 import { pridejMerak, smazMerak, ulozStav, upravMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
 import { denISO } from "@/lib/format";
 import { DatumPole } from "./DatumPole";
+import { Ikona, type NazevIkony } from "./Ikony";
+import { Badge, Card } from "./Stat";
 
 export interface MerakRadek { id: string; druh: string; nazev: string | null; cislo: string | null; aktivni: boolean }
 export interface StavRadek { id: string; merakId: string; leaseId: string | null; udalost: string; datum: string; hodnota: number }
@@ -116,77 +118,105 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
     }
   });
 
+  const ikona = (druh: string, trida = "h-9 w-9") => (
+    <span className={`flex ${trida} shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent`}>
+      <Ikona nazev={(DRUH_MERAKU_MAP.get(druh)?.ikona ?? "tri") as NazevIkony} />
+    </span>
+  );
+
   return (
     <div className="space-y-5">
       {chyba && <div className="rounded-lg border border-bad/40 bg-bad/5 px-3 py-2 text-sm text-bad">{chyba}</div>}
 
-      {/* Meraky */}
-      <section className="card p-5">
-        <h2 className="text-base font-semibold">Měřáky v bytě</h2>
-        {aktivni.length === 0 && <p className="mt-1 text-sm text-ink-secondary">Zatím žádné. Přidej je kliknutím níž, potom zapisuj stavy do tabulky.</p>}
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {aktivni.map((m) => {
-            const d = DRUH_MERAKU_MAP.get(m.druh);
-            return (
-              <div key={m.id} className="rounded-xl border border-line p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{d?.ikona} {d?.nazev ?? m.druh} <span className="text-xs font-normal text-ink-muted">({d?.jednotka})</span></span>
-                  {canEdit && (
-                    <button type="button" className="text-xs text-ink-muted hover:text-bad" title="Odebrat měřák (se zapsanými stavy zůstane v historii)"
-                      onClick={() => { if (confirm(`Odebrat měřák ${d?.nazev ?? ""}?`)) spust(async () => { await smazMerak(m.id); }); }}>✕</button>
-                  )}
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <input className="input py-1 text-sm" placeholder="Upřesnění (Kuchyň…)" defaultValue={m.nazev ?? ""} disabled={!canEdit}
-                    onBlur={(e) => e.target.value !== (m.nazev ?? "") && spust(async () => { await upravMerak(m.id, { nazev: e.target.value }); })} />
-                  <input className="input py-1 text-sm" placeholder="Výrobní číslo" defaultValue={m.cislo ?? ""} disabled={!canEdit}
-                    onBlur={(e) => e.target.value !== (m.cislo ?? "") && spust(async () => { await upravMerak(m.id, { cislo: e.target.value }); })} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      <Card title="Měřáky">
+        {aktivni.length === 0 ? (
+          <p className="py-3 text-center text-sm text-ink-muted">Žádné evidované měřáky.</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="table-base">
+              <thead>
+                <tr>
+                  <th>Měřák</th>
+                  <th>Upřesnění</th>
+                  <th>Výrobní číslo</th>
+                  {canEdit && <th className="w-12"><span className="sr-only">Akce</span></th>}
+                </tr>
+              </thead>
+              <tbody>
+                {aktivni.map((m) => {
+                  const d = DRUH_MERAKU_MAP.get(m.druh);
+                  return (
+                    <tr key={m.id}>
+                      <td>
+                        <div className="flex items-center gap-3">
+                          {ikona(m.druh)}
+                          <div>
+                            <div className="font-medium leading-tight">{d?.nazev ?? m.druh}</div>
+                            <div className="text-xs text-ink-muted">{d?.jednotka}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <input className="input max-w-[14rem] py-1.5" placeholder="např. Kuchyň" defaultValue={m.nazev ?? ""} disabled={!canEdit}
+                          onBlur={(e) => e.target.value !== (m.nazev ?? "") && spust(async () => { await upravMerak(m.id, { nazev: e.target.value }); })} />
+                      </td>
+                      <td>
+                        <input className="input max-w-[14rem] py-1.5" placeholder="nepovinné" defaultValue={m.cislo ?? ""} disabled={!canEdit}
+                          onBlur={(e) => e.target.value !== (m.cislo ?? "") && spust(async () => { await upravMerak(m.id, { cislo: e.target.value }); })} />
+                      </td>
+                      {canEdit && (
+                        <td className="text-right">
+                          <button type="button" className="text-ink-muted hover:text-bad" aria-label="Odebrat měřák"
+                            title="Odebrat měřák (se zapsanými stavy zůstane v historii)"
+                            onClick={() => { if (confirm(`Odebrat měřák ${d?.nazev ?? ""}?`)) spust(async () => { await smazMerak(m.id); }); }}>
+                            <Ikona nazev="kos" trida="h-4 w-4" />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
         {canEdit && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-sm text-ink-muted">Přidat:</span>
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
+            <span className="label mr-1">Přidat měřák</span>
             {aktivni.length === 0 && (
-              <button type="button" className="btn btn-primary py-1.5 text-sm" onClick={() => pridej(BEZNE)}>
-                + Běžné (elektřina, plyn, studená a teplá voda)
-              </button>
+              <button type="button" className="btn btn-primary" onClick={() => pridej(BEZNE)}>Elektřina, plyn a voda najednou</button>
             )}
             {DRUHY_MERAKU.map((d) => (
-              <button key={d.klic} type="button" className="btn py-1.5 text-sm" onClick={() => pridej([d.klic])}>+ {d.ikona} {d.nazev}</button>
+              <button key={d.klic} type="button" className="btn inline-flex items-center gap-1.5" onClick={() => pridej([d.klic])}>
+                <Ikona nazev={d.ikona as NazevIkony} trida="h-4 w-4" />{d.nazev}
+              </button>
             ))}
           </div>
         )}
-      </section>
+      </Card>
 
-      {/* Stavy */}
       {zobrazene.length > 0 && (
-        <section className="card p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-base font-semibold">Stavy při předání a vrácení</h2>
-              <p className="text-xs text-ink-muted">Řádky vznikají samy z nájemních smluv. Napiš číslo a klikni jinam — uloží se samo. Stav při vrácení se ve stejný den propíše i k předání dalšímu nájemci.</p>
-            </div>
-            {canEdit && (
-              <button type="button" className="btn py-1.5 text-sm" onClick={() => setNoveOdecty((o) => [denISO(new Date()), ...o.filter((d) => d !== denISO(new Date()))])}>+ Jiný odečet</button>
-            )}
-          </div>
+        <Card title="Stavy při předání a vrácení" action={canEdit ? (
+          <button type="button" className="btn" onClick={() => setNoveOdecty((o) => [denISO(new Date()), ...o.filter((d) => d !== denISO(new Date()))])}>Jiný odečet</button>
+        ) : undefined}>
+          <p className="-mt-2 mb-3 text-xs text-ink-muted">
+            Řádky vznikají z nájemních smluv. Hodnota se uloží po opuštění políčka; stav při vrácení se ve stejný den doplní i k předání dalšímu nájemci.
+            Prodloužení smlouvy téhož nájemníka se nepředává, takže řádek nemá.
+          </p>
           {radky.length === 0 ? (
-            <p className="mt-3 text-sm text-ink-muted">Nemovitost zatím nemá nájemní smlouvu. Až ji přidáš, objeví se tu řádek pro předání bytu.</p>
+            <p className="py-3 text-center text-sm text-ink-muted">Nemovitost zatím nemá nájemní smlouvu.</p>
           ) : (
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-max text-sm">
+            <div className="table-scroll">
+              <table className="table-base">
                 <thead>
-                  <tr className="border-b border-line text-left text-xs uppercase tracking-wide text-ink-muted">
-                    <th className="py-2 pr-3 font-medium">Událost</th>
+                  <tr>
+                    <th>Událost</th>
                     {zobrazene.map((m) => {
                       const d = DRUH_MERAKU_MAP.get(m.druh);
                       return (
-                        <th key={m.id} className={`px-2 py-2 font-medium ${m.aktivni ? "" : "opacity-60"}`}>
-                          {d?.ikona} {d?.nazev}{m.nazev ? ` · ${m.nazev}` : ""}
-                          <div className="font-normal normal-case">{d?.jednotka}{m.cislo ? ` · č. ${m.cislo}` : ""}{m.aktivni ? "" : " · vyřazený"}</div>
+                        <th key={m.id} className={`num ${m.aktivni ? "" : "opacity-60"}`}>
+                          <span className="inline-flex items-center gap-1.5"><Ikona nazev={(d?.ikona ?? "tri") as NazevIkony} trida="h-3.5 w-3.5" />{d?.nazev}{m.nazev ? ` · ${m.nazev}` : ""}</span>
+                          <div className="font-normal normal-case tracking-normal">{d?.jednotka}{m.cislo ? ` · č. ${m.cislo}` : ""}{m.aktivni ? "" : " · vyřazený"}</div>
                         </th>
                       );
                     })}
@@ -196,15 +226,18 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                   {radky.map((r) => {
                     const chybi = !r.budouci && zobrazene.some((m) => m.aktivni && hodnota(r, m.id) == null);
                     return (
-                      <tr key={r.klic} className={`border-b border-line/60 align-top ${r.budouci ? "opacity-60" : ""} ${chybi ? "bg-warn/5" : ""}`}>
-                        <td className="py-2 pr-3">
-                          <div className={`font-medium ${r.udalost === "ZACATEK" ? "text-good" : r.udalost === "KONEC" ? "text-bad" : ""}`}>{r.popis}</div>
-                          <div className="mt-1 w-36">
+                      <tr key={r.klic} className={r.budouci ? "opacity-60" : ""}>
+                        <td className="align-top">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{r.udalost === "ZACATEK" ? "Předání" : r.udalost === "KONEC" ? "Vrácení" : "Jiný odečet"}</span>
+                            {r.budouci && <Badge>plánováno</Badge>}
+                            {chybi && <Badge tone="warn">chybí stavy</Badge>}
+                          </div>
+                          {r.udalost !== "ODECET" && <div className="text-xs text-ink-muted">{r.popis.split(" · ").slice(1).join(" · ")}</div>}
+                          <div className="mt-1.5 w-36">
                             <DatumPole label="Datum" skrytLabel name={`datum-${r.klic}`} defaultValue={datumRadku(r)}
                               onChange={(iso) => { if (iso && canEdit) zmenDatum(r, iso); }} />
                           </div>
-                          {r.budouci && <div className="text-xs text-ink-muted">plánováno</div>}
-                          {chybi && <div className="text-xs text-warn">chybí stavy</div>}
                         </td>
                         {zobrazene.map((m) => {
                           const k = `${r.klic}|${m.id}`;
@@ -212,14 +245,14 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                           const sp = spotreba(r, m.id);
                           const b = bunky[k];
                           return (
-                            <td key={m.id} className="px-2 py-2">
+                            <td key={m.id} className="num align-top">
                               <input key={`${k}|${h ?? ""}`} inputMode="decimal" defaultValue={h != null ? fmt(h) : ""} disabled={!canEdit || (!m.aktivni && h == null)}
-                                placeholder="—"
-                                className={`input w-28 py-1 text-right tabular-nums ${b === "chyba" ? "border-bad" : b === "ok" ? "border-good" : ""}`}
+                                aria-label={`${DRUH_MERAKU_MAP.get(m.druh)?.nazev ?? ""} — ${r.popis}`}
+                                className={`input ml-auto w-32 py-1.5 text-right tabular-nums ${b === "chyba" ? "!border-bad" : ""}`}
                                 onBlur={(e) => uloz(r, m.id, e.target.value)}
                                 onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
-                              <div className="h-4 text-[11px] text-ink-muted">
-                                {b === "uklada" ? "ukládám…" : b === "chyba" ? <span className="text-bad">neuloženo</span> : sp != null ? `spotřeba ${fmt(sp)} ${DRUH_MERAKU_MAP.get(m.druh)?.jednotka ?? ""}` : b === "ok" ? "✓ uloženo" : ""}
+                              <div className="mt-1 h-4 text-xs text-ink-muted">
+                                {b === "uklada" ? "ukládám…" : b === "chyba" ? <span className="text-bad">neuloženo</span> : sp != null ? `spotřeba ${fmt(sp)} ${DRUH_MERAKU_MAP.get(m.druh)?.jednotka ?? ""}` : b === "ok" ? <span className="text-good">uloženo</span> : ""}
                               </div>
                             </td>
                           );
@@ -231,10 +264,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
               </table>
             </div>
           )}
-          {radky.some((r) => r.udalost !== "ODECET") && (
-            <p className="mt-2 text-xs text-ink-muted">Navazující smlouvy téhož nájemníka (prodloužení) se nepředávají, takže u nich řádek není.</p>
-          )}
-        </section>
+        </Card>
       )}
     </div>
   );
