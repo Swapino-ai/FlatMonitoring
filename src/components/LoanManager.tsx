@@ -10,10 +10,17 @@ interface Row {
   id: string; type: string; lender: string; contractNo: string | null; principal: number;
   interestRate: number; startDate: Date; termMonths: number; fixationEnd: Date | null;
   monthlyPayment: number; currentBalance: number;
+  vlastnici: { userId: string; user: { name: string } }[];
 }
 
-export function LoanManager({ propertyId, loans, canEdit }: {
+interface Clovek { id: string; name: string }
+
+export function LoanManager({ propertyId, loans, canEdit, lide = [], vlastniciNemovitosti = [] }: {
   propertyId: string; loans: Row[]; canEdit: boolean;
+  /** Komu jde uver priradit (uzivatele aplikace) */
+  lide?: Clovek[];
+  /** Vlastnici nemovitosti — u noveho uveru predvybrani */
+  vlastniciNemovitosti?: string[];
 }) {
   const [addState, addAction, adding] = useActionState<EntityFormState, FormData>(saveLoan.bind(null, null), {});
   const [delState, delAction] = useActionState<EntityFormState, FormData>(deleteLoan, {});
@@ -48,6 +55,12 @@ export function LoanManager({ propertyId, loans, canEdit }: {
                     {nazevUveru(l.type)}
                     {l.contractNo && ` · ${l.contractNo}`}
                   </div>
+                  <div className="mt-1 text-xs">
+                    {l.vlastnici.length > 0
+                      ? <><span className="text-ink-muted">{l.vlastnici.length > 1 ? "Vlastníci úvěru: " : "Vlastník úvěru: "}</span>
+                          <span className="font-medium">{l.vlastnici.map((v) => v.user.name).join(" a ")}</span></>
+                      : <span className="text-warn">Vlastník úvěru nepřiřazen</span>}
+                  </div>
                 </div>
                 {canEdit && (
                   <div className="flex shrink-0 items-center gap-3">
@@ -73,14 +86,15 @@ export function LoanManager({ propertyId, loans, canEdit }: {
 
       {canEdit && upravovany && (
         <UpravaPanel nadpis={`Upravit úvěr od ${upravovany.lender}`} onZavrit={() => setUpravaId(null)}>
-          <Formular key={upravovany.id} propertyId={propertyId} r={upravovany}
+          <Formular key={upravovany.id} propertyId={propertyId} r={upravovany} lide={lide}
+            vybrani={upravovany.vlastnici.map((v) => v.userId)}
             action={upravaAction} pending={upravuji} popisekTlacitka="Uložit změny" />
         </UpravaPanel>
       )}
 
       {canEdit && !upravovany && (
         <Rozbalovaci popisek="Přidat úvěr nebo hypotéku" zavritPo={addState.success}>
-          <Formular propertyId={propertyId} r={null} action={addAction} pending={adding}
+          <Formular propertyId={propertyId} r={null} lide={lide} vybrani={vlastniciNemovitosti} action={addAction} pending={adding}
             popisekTlacitka="Uložit úvěr" />
         </Rozbalovaci>
       )}
@@ -88,8 +102,8 @@ export function LoanManager({ propertyId, loans, canEdit }: {
   );
 }
 
-function Formular({ propertyId, r, action, pending, popisekTlacitka }: {
-  propertyId: string; r: Row | null;
+function Formular({ propertyId, r, lide, vybrani, action, pending, popisekTlacitka }: {
+  propertyId: string; r: Row | null; lide: Clovek[]; vybrani: string[];
   action: (payload: FormData) => void; pending: boolean; popisekTlacitka: string;
 }) {
   const [typ, setTyp] = useState(r?.type ?? "HYPOTEKA_NA_BYDLENI");
@@ -117,6 +131,21 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka }: {
           </div>
         )}
       </div>
+      {lide.length > 0 && (
+        <fieldset className="sm:col-span-2">
+          <legend className="label mb-1.5 block">Vlastník úvěru (dlužník)</legend>
+          <input type="hidden" name="vlastniciVeFormulari" value="1" />
+          <div className="flex flex-wrap gap-2">
+            {lide.map((c) => (
+              <label key={c.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-line px-3 py-1.5 text-sm has-[:checked]:border-accent has-[:checked]:bg-accent/5">
+                <input type="checkbox" name="vlastnici" value={c.id} defaultChecked={vybrani.includes(c.id)} />
+                {c.name}
+              </label>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-ink-muted">Můžeš zaškrtnout i víc lidí (společný úvěr).</p>
+        </fieldset>
+      )}
       <Pole label="Banka / věřitel" name="lender" required defaultValue={r?.lender} />
       <Pole label="Číslo smlouvy" name="contractNo" placeholder="nepovinné" defaultValue={r?.contractNo ?? ""} />
       <Pole label="Půjčená jistina (Kč)" name="principal" type="number" step="1000" required

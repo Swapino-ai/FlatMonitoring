@@ -13,7 +13,7 @@ import type { Prisma } from "@prisma/client";
  */
 const withRelations = {
   include: {
-    loans: true,
+    loans: { include: { vlastnici: { select: { userId: true, user: { select: { name: true } } } } } },
     leases: true,
     operator: true,
     services: true,

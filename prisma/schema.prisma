@@ -34,6 +34,7 @@ model User {
   account String?
 
   podily PropertyOwner[]
+  uvery  LoanOwner[]
 }
 
 /// Spoluvlastnictvi bytu. Podil rozhoduje, kolik z hodnoty, dluhu i najmu
@@ -170,8 +171,22 @@ model Loan {
   isActive Boolean @default(true)
   notes    String?
 
+  /// Kdo je dluznikem (jeden i vic, napr. manzele)
+  vlastnici LoanOwner[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/// Vlastnik (dluznik) uveru
+model LoanOwner {
+  loanId String
+  loan   Loan   @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([loanId, userId])
+  @@index([userId])
 }
 
 /// Najemni smlouva

@@ -702,7 +702,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
               </table>
             </SbalitelnaKarta>
             <SbalitelnaKarta klic="dluh" title="Dluh a zajištění">
-              <LoanManager propertyId={property.id} loans={property.loans} canEdit={user.role === "OWNER"} />
+              <LoanManager propertyId={property.id} loans={property.loans} canEdit={user.role === "OWNER"}
+                lide={uzivatele.map((u) => ({ id: u.id, name: u.name }))} vlastniciNemovitosti={property.owners.map((o) => o.userId)} />
               {activeLoans.length > 0 && (
                 <div className="mt-4 border-t border-line pt-3">
                   <table className="table-base">

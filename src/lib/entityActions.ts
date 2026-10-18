@@ -155,12 +155,20 @@ export async function saveLoan(id: string | null, _prev: EntityFormState, formDa
   const zustatek = Math.round(
     balanceAt({ ...zaklad, startDate: zaklad.startDate, monthlyPayment: splatka }, new Date()),
   );
+  // Dluznici: zaskrtnuti uzivatele (muze jich byt vic)
+  const vlastnici = [...new Set(formData.getAll("vlastnici").map(String).filter(Boolean))];
+  const vlastniciData = { create: vlastnici.map((userId) => ({ userId })) };
+  // Formular bez vyberu (nema komu priradit) dluzniky nemeni
+  const menitVlastniky = formData.get("vlastniciVeFormulari") === "1";
 
   if (id) {
-    await prisma.loan.update({ where: { id }, data: { ...zaklad, currentBalance: zustatek, balanceAsOf: new Date() } });
+    await prisma.$transaction([
+      ...(menitVlastniky ? [prisma.loanOwner.deleteMany({ where: { loanId: id } })] : []),
+      prisma.loan.update({ where: { id }, data: { ...zaklad, currentBalance: zustatek, balanceAsOf: new Date(), ...(menitVlastniky ? { vlastnici: vlastniciData } : {}) } }),
+    ]);
   } else {
     await prisma.loan.create({
-      data: { ...zaklad, propertyId: d.propertyId, currentBalance: zustatek, balanceAsOf: new Date(), isActive: true },
+      data: { ...zaklad, propertyId: d.propertyId, currentBalance: zustatek, balanceAsOf: new Date(), isActive: true, vlastnici: vlastniciData },
     });
   }
 
