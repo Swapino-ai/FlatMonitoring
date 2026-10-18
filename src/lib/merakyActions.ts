@@ -28,11 +28,11 @@ export async function pridejMerak(propertyId: string, druh: string): Promise<{ e
   return { id: m.id };
 }
 
-export async function upravMerak(id: string, data: { nazev?: string | null; cislo?: string | null; aktivni?: boolean; dvoutarif?: boolean }): Promise<{ error?: string }> {
+export async function upravMerak(id: string, data: { nazev?: string | null; cislo?: string | null; aktivni?: boolean; dvoutarif?: boolean; svjCislo?: string | null; svjByt?: string | null }): Promise<{ error?: string }> {
   const chyba = await smiMenit();
   if (chyba) return { error: chyba };
   const cist = (v: string | null | undefined) => (v === undefined ? undefined : v?.trim() || null);
-  const m = await prisma.merak.update({ where: { id }, data: { nazev: cist(data.nazev), cislo: cist(data.cislo), aktivni: data.aktivni, dvoutarif: data.dvoutarif } });
+  const m = await prisma.merak.update({ where: { id }, data: { nazev: cist(data.nazev), cislo: cist(data.cislo), aktivni: data.aktivni, dvoutarif: data.dvoutarif, svjCislo: cist(data.svjCislo), svjByt: cist(data.svjByt) } });
   obnov(m.propertyId);
   return {};
 }

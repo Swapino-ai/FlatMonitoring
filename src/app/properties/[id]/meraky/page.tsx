@@ -6,6 +6,7 @@ import { HlavickaNemovitosti } from "@/components/HlavickaNemovitosti";
 import { MerakyNemovitosti } from "@/components/MerakyNemovitosti";
 import { prisma } from "@/lib/db";
 import { udalostiNajmu } from "@/lib/meraky";
+import { svjNastaveno, synchronizujSvj } from "@/lib/svj";
 import { denISO } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,8 @@ export const dynamic = "force-dynamic";
 export default async function MerakyPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await page();
   const { id } = await params;
+  // Odecty z Evidence SVJ (u meraku s cislem v SVJ) se prevezmou pred nactenim stavu
+  const svj = await synchronizujSvj(id);
   const property = await prisma.property.findUnique({
     where: { id },
     include: {
@@ -33,10 +36,13 @@ export default async function MerakyPage({ params }: { params: Promise<{ id: str
           propertyId={id}
           canEdit={canEdit}
           meraky={property.meraky.map((m) => ({ id: m.id, druh: m.druh, nazev: m.nazev, cislo: m.cislo, aktivni: m.aktivni, dvoutarif: m.dvoutarif,
-            nahrazujeId: m.nahrazujeId, vymenenAt: m.vymenenAt ? denISO(m.vymenenAt) : null }))}
+            nahrazujeId: m.nahrazujeId, vymenenAt: m.vymenenAt ? denISO(m.vymenenAt) : null,
+            svjCislo: m.svjCislo, svjByt: m.svjByt }))}
+          svj={svj}
+          svjNastaveno={svjNastaveno()}
           udalosti={udalostiNajmu(property.leases)}
           stavy={property.meraky.flatMap((m) => m.stavy.map((s) => ({
-            id: s.id, merakId: s.merakId, leaseId: s.leaseId, udalost: s.udalost, datum: denISO(s.datum), hodnota: s.hodnota, hodnota2: s.hodnota2,
+            id: s.id, merakId: s.merakId, leaseId: s.leaseId, udalost: s.udalost, datum: denISO(s.datum), hodnota: s.hodnota, hodnota2: s.hodnota2, zdroj: s.zdroj,
           })))}
         />
       </main>

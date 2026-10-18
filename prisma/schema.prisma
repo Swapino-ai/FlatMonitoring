@@ -858,6 +858,10 @@ model Merak {
   /// Vyrobni cislo meridla
   cislo       String?
   poradi      Int          @default(0)
+  /// Cislo meraku v Evidenci SVJ (externi rozhrani); stavy se odtud prebiraji samy
+  svjCislo    String?
+  /// Byt v Evidenci SVJ — kdyz je stejne cislo meraku u vic bytu
+  svjByt      String?
   /// Elektromer s dvoutarifem: stav ma T1 (vysoky tarif) a T2 (nizky tarif)
   dvoutarif   Boolean      @default(false)
   /// Vymena: novy merak odkazuje na ten, ktery nahradil (spotreba se pocita pres oba)
@@ -888,6 +892,8 @@ model StavMeraku {
   hodnota   Float?
   /// U dvoutarifu T2 — nizky tarif
   hodnota2  Float?
+  /// Odkud stav je: null = zapsany rucne, "SVJ" = prevzaty z Evidence SVJ
+  zdroj     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -15,8 +15,14 @@ export interface MerakRadek {
   nahrazujeId: string | null;
   /** Den vymeny (u vymeneneho meraku) */
   vymenenAt: string | null;
+  /** Cislo meraku a byt v Evidenci SVJ (stavy se odtud prebiraji samy) */
+  svjCislo?: string | null;
+  svjByt?: string | null;
 }
-export interface StavRadek { id: string; merakId: string; leaseId: string | null; udalost: string; datum: string; hodnota: number | null; hodnota2: number | null }
+export interface StavRadek { id: string; merakId: string; leaseId: string | null; udalost: string; datum: string; hodnota: number | null; hodnota2: number | null; zdroj?: string | null }
+
+/** Stav napojeni meraku na Evidenci SVJ (z serveru). */
+export interface SvjStav { posledni: { datum: string; t1: number | null; t2: number | null } | null; chyba: string | null; prevzato: number }
 
 /** Ctene hodnoty meraku: dvoutarif T1 a T2, jinak jedna. */
 const tarify = (m: MerakRadek): (1 | 2)[] => (m.dvoutarif ? [1, 2] : [1]);
@@ -44,7 +50,11 @@ const fmt = (n: number) => n.toLocaleString("cs-CZ", { maximumFractionDigits: 3 
  * Meraky nemovitosti a jejich stavy pri predani a vraceni bytu. Meraky se pridavaji
  * jednim kliknutim, stavy se pisou primo do tabulky a ukladaji se samy po opusteni policka.
  */
-export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy }: {
+export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy, svj = {}, svjNastaveno = false }: {
+  /** Vysledek prevzeti stavu z Evidence SVJ podle meraku */
+  svj?: Record<string, SvjStav>;
+  /** Je na serveru nastavena adresa a klic SVJ? */
+  svjNastaveno?: boolean;
   propertyId: string;
   canEdit: boolean;
   meraky: MerakRadek[];
@@ -225,6 +235,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                   <th>Měřák</th>
                   <th>Upřesnění</th>
                   <th>Výrobní číslo</th>
+                  <th title="Číslo měřáku v Evidenci SVJ — stavy se odtud převezmou samy">Evidence SVJ</th>
                   {canEdit && <th className="w-36"><span className="sr-only">Akce</span></th>}
                 </tr>
               </thead>
@@ -258,6 +269,28 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                         <input className="input max-w-[14rem] py-1.5" placeholder="nepovinné" defaultValue={m.cislo ?? ""} disabled={!canEdit}
                           onBlur={(e) => e.target.value !== (m.cislo ?? "") && spust(async () => { await upravMerak(m.id, { cislo: e.target.value }); })} />
                       </td>
+                      <td>
+                        <div className="flex gap-2">
+                          <input className="input w-28 py-1.5" placeholder="číslo" defaultValue={m.svjCislo ?? ""} disabled={!canEdit}
+                            aria-label="Číslo měřáku v Evidenci SVJ"
+                            onBlur={(e) => e.target.value !== (m.svjCislo ?? "") && spust(async () => { await upravMerak(m.id, { svjCislo: e.target.value }); })} />
+                          <input className="input w-20 py-1.5" placeholder="byt" defaultValue={m.svjByt ?? ""} disabled={!canEdit}
+                            aria-label="Byt v Evidenci SVJ (jen když má víc bytů stejné číslo)" title="Jen když má v SVJ víc bytů stejné číslo měřáku"
+                            onBlur={(e) => e.target.value !== (m.svjByt ?? "") && spust(async () => { await upravMerak(m.id, { svjByt: e.target.value }); })} />
+                        </div>
+                        {m.svjCislo && (() => {
+                          const x = svj[m.id];
+                          if (!svjNastaveno) return <div className="mt-1 text-xs text-warn">napojení na SVJ není nastavené</div>;
+                          if (!x) return null;
+                          if (x.chyba) return <div className="mt-1 text-xs text-warn">{x.chyba}</div>;
+                          return (
+                            <div className="mt-1 text-xs text-ink-muted">
+                              {x.posledni ? <>poslední {fmt(x.posledni.t1 ?? 0)}{x.posledni.t2 != null ? ` / ${fmt(x.posledni.t2)}` : ""} {d?.jednotka} ({x.posledni.datum.split("-").reverse().join("/")})</> : "zatím bez odečtu"}
+                              {x.prevzato > 0 && <span className="text-good"> · převzato {x.prevzato}</span>}
+                            </div>
+                          );
+                        })()}
+                      </td>
                       {canEdit && (
                         <td className="whitespace-nowrap text-right">
                           <button type="button" className="mr-3 text-sm font-medium text-accent hover:underline" onClick={() => setVymenaId(vymenaId === m.id ? null : m.id)}>Vyměnit</button>
@@ -271,7 +304,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                     </tr>
                     {vymenaId === m.id && (
                       <tr className="!bg-accent-soft/30">
-                        <td colSpan={canEdit ? 4 : 3}>
+                        <td colSpan={canEdit ? 5 : 4}>
                           <VymenaFormular merak={m} posledni={posledniStav(m.id)} onHotovo={(e) => { setChyba(e); if (!e) setVymenaId(null); }}
                             propertyId={propertyId} />
                         </td>
@@ -419,6 +452,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                           <span className="font-medium">{nazevRadku(r)}</span>
                           {r.budouci && <Badge>plánováno</Badge>}
                           {jeNeuplny(r) && <Badge tone="warn">chybí stavy</Badge>}
+                          {zobrazene.some((m) => stav(r, m.id)?.zdroj === "SVJ") && <span title="Převzato z Evidence SVJ"><Badge>SVJ</Badge></span>}
                         </div>
                         {(r.udalost === "ZACATEK" || r.udalost === "KONEC") && <div className="text-xs text-ink-muted">{r.popis.split(" · ").slice(1).join(" · ")}</div>}
                       </td>
