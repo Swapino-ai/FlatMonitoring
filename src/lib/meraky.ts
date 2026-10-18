@@ -82,8 +82,34 @@ export interface MerakSeStavy {
   aktivni: boolean;
   dvoutarif: boolean;
   nahrazujeId: string | null;
-  stavy: { datum: string; hodnota: number | null; hodnota2: number | null }[];
+  /** Kazdorocni vynulovani "MM-DD" (radiatory) */
+  nulovani?: string | null;
+  stavy: { datum: string; hodnota: number | null; hodnota2: number | null; vynulovanoPo?: boolean }[];
 }
+
+/** Lezi den vynulovani (kazdy rok "MM-DD") v intervalu (od, do]? Vraci jeho datum. */
+export function nulovaniMezi(nulovani: string | null | undefined, od: string, doDne: string): string | null {
+  if (!nulovani || !/^\d{2}-\d{2}$/.test(nulovani)) return null;
+  for (let rok = Number(od.slice(0, 4)); rok <= Number(doDne.slice(0, 4)); rok++) {
+    const d = `${rok}-${nulovani}`;
+    if (d > od && d <= doDne) return d;
+  }
+  return null;
+}
+
+/** "31/12" (den/mesic) → "12-31"; prazdne → null; neplatne → undefined. */
+export function nulovaniZTextu(text: string): string | null | undefined {
+  const t = text.trim();
+  if (!t) return null;
+  const m = /^(\d{1,2})[/.\-\s]+(\d{1,2})\.?$/.exec(t);
+  if (!m) return undefined;
+  const den = Number(m[1]), mesic = Number(m[2]);
+  if (mesic < 1 || mesic > 12 || den < 1 || den > new Date(Date.UTC(2024, mesic, 0)).getUTCDate()) return undefined;
+  return `${String(mesic).padStart(2, "0")}-${String(den).padStart(2, "0")}`;
+}
+
+/** "12-31" → "31/12" */
+export const nulovaniText = (n: string | null | undefined) => (n ? `${n.slice(3, 5)}/${n.slice(0, 2)}` : "");
 
 /**
  * Meraky seskupene podle mista: aktualni merak a pred nim ty, ktere nahradil
@@ -109,29 +135,43 @@ export interface SpotrebaVObdobi {
   /** Prvni a posledni pouzity odecet — kdyz se lisi od hranic obdobi, je to jen cast */
   od: string;
   do: string;
+  /** Pres vynulovani bez odectu tesne pred nim: cast spotreby pred vynulovanim chybi */
+  neuplna?: boolean;
 }
 
 /**
- * Spotreba mista (retezce meraku) mezi dvema dny vcetne vymen: u kazdeho meraku
- * posledni minus prvni stav v obdobi. Null, kdyz v obdobi nejsou aspon dva stavy.
+ * Spotreba mista (retezce meraku) mezi dvema dny vcetne vymen a vynulovani: u kazdeho
+ * meraku soucet prirustku mezi po sobe jdoucimi stavy. Kdyz se merak mezi dvema stavy
+ * vynuloval (kazdorocni den nulovani, priznak z odectu, nebo u nulovaneho meraku pokles),
+ * pocita se novy stav od nuly. Null, kdyz v obdobi nejsou aspon dva stavy.
  */
 export function spotrebaVObdobi(retezec: MerakSeStavy[], od: string, doDne: string, tarif: 1 | 2 = 1): SpotrebaVObdobi | null {
   let spotreba = 0;
   let prvni: string | null = null;
   let posledni: string | null = null;
   let pouzito = false;
+  let neuplna = false;
   for (const m of retezec) {
     const stavy = m.stavy
-      .map((s) => ({ datum: s.datum, h: tarif === 2 ? s.hodnota2 : s.hodnota }))
-      .filter((s): s is { datum: string; h: number } => s.h != null && s.datum >= od && s.datum <= doDne)
+      .map((s) => ({ datum: s.datum, h: tarif === 2 ? s.hodnota2 : s.hodnota, nula: !!s.vynulovanoPo }))
+      .filter((s): s is { datum: string; h: number; nula: boolean } => s.h != null && s.datum >= od && s.datum <= doDne)
       .sort((a, b) => a.datum.localeCompare(b.datum));
     if (stavy.length < 2) continue;
-    spotreba += stavy[stavy.length - 1].h - stavy[0].h;
+    for (let i = 1; i < stavy.length; i++) {
+      const a = stavy[i - 1], b = stavy[i];
+      const den = nulovaniMezi(m.nulovani, a.datum, b.datum);
+      const vynulovano = a.nula || !!den || (!!m.nulovani && b.h < a.h);
+      if (!vynulovano) { spotreba += b.h - a.h; continue; }
+      spotreba += b.h;
+      // Odecet tesne pred vynulovanim (den pred nim nebo s priznakem) = nic nechybi
+      const denPred = den ? new Date(Date.parse(`${den}T00:00:00Z`) - 86400000).toISOString().slice(0, 10) : null;
+      if (!a.nula && a.datum !== denPred) neuplna = true;
+    }
     pouzito = true;
     if (!prvni || stavy[0].datum < prvni) prvni = stavy[0].datum;
     if (!posledni || stavy[stavy.length - 1].datum > posledni) posledni = stavy[stavy.length - 1].datum;
   }
-  return pouzito ? { spotreba: Math.round(spotreba * 1000) / 1000, od: prvni!, do: posledni! } : null;
+  return pouzito ? { spotreba: Math.round(spotreba * 1000) / 1000, od: prvni!, do: posledni!, ...(neuplna ? { neuplna } : {}) } : null;
 }
 
 /** Ktere meraky patri ke sluzbe (podle ikony druhu sluzby — plati i pro vlastni druhy). */

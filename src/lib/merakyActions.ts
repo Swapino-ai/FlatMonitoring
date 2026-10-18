@@ -28,11 +28,12 @@ export async function pridejMerak(propertyId: string, druh: string): Promise<{ e
   return { id: m.id };
 }
 
-export async function upravMerak(id: string, data: { nazev?: string | null; cislo?: string | null; aktivni?: boolean; dvoutarif?: boolean }): Promise<{ error?: string }> {
+export async function upravMerak(id: string, data: { nazev?: string | null; cislo?: string | null; aktivni?: boolean; dvoutarif?: boolean; nulovani?: string | null }): Promise<{ error?: string }> {
   const chyba = await smiMenit();
   if (chyba) return { error: chyba };
   const cist = (v: string | null | undefined) => (v === undefined ? undefined : v?.trim() || null);
-  const m = await prisma.merak.update({ where: { id }, data: { nazev: cist(data.nazev), cislo: cist(data.cislo), aktivni: data.aktivni, dvoutarif: data.dvoutarif } });
+  const m = await prisma.merak.update({ where: { id }, data: { nazev: cist(data.nazev), cislo: cist(data.cislo), aktivni: data.aktivni, dvoutarif: data.dvoutarif,
+    ...(data.nulovani !== undefined ? { nulovani: data.nulovani && /^\d{2}-\d{2}$/.test(data.nulovani) ? data.nulovani : null } : {}) } });
   obnov(m.propertyId);
   return {};
 }
@@ -145,7 +146,7 @@ export async function vymenMerak(propertyId: string, v: {
     await tx.merak.update({ where: { id: stary.id }, data: { aktivni: false, vymenenAt: datum } });
     const novy = await tx.merak.create({
       data: {
-        propertyId, druh: stary.druh, nazev: stary.nazev, dvoutarif: stary.dvoutarif, poradi: stary.poradi,
+        propertyId, druh: stary.druh, nazev: stary.nazev, dvoutarif: stary.dvoutarif, nulovani: stary.nulovani, poradi: stary.poradi,
         cislo: v.cislo?.trim() || null, nahrazujeId: stary.id,
       },
     });

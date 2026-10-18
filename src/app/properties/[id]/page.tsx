@@ -111,8 +111,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   // Meraky se stavy: spotreba najemcu do vyuctovani podle odectu
   await synchronizujSvj(id);
   const merakyVyuctovani = (await prisma.merak.findMany({ where: { propertyId: id }, include: { stavy: true } })).map((m) => ({
-    id: m.id, druh: m.druh, nazev: m.nazev, aktivni: m.aktivni, dvoutarif: m.dvoutarif, nahrazujeId: m.nahrazujeId,
-    stavy: m.stavy.map((x) => ({ datum: denISO(x.datum), hodnota: x.hodnota, hodnota2: x.hodnota2 })),
+    id: m.id, druh: m.druh, nazev: m.nazev, aktivni: m.aktivni, dvoutarif: m.dvoutarif, nahrazujeId: m.nahrazujeId, nulovani: m.nulovani,
+    stavy: m.stavy.map((x) => ({ datum: denISO(x.datum), hodnota: x.hodnota, hodnota2: x.hodnota2, vynulovanoPo: x.vynulovanoPo })),
   }));
   // Na trhu ceka ke schvaleni: navrhy k zarazeni a mozne shody stejneho bytu (u propojeneho oceneni u korene)
   const korenTrhu = property.oceneniPodle ?? property.id;

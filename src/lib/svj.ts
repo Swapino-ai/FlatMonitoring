@@ -212,7 +212,7 @@ export async function synchronizujSvj(propertyId: string): Promise<Record<string
         ];
         for (const u of udalosti.length ? udalosti : [{ udalost: "ODECET", leaseId: null }]) {
           await prisma.stavMeraku.create({
-            data: { merakId: m.id, leaseId: u.leaseId, udalost: u.udalost, datum, hodnota: prepocti(t.t1), hodnota2: prepocti(t.t2), zdroj: "SVJ" },
+            data: { merakId: m.id, leaseId: u.leaseId, udalost: u.udalost, datum, hodnota: prepocti(t.t1), hodnota2: prepocti(t.t2), vynulovanoPo: o.vynulovano_po === true, zdroj: "SVJ" },
           });
         }
         dnyMeraku.add(o.datum);

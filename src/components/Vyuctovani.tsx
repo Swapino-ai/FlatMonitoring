@@ -604,22 +604,23 @@ function Formular({ r, services, leases, vyuctovani, action, pending, popisekTla
     const druhy = druhyMerakuProSluzbu(sluzba ? typy[sluzba.type]?.icon : undefined);
     const retezce = retezceMeraku(meraky.filter((m) => druhy.includes(m.druh)));
     if (!retezce.length || !od || !doDne) return null;
-    const vysledek: Record<string, { spotreba: number; od: string; do: string } | null> = {};
+    const vysledek: Record<string, { spotreba: number; od: string; do: string; neuplna?: boolean } | null> = {};
     for (const l of dotcene) {
       const z = l.od > od ? l.od : od;
       const k = l.do && l.do < doDne ? l.do : doDne;
-      let spotreba = 0, prvni = "", posledni = "", nalezeno = false;
+      let spotreba = 0, prvni = "", posledni = "", nalezeno = false, neuplna = false;
       for (const ret of retezce) {
         for (const t of (ret[0].dvoutarif ? [1, 2] : [1]) as (1 | 2)[]) {
           const x = spotrebaVObdobi(ret, z, k, t);
           if (!x) continue;
           nalezeno = true;
           spotreba += x.spotreba;
+          if (x.neuplna) neuplna = true;
           if (!prvni || x.od < prvni) prvni = x.od;
           if (!posledni || x.do > posledni) posledni = x.do;
         }
       }
-      vysledek[l.id] = nalezeno ? { spotreba: Math.round(spotreba * 1000) / 1000, od: prvni, do: posledni } : null;
+      vysledek[l.id] = nalezeno ? { spotreba: Math.round(spotreba * 1000) / 1000, od: prvni, do: posledni, neuplna } : null;
     }
     return { vysledek, jednotka: DRUH_MERAKU_MAP.get(retezce[0][0].druh)?.jednotka ?? "" };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -696,7 +697,7 @@ function Formular({ r, services, leases, vyuctovani, action, pending, popisekTla
                 <Pole key={l.id} label={`Spotřeba: ${l.nazev} (${dateCz(l.od)} – ${l.do ? dateCz(l.do) : "dosud"})`}
                   name={`odecet:${l.id}`} type="number" step="any"
                   value={odecty[l.id] ?? ""} onChange={(e) => setOdecty((o) => ({ ...o, [l.id]: e.target.value }))}
-                  hint={zMeraku ? (m ? `Z měřáků: ${m.spotreba} ${zMeraku.jednotka} (stavy ${dateCz(m.od)} – ${dateCz(m.do)})` : "V měřácích chybí stavy pro toto období") : undefined} />
+                  hint={zMeraku ? (m ? `Z měřáků: ${m.spotreba} ${zMeraku.jednotka} (stavy ${dateCz(m.od)} – ${dateCz(m.do)})${m.neuplna ? " — neúplné: chybí odečet těsně před ročním vynulováním" : ""}` : "V měřácích chybí stavy pro toto období") : undefined} />
               );
             })}
             <Pole label="Spotřeba mimo nájemce (prázdný byt, společné)" name="ownerConsumption" type="number" step="any"

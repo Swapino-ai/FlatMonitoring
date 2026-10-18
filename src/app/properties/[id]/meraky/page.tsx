@@ -35,14 +35,14 @@ export default async function MerakyPage({ params }: { params: Promise<{ id: str
         <MerakyNemovitosti
           propertyId={id}
           canEdit={canEdit}
-          meraky={property.meraky.map((m) => ({ id: m.id, druh: m.druh, nazev: m.nazev, cislo: m.cislo, aktivni: m.aktivni, dvoutarif: m.dvoutarif,
+          meraky={property.meraky.map((m) => ({ id: m.id, druh: m.druh, nazev: m.nazev, cislo: m.cislo, aktivni: m.aktivni, dvoutarif: m.dvoutarif, nulovani: m.nulovani,
             nahrazujeId: m.nahrazujeId, vymenenAt: m.vymenenAt ? denISO(m.vymenenAt) : null }))}
           svjByt={property.svjByt}
           svj={svj}
           svjNastaveno={svjNastaveno()}
           udalosti={udalostiNajmu(property.leases)}
           stavy={property.meraky.flatMap((m) => m.stavy.map((s) => ({
-            id: s.id, merakId: s.merakId, leaseId: s.leaseId, udalost: s.udalost, datum: denISO(s.datum), hodnota: s.hodnota, hodnota2: s.hodnota2, zdroj: s.zdroj,
+            id: s.id, merakId: s.merakId, leaseId: s.leaseId, udalost: s.udalost, datum: denISO(s.datum), hodnota: s.hodnota, hodnota2: s.hodnota2, zdroj: s.zdroj, vynulovanoPo: s.vynulovanoPo,
           })))}
         />
       </main>

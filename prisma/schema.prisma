@@ -862,6 +862,8 @@ model Merak {
   poradi      Int          @default(0)
   /// Elektromer s dvoutarifem: stav ma T1 (vysoky tarif) a T2 (nizky tarif)
   dvoutarif   Boolean      @default(false)
+  /// Kazdorocni vynulovani (indikatory na radiatorech): "MM-DD" = den, od ktereho merak pocita znovu od nuly
+  nulovani    String?
   /// Vymena: novy merak odkazuje na ten, ktery nahradil (spotreba se pocita pres oba)
   nahrazujeId String?
   nahrazuje   Merak?       @relation("VymenaMeraku", fields: [nahrazujeId], references: [id], onDelete: SetNull)
@@ -878,22 +880,24 @@ model Merak {
 
 /// Stav meraku: pri predani bytu najemci (ZACATEK), pri vraceni (KONEC) nebo jiny odecet
 model StavMeraku {
-  id        String   @id @default(cuid())
-  merakId   String
-  merak     Merak    @relation(fields: [merakId], references: [id], onDelete: Cascade)
-  leaseId   String?
-  lease     Lease?   @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  id           String   @id @default(cuid())
+  merakId      String
+  merak        Merak    @relation(fields: [merakId], references: [id], onDelete: Cascade)
+  leaseId      String?
+  lease        Lease?   @relation(fields: [leaseId], references: [id], onDelete: SetNull)
   /// ZACATEK | KONEC | ODECET | VYMENA (konecny stav stareho / pocatecni noveho meraku)
-  udalost   String
-  datum     DateTime
+  udalost      String
+  datum        DateTime
   /// Stav (u dvoutarifu T1 — vysoky tarif)
-  hodnota   Float?
+  hodnota      Float?
   /// U dvoutarifu T2 — nizky tarif
-  hodnota2  Float?
+  hodnota2     Float?
+  /// Po tomto odectu se merak vynuloval (napr. z Evidence SVJ)
+  vynulovanoPo Boolean  @default(false)
   /// Odkud stav je: null = zapsany rucne, "SVJ" = prevzaty z Evidence SVJ
-  zdroj     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  zdroj        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([merakId, datum])
   @@index([leaseId])

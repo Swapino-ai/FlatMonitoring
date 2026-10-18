@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState, useTransition } from "react";
-import { DRUHY_MERAKU, DRUH_MERAKU_MAP, retezceMeraku, spotrebaVObdobi, type MerakSeStavy, type UdalostNajmu } from "@/lib/meraky";
+import { DRUHY_MERAKU, DRUH_MERAKU_MAP, nulovaniMezi, nulovaniText, nulovaniZTextu, retezceMeraku, spotrebaVObdobi, type MerakSeStavy, type UdalostNajmu } from "@/lib/meraky";
 import { nastavSvjByt, pridejMerak, smazMerak, ulozStav, upravMerak, vymenMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
 import { denISO } from "@/lib/format";
 import { DatumPole } from "./DatumPole";
@@ -11,12 +11,14 @@ import { SbalitelnaKarta } from "./SbalitelnaKarta";
 
 export interface MerakRadek {
   id: string; druh: string; nazev: string | null; cislo: string | null; aktivni: boolean; dvoutarif: boolean;
+  /** Kazdorocni vynulovani "MM-DD" (radiatory) */
+  nulovani?: string | null;
   /** Merak, ktery tento nahradil (vymena) */
   nahrazujeId: string | null;
   /** Den vymeny (u vymeneneho meraku) */
   vymenenAt: string | null;
 }
-export interface StavRadek { id: string; merakId: string; leaseId: string | null; udalost: string; datum: string; hodnota: number | null; hodnota2: number | null; zdroj?: string | null }
+export interface StavRadek { id: string; merakId: string; leaseId: string | null; udalost: string; datum: string; hodnota: number | null; hodnota2: number | null; zdroj?: string | null; vynulovanoPo?: boolean }
 
 /** Stav napojeni meraku na Evidenci SVJ (z serveru). */
 export interface SvjStav { posledni: { datum: string; t1: number | null; t2: number | null } | null; chyba: string | null; prevzato: number }
@@ -103,7 +105,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
   // Sloupce historie: misto = aktualni merak + meraky, ktere nahradil
   const retezce = retezceMeraku(zobrazene);
   const sMerakem = (m: MerakRadek): MerakSeStavy => ({
-    ...m, stavy: stavy.filter((x) => x.merakId === m.id).map((x) => ({ datum: x.datum, hodnota: x.hodnota, hodnota2: x.hodnota2 })),
+    ...m, stavy: stavy.filter((x) => x.merakId === m.id).map((x) => ({ datum: x.datum, hodnota: x.hodnota, hodnota2: x.hodnota2, vynulovanoPo: x.vynulovanoPo })),
   });
   const [vymenaId, setVymenaId] = useState<string | null>(null);
   /** Posledni zapsany stav meraku (navrh pro konecny stav pri vymene). */
@@ -164,7 +166,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
     const od = zacatek ? datumRadku(zacatek) : "";
     const doDne = datumRadku(r);
     if (!od || !doDne) return null;
-    return spotrebaVObdobi(ret.map(sMerakem), od, doDne, tarif)?.spotreba ?? null;
+    return spotrebaVObdobi(ret.map(sMerakem), od, doDne, tarif);
   };
 
   // Predani a vraceni potrebuji stav vsech meraku; prubezny odecet muze byt jen nektery
@@ -256,6 +258,17 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                                 <option value="2">dvoutarif T1 + T2 · kWh</option>
                               </select>
                             ) : <div className="text-xs text-ink-muted">{d?.jednotka}</div>}
+                            {(m.druh === "RADIATOR" || m.nulovani) && (
+                              <label className="mt-1 flex items-center gap-1.5 text-xs text-ink-muted" title="Den, od kterého měřák každý rok počítá znovu od nuly">
+                                od nuly každý rok od
+                                <input className="input w-16 px-1.5 py-0.5 text-xs" placeholder="dd/mm" defaultValue={nulovaniText(m.nulovani)} disabled={!canEdit}
+                                  onBlur={(e) => {
+                                    const n = nulovaniZTextu(e.target.value);
+                                    if (n === undefined) { setChyba("Den vynulování zadej jako den/měsíc, např. 01/01."); return; }
+                                    if (n !== (m.nulovani ?? null)) spust(async () => { const v = await upravMerak(m.id, { nulovani: n }); setChyba(v.error ?? null); });
+                                  }} />
+                              </label>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -405,7 +418,11 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                                 {pred && (
                                   <div className="text-ink-muted">
                                     minule {fmt(pred.hodnota)} ({pred.datum.split("-").reverse().join("/")})
-                                    {h != null && <> · <span className={h < pred.hodnota ? "text-bad" : ""}>{h < pred.hodnota ? "menší než minule!" : `+${fmt(h - pred.hodnota)} ${d?.jednotka ?? ""}`}</span></>}
+                                    {h != null && (() => {
+                                      const nula = !!nulovaniMezi(m.nulovani, pred.datum, datumRadku(otevreny));
+                                      if (nula) return <> · <span>od vynulování +{fmt(h)} {d?.jednotka ?? ""}</span></>;
+                                      return <> · <span className={h < pred.hodnota ? "text-bad" : ""}>{h < pred.hodnota ? (m.nulovani ? "vynulováno?" : "menší než minule!") : `+${fmt(h - pred.hodnota)} ${d?.jednotka ?? ""}`}</span></>;
+                                    })()}
                                   </div>
                                 )}
                               </div>
@@ -464,7 +481,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                               <div key={t}>
                                 {ret[0].dvoutarif && <span className="mr-1 text-xs text-ink-muted">T{t}</span>}
                                 {hodnotyRetezce.length ? hodnotyRetezce.map(fmt).join(" → ") : <span className="text-ink-muted">—</span>}
-                                {sp != null && <div className="text-xs text-ink-muted">spotřeba {fmt(sp)}</div>}
+                                {sp != null && <div className="text-xs text-ink-muted" title={sp.neuplna ? "Mezi odečty se měřák vynuloval a chybí odečet těsně před vynulováním — část spotřeby není započtená" : undefined}>spotřeba {fmt(sp.spotreba)}{sp.neuplna ? " (neúplná)" : ""}</div>}
                               </div>
                             );
                           })}
