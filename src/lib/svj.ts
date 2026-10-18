@@ -41,16 +41,20 @@ export const POPIS_CHYBY_SVJ: Record<SvjChyba, string> = {
   nedostupne: "stav nedostupný",
 };
 
-export const svjNastaveno = () => !!process.env.SVJ_API_URL && !!process.env.SVJ_API_KLIC;
+export const svjNastaveno = () => !!process.env.SVJ_API_URL?.trim() && !!process.env.SVJ_API_KLIC?.trim();
 
 /** Odecty meraku z Evidence SVJ (od nejnovejsiho). Nikdy nevyhodi chybu. */
 export async function nactiMerakSvj(cislo: string, limit = 1): Promise<SvjVysledek> {
-  const url = process.env.SVJ_API_URL?.replace(/\/+$/, "");
-  const klic = process.env.SVJ_API_KLIC;
+  const url = hodnotaPromenne("SVJ_API_URL")?.replace(/\/+$/, "");
+  const klic = hodnotaPromenne("SVJ_API_KLIC");
   if (!url || !klic) return { ok: false, chyba: "nenastaveno" };
+  const cfId = hodnotaPromenne("SVJ_CF_CLIENT_ID");
+  const cfSecret = hodnotaPromenne("SVJ_CF_CLIENT_SECRET");
+  // Hodnoty klicu se nikdy nesmi dostat do hlaseni ani do logu
+  const skryj = (t: string) => [klic, cfId, cfSecret, process.env.SVJ_API_KLIC, process.env.SVJ_CF_CLIENT_ID, process.env.SVJ_CF_CLIENT_SECRET]
+    .filter((x): x is string => !!x && x.length >= 4)
+    .reduce((acc, x) => acc.split(x).join("•••"), t);
   try {
-    const cfId = process.env.SVJ_CF_CLIENT_ID;
-    const cfSecret = process.env.SVJ_CF_CLIENT_SECRET;
     const r = await fetch(`${url}/api/ext/meraky/${encodeURIComponent(cislo)}?limit=${Math.min(500, Math.max(1, limit))}`, {
       headers: {
         "X-API-Key": klic,
@@ -72,9 +76,18 @@ export async function nactiMerakSvj(cislo: string, limit = 1): Promise<SvjVysled
     const data = (await r.json()) as { meraky?: SvjMerak[] };
     return Array.isArray(data.meraky) ? { ok: true, meraky: data.meraky } : nedostupne(cislo, "odpověď SVJ nemá seznam měřáků");
   } catch (e) {
-    const zprava = e instanceof Error ? `${e.name === "TimeoutError" ? "SVJ neodpovědělo do 8 s" : e.message}${e.cause instanceof Error ? ` (${e.cause.message})` : ""}` : String(e);
+    const zprava = skryj(e instanceof Error ? `${e.name === "TimeoutError" ? "SVJ neodpovědělo do 8 s" : e.message}${e.cause instanceof Error ? ` (${e.cause.message})` : ""}` : String(e));
     return nedostupne(cislo, /invalid url|failed to parse url/i.test(zprava) ? `neplatná adresa SVJ_API_URL — musí začínat https://` : zprava);
   }
+}
+
+/**
+ * Hodnota promenne prostredi: jen prvni souvisly retezec. Pri vkladani do Vercelu se
+ * hodnota snadno zdvoji nebo prida konec radku — to by jako hlavicka neproslo.
+ */
+function hodnotaPromenne(nazev: string): string | undefined {
+  const v = process.env[nazev]?.trim().split(/\s+/)[0];
+  return v || undefined;
 }
 
 /** Nedostupne s duvodem: ukaze se v aplikaci a zapise do logu Vercelu (bez klicu). */
