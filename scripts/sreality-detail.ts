@@ -115,7 +115,7 @@ export async function uklidStranku(stranka: Page): Promise<void> {
 
 /** Tlacitka typu "Zobrazit celý popis"; ne dalsi nabidky, telefon ani fotky. */
 const ROZBALIT = /^(zobrazit|číst|ukázat|rozbalit)\s+(celý|celou|více|vše|další)|^(více|celý popis|číst dál|zobrazit více)$/i;
-const NEROZBALOVAT = /nabíd|inzerát|fotk|telefon|kontakt|e-?mail|hypot|mapu|podobn/i;
+const NEROZBALOVAT = /nabíd|inzerát|fot|vide|prohlíd|telefon|kontakt|e-?mail|hypot|mapu|podobn/i;
 
 /**
  * Rozbali zkraceny popis (tlacitko "Zobrazit celý popis", zkraceni na par radku) a projede

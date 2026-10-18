@@ -29,6 +29,21 @@ async function main() {
       return { prekryvy: prekryvy.slice(0, 5), premium: /Premium je tu/.test(document.body.innerText) };
     })()`) as { prekryvy: string[]; premium: boolean };
     const fotka = d.fotky[0] ? await p.request.get(d.fotky[0]).then(async (r) => `${r.status()} ${r.headers()["content-type"]} ${(await r.body()).length} B`).catch((e) => String(e)) : "—";
+    // Je v textu stranky cely popis? (porovnani s popisem v datech stranky)
+    const kontrola = await p.evaluate(`(() => {
+      const najdi = (o, d) => { if (!o || typeof o !== "object" || d > 8) return null;
+        for (const [k, v] of Object.entries(o)) {
+          if (/^(description|popis|text)$/i.test(k) && typeof v === "string" && v.length > 200) return v;
+          const r = najdi(v, d + 1); if (r) return r; }
+        return null; };
+      let popis = null;
+      try { popis = najdi(JSON.parse(document.getElementById("__NEXT_DATA__").textContent), 0); } catch {}
+      const t = document.body.innerText.replace(/\\s+/g, " ");
+      const konec = popis ? popis.replace(/\\s+/g, " ").trim().slice(-60) : "";
+      const tlacitka = Array.from(document.querySelectorAll("button, [role=button], a")).map((b) => (b.innerText || "").trim().replace(/\\s+/g, " ")).filter((x) => x && x.length < 40 && /zobraz|více|celý|číst|rozbal|méně/i.test(x));
+      return { delkaPopisu: popis ? popis.length : 0, konecVidet: popis ? t.includes(konec) : null, konec, tlacitka: [...new Set(tlacitka)].slice(0, 12) };
+    })()`) as { delkaPopisu: number; konecVidet: boolean | null; konec: string; tlacitka: string[] };
+    console.log(`${i.externalId}: popis ${kontrola.delkaPopisu} znaků, konec popisu na stránce viditelný: ${kontrola.konecVidet} („…${kontrola.konec}“); tlačítka: ${kontrola.tlacitka.join(" | ")}`);
     mkdirSync("sonda", { recursive: true });
     const snimek = await snimekStranky(p);
     writeFileSync(`sonda/${i.externalId}.jpg`, snimek);
