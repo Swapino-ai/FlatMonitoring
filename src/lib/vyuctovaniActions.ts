@@ -54,6 +54,8 @@ export async function saveSettlement(
 
   const sluzba = await prisma.service.findUnique({ where: { id: serviceId } });
   if (!sluzba) return { error: "Služba neexistuje." };
+  const mimo = mimoPlatnost(sluzba, od, doDne);
+  if (mimo) return { error: mimo };
 
   // Dve vyuctovani jedne sluzby se nesmi prekryvat: den by se zapocital dvakrat
   const stavajici = await prisma.serviceSettlement.findMany({
@@ -132,6 +134,15 @@ export async function deleteSettlement(_prev: VyuctovaniFormState, formData: For
  * Doklad se rozdeli do vyuctovani jednotlivych sluzeb podle jejich mesicnich nakladu a zaznamy
  * se spoji spolecnym batchId, aby se daly smazat spolu.
  */
+/** Sluzba v obdobi vubec neplatila (zacala pozdeji / skoncila drive)? Vraci text chyby. */
+function mimoPlatnost(s: { provider: string; contractStart: Date | null; activeTo: Date | null }, od: string, doDne: string): string | null {
+  const den = (d: Date) => d.toISOString().slice(0, 10);
+  const cz = (iso: string) => iso.split("-").reverse().join("/");
+  if (s.contractStart && den(s.contractStart) > doDne) return `Služba ${s.provider} v tomto období ještě neplatila (platí od ${cz(den(s.contractStart))}).`;
+  if (s.activeTo && den(s.activeTo) < od) return `Služba ${s.provider} v tomto období už neplatila (skončila ${cz(den(s.activeTo))}).`;
+  return null;
+}
+
 export async function saveSettlementSkupina(
   _prev: VyuctovaniFormState, formData: FormData,
 ): Promise<VyuctovaniFormState> {
@@ -154,6 +165,10 @@ export async function saveSettlementSkupina(
   });
   if (sluzby.length !== serviceIds.length) return { error: "Některá ze služeb neexistuje." };
   if (new Set(sluzby.map((s) => s.propertyId)).size !== 1) return { error: "Služby musí patřit k jedné nemovitosti." };
+  for (const s of sluzby) {
+    const mimo = mimoPlatnost(s, od, doDne);
+    if (mimo) return { error: mimo };
+  }
 
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   for (const s of sluzby) {

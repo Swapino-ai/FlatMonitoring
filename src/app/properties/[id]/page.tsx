@@ -688,7 +688,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             nazev: "Vyúčtování",
             obsah: (<>
             <SbalitelnaKarta klic="vyuctovani-sluzeb" title="Vyúčtování služeb od dodavatelů">
-              <VyuctovaniSluzeb typy={typy} dokumenty={dokumentyVyuctovani} diskPripojen={diskPripojen} services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant, groupName: sl.groupName, notes: sl.notes }))}
+              <VyuctovaniSluzeb typy={typy} dokumenty={dokumentyVyuctovani} diskPripojen={diskPripojen} services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant, groupName: sl.groupName, notes: sl.notes,
+                od: sl.contractStart ? iso(new Date(sl.contractStart)) : null, do: sl.activeTo ? iso(new Date(sl.activeTo)) : null }))}
                 leases={najmyVyuctovani} vyuctovani={vyuctovani} canEdit={user.role === "OWNER"} meraky={merakyVyuctovani} />
             </SbalitelnaKarta>
             {jeMajitel && (

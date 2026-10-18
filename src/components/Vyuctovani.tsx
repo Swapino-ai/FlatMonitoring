@@ -17,7 +17,17 @@ import { Ikona, type NazevIkony } from "./Ikony";
 import { Badge } from "./Stat";
 import { Dokumenty, type DokumentRadek } from "./Dokumenty";
 
-export interface SluzbaRadek { id: string; type: string; provider: string; chargedToTenant: boolean; groupName?: string | null; notes?: string | null }
+export interface SluzbaRadek {
+  id: string; type: string; provider: string; chargedToTenant: boolean; groupName?: string | null; notes?: string | null;
+  /** Kdy sluzba platila (ISO); null = bez omezeni */
+  od?: string | null; do?: string | null;
+}
+
+/** Platila sluzba aspon cast obdobi? */
+const platiVObdobi = (s: SluzbaRadek, od: string, doDne: string) => (!s.od || s.od <= doDne) && (!s.do || s.do >= od);
+const ddmm = (iso: string) => iso.split("-").reverse().join("/");
+/** "platí od 01/01/2026", "platila do 31/12/2024", "01/01/2023 – 31/12/2024" */
+const platnostText = (s: SluzbaRadek) => (s.od && s.do ? `${ddmm(s.od)} – ${ddmm(s.do)}` : s.od ? `od ${ddmm(s.od)}` : s.do ? `do ${ddmm(s.do)}` : "");
 
 export interface NajemRadek extends NajemVstup {
   tenantStreet: string | null; tenantCity: string | null; tenantZip: string | null;
@@ -377,9 +387,14 @@ function SkupinaFormular({ services, typy, action, pending }: {
 
   async function dalKCastkam() {
     if (!od || !doDne || od > doDne) { setChyba("Zadej platné období od–do."); return; }
-    setChyba("");
+    // Sluzby, ktere v obdobi vubec neplatily (zacaly pozdeji, skoncily), na doklad nepatri
+    const mimo = [...vybrane].filter((id) => { const s = services.find((x) => x.id === id); return s && !platiVObdobi(s, od, doDne); });
+    const platne = [...vybrane].filter((id) => !mimo.includes(id));
+    if (platne.length < 2) { setChyba(`V tomto období platí jen ${platne.length} z vybraných služeb${mimo.length ? ` (${mimo.map(nazev).join(", ")} neplatila)` : ""} — společné vyúčtování potřebuje aspoň dvě.`); return; }
+    if (mimo.length) setVybrane(new Set(platne));
+    setChyba(mimo.length ? `Vynecháno, v tomto období neplatilo: ${mimo.map(nazev).join(", ")}.` : "");
     setNacitam(true);
-    const r = await zaplacenoDodavateli([...vybrane], od, doDne);
+    const r = await zaplacenoDodavateli(platne, od, doDne);
     setNacitam(false);
     if (r.error) { setChyba(r.error); return; }
     setZaplaceno(r.sluzby ?? []);
@@ -446,6 +461,7 @@ function SkupinaFormular({ services, typy, action, pending }: {
                 <input type="checkbox" checked={vybrane.has(s.id)} onChange={() => prepni(s.id)} className="h-4 w-4 accent-accent" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{nazevDruhu(typy, s.type)} · {s.provider}</span>
+                  {platnostText(s) && <span className="block text-xs text-ink-muted">platí {platnostText(s)}</span>}
                   {s.notes && <span className="block truncate text-xs italic text-ink-muted">{s.notes}</span>}
                 </span>
                 {s.groupName && <span className="text-xs text-ink-muted">{s.groupName}</span>}
@@ -650,7 +666,10 @@ function Formular({ r, services, leases, vyuctovani, action, pending, popisekTla
         <label className="label mb-1.5 block" htmlFor="serviceId">Služba</label>
         <select id="serviceId" name="serviceId" className="input" value={sluzbaId}
           onChange={(e) => setSluzbaId(e.target.value)}>
-          {services.map((s) => <option key={s.id} value={s.id}>{`${nazevDruhu(typy, s.type)} · ${s.provider}`}</option>)}
+          {[...services]
+            // Sluzby platne v zadanem obdobi napred, ostatni s udajem, kdy platily
+            .sort((a, b) => Number(od && doDne ? !platiVObdobi(a, od, doDne) : 0) - Number(od && doDne ? !platiVObdobi(b, od, doDne) : 0))
+            .map((s) => <option key={s.id} value={s.id}>{`${nazevDruhu(typy, s.type)} · ${s.provider}${platnostText(s) ? ` (platí ${platnostText(s)})` : ""}`}</option>)}
         </select>
       </div>
       <DatumPole key={`od-${r?.id ?? sluzbaId}`} label="Období od" name="periodFrom" required
@@ -658,6 +677,14 @@ function Formular({ r, services, leases, vyuctovani, action, pending, popisekTla
         hint={!r && navrhOd ? "Navazuje na předchozí vyúčtování této služby." : undefined} />
       <DatumPole label="Období do (včetně)" name="periodTo" required defaultValue={r?.do ?? ""} onChange={setDoDne}
         hint="Nemusí to být celý měsíc ani rok — zadej přesně, co vyúčtování pokrývá." />
+      {(() => {
+        const s = services.find((x) => x.id === sluzbaId);
+        return s && od && doDne && od <= doDne && !platiVObdobi(s, od, doDne) ? (
+          <p className="rounded-lg bg-bad/10 px-3 py-2 text-sm text-bad sm:col-span-2">
+            Služba {s.provider} v tomto období neplatila (platí {platnostText(s)}). Vyber jinou službu, nebo uprav období.
+          </p>
+        ) : null;
+      })()}
       <Pole label="Skutečný náklad za období (Kč)" name="totalCost" type="number" step="0.01" required
         value={naklad} onChange={(e) => setNaklad(e.target.value)} />
       <Pole label="Zálohy zaplacené dodavateli (Kč)" name="supplierAdvances" type="number" step="0.01"
