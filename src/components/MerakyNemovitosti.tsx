@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { DRUHY_MERAKU, DRUH_MERAKU_MAP, nulovaniMezi, nulovaniText, nulovaniZTextu, retezceMeraku, spotrebaVObdobi, type MerakSeStavy, type UdalostNajmu } from "@/lib/meraky";
-import { nastavSvjByt, pridejMerak, smazMerak, ulozStav, upravMerak, vymenMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
+import { nastavSvjByt, synchronizujSvjTed, pridejMerak, smazMerak, ulozStav, upravMerak, vymenMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
 import { denISO } from "@/lib/format";
 import { DatumPole } from "./DatumPole";
 import { Ikona, type NazevIkony } from "./Ikony";
@@ -49,7 +49,9 @@ const fmt = (n: number) => n.toLocaleString("cs-CZ", { maximumFractionDigits: 3 
  * Meraky nemovitosti a jejich stavy pri predani a vraceni bytu. Meraky se pridavaji
  * jednim kliknutim, stavy se pisou primo do tabulky a ukladaji se samy po opusteni policka.
  */
-export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy, svj = {}, svjNastaveno = false, svjByt = null }: {
+export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy, svj = {}, svjNastaveno = false, svjByt = null, svjSyncAt = null }: {
+  /** Kdy se naposledy prebiraly stavy ze SVJ (ISO) */
+  svjSyncAt?: string | null;
   /** Cislo bytu v Evidenci SVJ (meraky se tam dohledaji podle vyrobniho cisla) */
   svjByt?: string | null;
   /** Vysledek prevzeti stavu z Evidence SVJ podle meraku */
@@ -64,6 +66,8 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
 }) {
   const [, spust] = useTransition();
   const [chyba, setChyba] = useState<string | null>(null);
+  const [synchronizuji, synchronizuj] = useTransition();
+  const [svjHlaska, setSvjHlaska] = useState<string | null>(null);
   // Stav bunky: ukladam / ulozeno / chyba (klic = radek|merak)
   const [bunky, setBunky] = useState<Record<string, "uklada" | "ok" | "chyba">>({});
   // Lokalni hodnoty (at je hned videt spotreba, nez se stranka obnovi)
@@ -323,8 +327,20 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
           <label htmlFor="svj-byt" className="label">Evidence SVJ — číslo bytu</label>
           <input id="svj-byt" className="input w-28 py-1.5" placeholder="např. 5" defaultValue={svjByt ?? ""} disabled={!canEdit}
             onBlur={(e) => e.target.value.trim() !== (svjByt ?? "") && spust(async () => { const v = await nastavSvjByt(propertyId, e.target.value); setChyba(v.error ?? null); })} />
+          {svjByt && canEdit && (
+            <button type="button" className="btn py-1.5" disabled={synchronizuji}
+              onClick={() => synchronizuj(async () => {
+                const v = await synchronizujSvjTed(propertyId);
+                setChyba(v.error ?? null);
+                setSvjHlaska(v.error ? null : `Převzato ${v.prevzato ?? 0} ${v.prevzato === 1 ? "odečet" : (v.prevzato ?? 0) > 1 && (v.prevzato ?? 0) < 5 ? "odečty" : "odečtů"}${v.chyb ? `, ${v.chyb} ${v.chyb === 1 ? "měřák" : "měřáky"} se nepodařilo načíst` : ""}.`);
+              })}>
+              {synchronizuji ? "Synchronizuji…" : "Synchronizovat se SVJ"}
+            </button>
+          )}
           <span className="text-xs text-ink-muted">
-            {svjByt ? "Měřáky se v SVJ dohledají podle výrobních čísel a stavy se převezmou samy." : "Vyplň, pokud byt eviduje odečty v aplikaci SVJ domu."}
+            {svjHlaska ?? (svjByt
+              ? `Měřáky se v SVJ dohledají podle výrobních čísel; stavy se převezmou samy jednou za měsíc${svjSyncAt ? ` (naposledy ${svjSyncAt.slice(0, 10).split("-").reverse().join("/")})` : ""}.`
+              : "Vyplň, pokud byt eviduje odečty v aplikaci SVJ domu.")}
           </span>
         </div>
         {archiv.length > 0 && (

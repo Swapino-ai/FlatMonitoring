@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { getSession } from "./auth";
 import { DRUH_MERAKU_MAP } from "./meraky";
+import { svjNastaveno, synchronizujSvj } from "./svj";
 
 async function smiMenit(): Promise<string | null> {
   const user = await getSession();
@@ -164,7 +166,19 @@ export async function vymenMerak(propertyId: string, v: {
 export async function nastavSvjByt(propertyId: string, byt: string): Promise<{ error?: string }> {
   const chyba = await smiMenit();
   if (chyba) return { error: chyba };
-  await prisma.property.update({ where: { id: propertyId }, data: { svjByt: byt.trim() || null } });
+  await prisma.property.update({ where: { id: propertyId }, data: { svjByt: byt.trim() || null, svjSyncAt: null, svjStav: Prisma.DbNull } });
   obnov(propertyId);
   return {};
+}
+
+/** Rucni synchronizace se SVJ (cerstva data, bez cache). */
+export async function synchronizujSvjTed(propertyId: string): Promise<{ error?: string; prevzato?: number; chyb?: number }> {
+  const chyba = await smiMenit();
+  if (chyba) return { error: chyba };
+  if (!svjNastaveno()) return { error: "Napojení na SVJ není nastavené (SVJ_API_URL, SVJ_API_KLIC na Vercelu)." };
+  const v = await synchronizujSvj(propertyId, true);
+  obnov(propertyId);
+  revalidatePath(`/properties/${propertyId}`);
+  const stavy = Object.values(v);
+  return { prevzato: stavy.reduce((a, x) => a + x.prevzato, 0), chyb: stavy.filter((x) => x.chyba).length };
 }

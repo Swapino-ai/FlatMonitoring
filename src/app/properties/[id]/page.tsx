@@ -19,7 +19,8 @@ import { analyzeProperty, loadProperty, mujMesicniTok } from "@/lib/portfolio";
 import { nasobitel, podilNaUveru, podilUzivatele } from "@/lib/ownership";
 import { aktualniPohled } from "@/lib/ownership.server";
 import { prisma } from "@/lib/db";
-import { synchronizujSvj } from "@/lib/svj";
+import { synchronizujSvjKdyzJeCas } from "@/lib/svj";
+import { after } from "next/server";
 import { odhadNemovitosti } from "@/lib/market/inzeraty";
 import { OwnerManager } from "@/components/OwnerManager";
 import { Listy } from "@/components/Listy";
@@ -109,7 +110,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
 
   const podil = nasobitel(pohled, property.owners, user.id);
   // Meraky se stavy: spotreba najemcu do vyuctovani podle odectu
-  await synchronizujSvj(id);
+  // Stavy ze SVJ jednou za mesic, az po odeslani stranky (nebrzdi ji)
+  after(() => synchronizujSvjKdyzJeCas(id));
   const merakyVyuctovani = (await prisma.merak.findMany({ where: { propertyId: id }, include: { stavy: true } })).map((m) => ({
     id: m.id, druh: m.druh, nazev: m.nazev, aktivni: m.aktivni, dvoutarif: m.dvoutarif, nahrazujeId: m.nahrazujeId, nulovani: m.nulovani,
     stavy: m.stavy.map((x) => ({ datum: denISO(x.datum), hodnota: x.hodnota, hodnota2: x.hodnota2, vynulovanoPo: x.vynulovanoPo })),

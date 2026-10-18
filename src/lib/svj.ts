@@ -5,12 +5,13 @@
  * a klic jsou v promennych prostredi na Vercelu (SVJ_API_URL, SVJ_API_KLIC).
  * Domena je za Cloudflare Access: service token se posila v hlavickach
  * CF-Access-Client-Id / CF-Access-Client-Secret (SVJ_CF_CLIENT_ID, SVJ_CF_CLIENT_SECRET).
- * Stavy se meni jen pri zapisu odectu, proto cache 5 minut.
+ * Stavy se prebiraji samy jednou za mesic (po odeslani stranky, nebrzdi ji), jinak tlacitkem.
  *
  * Prevzate odecty se ukladaji jako stavy meraku se zdrojem "SVJ": datum predani
  * nebo vraceni bytu → k teto udalosti, jinak jako prubezny odecet. Rucne zapsany
  * stav se nikdy neprepisuje.
  */
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { denISO } from "./format";
 import { DRUH_MERAKU_MAP } from "./meraky";
@@ -44,7 +45,7 @@ export const POPIS_CHYBY_SVJ: Record<SvjChyba, string> = {
 export const svjNastaveno = () => !!process.env.SVJ_API_URL?.trim() && !!process.env.SVJ_API_KLIC?.trim();
 
 /** Odecty meraku z Evidence SVJ (od nejnovejsiho). Nikdy nevyhodi chybu. */
-export async function nactiMerakSvj(cislo: string, limit = 1): Promise<SvjVysledek> {
+export async function nactiMerakSvj(cislo: string, limit = 1, cerstve = false): Promise<SvjVysledek> {
   const url = hodnotaPromenne("SVJ_API_URL")?.replace(/\/+$/, "");
   const klic = hodnotaPromenne("SVJ_API_KLIC");
   if (!url || !klic) return { ok: false, chyba: "nenastaveno" };
@@ -66,7 +67,11 @@ export async function nactiMerakSvj(cislo: string, limit = 1): Promise<SvjVysled
     let adresa = `${url}/api/ext/meraky/${encodeURIComponent(cislo)}?limit=${Math.min(500, Math.max(1, limit))}`;
     let r: Response | null = null;
     for (let krok = 0; krok < 4; krok++) {
-      r = await fetch(adresa, { headers: hlavicky, redirect: "manual", next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) });
+      r = await fetch(adresa, {
+        headers: hlavicky, redirect: "manual", signal: AbortSignal.timeout(8000),
+        // Rucni synchronizace chce cerstva data, jinak staci cache 5 minut
+        ...(cerstve ? { cache: "no-store" as const } : { next: { revalidate: 300 } }),
+      });
       if (r.status < 300 || r.status >= 400) break;
       const kam = r.headers.get("location");
       if (!kam) break;
@@ -158,32 +163,40 @@ export interface SvjStavMeraku {
   prevzato: number;
 }
 
+/** Jak casto se stavy ze SVJ prebiraji samy (jinak tlacitkem). */
+export const SVJ_INTERVAL_DNU = 30;
+
 /**
  * Prevezme odecty ze SVJ k merakum nemovitosti: kdyz ma nemovitost cislo bytu v SVJ,
- * kazdy aktivni merak s vyrobnim cislem se tam dohleda podle nej. Bezi pri
- * otevreni stranky (diky cache nejvys jednou za 5 minut na merak). Nikdy nevyhodi chybu.
+ * kazdy aktivni merak s vyrobnim cislem se tam dohleda podle nej. Dotazy bezi souber,
+ * nove stavy se zapisou jednim dotazem a vysledek se ulozi k nemovitosti (stranky pak
+ * SVJ vubec nevolaji). Nikdy nevyhodi chybu.
  */
-export async function synchronizujSvj(propertyId: string): Promise<Record<string, SvjStavMeraku>> {
+export async function synchronizujSvj(propertyId: string, cerstve = false): Promise<Record<string, SvjStavMeraku>> {
   const vysledek: Record<string, SvjStavMeraku> = {};
   try {
     // Byt v SVJ je nastaveny u nemovitosti; meraky se hledaji podle vyrobniho cisla
     const nemovitost = await prisma.property.findUnique({ where: { id: propertyId }, select: { svjByt: true } });
     if (!nemovitost?.svjByt) return vysledek;
     const byt = nemovitost.svjByt;
-    const meraky = await prisma.merak.findMany({
-      where: { propertyId, aktivni: true, cislo: { not: null } },
-      include: { stavy: { select: { datum: true, udalost: true, leaseId: true } } },
-    });
-    if (!meraky.length) return vysledek;
-    const smlouvy = await prisma.lease.findMany({ where: { propertyId }, select: { id: true, startDate: true, endDate: true } });
+    const [meraky, smlouvy] = await Promise.all([
+      prisma.merak.findMany({
+        where: { propertyId, aktivni: true, cislo: { not: null } },
+        include: { stavy: { select: { datum: true } } },
+      }),
+      prisma.lease.findMany({ where: { propertyId }, select: { id: true, startDate: true, endDate: true } }),
+    ]);
+    const odpovedi = await Promise.all(meraky.map((m) => nactiMerakSvj(m.cislo!.trim(), 500, cerstve)));
+    const nove: Prisma.StavMerakuCreateManyInput[] = [];
+    const dvoutarifni: string[] = [];
 
-    for (const m of meraky) {
-      const odp = await nactiMerakSvj(m.cislo!.trim(), 500);
-      if (!odp.ok) { vysledek[m.id] = { posledni: null, chyba: POPIS_CHYBY_SVJ[odp.chyba] + (odp.detail ? ` (${odp.detail})` : ""), prevzato: 0 }; continue; }
+    meraky.forEach((m, i) => {
+      const odp = odpovedi[i];
+      if (!odp.ok) { vysledek[m.id] = { posledni: null, chyba: POPIS_CHYBY_SVJ[odp.chyba] + (odp.detail ? ` (${odp.detail})` : ""), prevzato: 0 }; return; }
       const svj = vyberMerak(odp.meraky, byt);
       if (!svj) {
         vysledek[m.id] = { posledni: null, chyba: `stav nedostupný — měřák č. ${m.cislo} je v SVJ u bytů ${odp.meraky.map((x) => x.byt ?? "bez bytu").join(", ")}, ne u bytu ${byt}`, prevzato: 0 };
-        continue;
+        return;
       }
       const k = prevodJednotky(svj.jednotka, DRUH_MERAKU_MAP.get(m.druh)?.jednotka ?? "");
       const prepocti = (n: number | null) => (n == null ? null : Math.round(n * k * 1000) / 1000);
@@ -192,9 +205,7 @@ export async function synchronizujSvj(propertyId: string): Promise<Record<string
       vysledek[m.id] = { posledni: nejnovejsi && tn ? { datum: nejnovejsi.datum, t1: prepocti(tn.t1), t2: prepocti(tn.t2) } : null, chyba: null, prevzato: 0 };
 
       // Viceterifovy merak v SVJ: v aplikaci taky dvoutarif
-      if (!m.dvoutarif && svj.odecty.some((o) => (o.hodnoty?.length ?? 0) > 1)) {
-        await prisma.merak.update({ where: { id: m.id }, data: { dvoutarif: true } });
-      }
+      if (!m.dvoutarif && svj.odecty.some((o) => (o.hodnoty?.length ?? 0) > 1)) dvoutarifni.push(m.id);
 
       const dnyMeraku = new Set(m.stavy.map((x) => denISO(x.datum)));
       for (const o of svj.odecty) {
@@ -211,17 +222,29 @@ export async function synchronizujSvj(propertyId: string): Promise<Record<string
           ...(zacatek ? [{ udalost: "ZACATEK", leaseId: zacatek.id }] : []),
         ];
         for (const u of udalosti.length ? udalosti : [{ udalost: "ODECET", leaseId: null }]) {
-          await prisma.stavMeraku.create({
-            data: { merakId: m.id, leaseId: u.leaseId, udalost: u.udalost, datum, hodnota: prepocti(t.t1), hodnota2: prepocti(t.t2), vynulovanoPo: o.vynulovano_po === true, zdroj: "SVJ" },
-          });
+          nove.push({ merakId: m.id, leaseId: u.leaseId, udalost: u.udalost, datum, hodnota: prepocti(t.t1), hodnota2: prepocti(t.t2), vynulovanoPo: o.vynulovano_po === true, zdroj: "SVJ" });
         }
         dnyMeraku.add(o.datum);
         vysledek[m.id].prevzato++;
       }
-    }
+    });
+
+    await prisma.$transaction([
+      ...(dvoutarifni.length ? [prisma.merak.updateMany({ where: { id: { in: dvoutarifni } }, data: { dvoutarif: true } })] : []),
+      ...(nove.length ? [prisma.stavMeraku.createMany({ data: nove })] : []),
+      prisma.property.update({ where: { id: propertyId }, data: { svjSyncAt: new Date(), svjStav: vysledek as unknown as Prisma.InputJsonValue } }),
+    ]);
   } catch (e) {
     // SVJ nesmi shodit stranku — stav se jen neprevezme
     console.error("[SVJ] převzetí odečtů selhalo:", e instanceof Error ? e.message : e);
   }
   return vysledek;
+}
+
+/** Automaticke prevzeti, jen kdyz je nastaveny byt a od posledniho uplynul mesic. */
+export async function synchronizujSvjKdyzJeCas(propertyId: string): Promise<void> {
+  const p = await prisma.property.findUnique({ where: { id: propertyId }, select: { svjByt: true, svjSyncAt: true } }).catch(() => null);
+  if (!p?.svjByt || !svjNastaveno()) return;
+  if (p.svjSyncAt && Date.now() - p.svjSyncAt.getTime() < SVJ_INTERVAL_DNU * 86400000) return;
+  await synchronizujSvj(propertyId);
 }

@@ -148,6 +148,10 @@ model Property {
   meraky           Merak[]
   /// Cislo bytu v Evidenci SVJ: meraky se tam dohledaji podle vyrobniho cisla
   svjByt           String?
+  /// Posledni prevzeti stavu ze SVJ (automaticky jednou za mesic, jinak tlacitkem)
+  svjSyncAt        DateTime?
+  /// Vysledek posledniho prevzeti podle meraku (posledni stav, chyba, pocet prevzatych)
+  svjStav          Json?
 }
 
 /// Hypoteka / uver — "zda vazne dluh na nich"

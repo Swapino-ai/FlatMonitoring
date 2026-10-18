@@ -6,7 +6,8 @@ import { HlavickaNemovitosti } from "@/components/HlavickaNemovitosti";
 import { MerakyNemovitosti } from "@/components/MerakyNemovitosti";
 import { prisma } from "@/lib/db";
 import { udalostiNajmu } from "@/lib/meraky";
-import { svjNastaveno, synchronizujSvj } from "@/lib/svj";
+import { svjNastaveno, synchronizujSvjKdyzJeCas, type SvjStavMeraku } from "@/lib/svj";
+import { after } from "next/server";
 import { denISO } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +16,8 @@ export const dynamic = "force-dynamic";
 export default async function MerakyPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await page();
   const { id } = await params;
-  // Odecty z Evidence SVJ (u meraku s cislem v SVJ) se prevezmou pred nactenim stavu
-  const svj = await synchronizujSvj(id);
+  // Odecty z Evidence SVJ: jednou za mesic, az po odeslani stranky (nebrzdi ji); jinak tlacitkem
+  after(() => synchronizujSvjKdyzJeCas(id));
   const property = await prisma.property.findUnique({
     where: { id },
     include: {
@@ -38,7 +39,8 @@ export default async function MerakyPage({ params }: { params: Promise<{ id: str
           meraky={property.meraky.map((m) => ({ id: m.id, druh: m.druh, nazev: m.nazev, cislo: m.cislo, aktivni: m.aktivni, dvoutarif: m.dvoutarif, nulovani: m.nulovani,
             nahrazujeId: m.nahrazujeId, vymenenAt: m.vymenenAt ? denISO(m.vymenenAt) : null }))}
           svjByt={property.svjByt}
-          svj={svj}
+          svj={(property.svjStav ?? {}) as unknown as Record<string, SvjStavMeraku>}
+          svjSyncAt={property.svjSyncAt?.toISOString() ?? null}
           svjNastaveno={svjNastaveno()}
           udalosti={udalostiNajmu(property.leases)}
           stavy={property.meraky.flatMap((m) => m.stavy.map((s) => ({
