@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { getSession } from "./auth";
 import { prisma } from "./db";
 import { doKose } from "./googleDrive";
-import { vyuctujNajemci } from "./vyuctovaniNajemce";
+import { vyuctujNajemci, zacatekZaloh } from "./vyuctovaniNajemce";
+import { nactiNavrhPlatby } from "./pravidelnePlatbyData";
 import { nactiVstupyVyuctovani } from "./vyuctovaniData";
 import {
-  dalsiCislo, sestavSnapshot, variabilniSymbol, vychoziSplatnost,
+  dalsiCislo, platbyZaloh, sestavSnapshot, variabilniSymbol, vychoziSplatnost,
 } from "./vyuctovaniVydane";
 
 export interface VydaniState {
@@ -68,6 +69,7 @@ export async function vydejVyuctovani(_prev: VydaniState, formData: FormData): P
   const info = vstupy.najemceInfo(vstupy.smlouvy.find((s) => s.id === leaseId)!);
   const snapshot = sestavSnapshot({
     nemovitost: vstupy.nemovitost, najemce: info, pronajimatel: vstupy.pronajimatelPro(lease.landlordRef), v, aktualniZaloha: najem.utilitiesMonthly,
+    platby: platbyZaloh(await nactiNavrhPlatby(lease.propertyId), leaseId, zacatekZaloh(v), v.do),
     zamerne: vstupy.smlouvy.find((s) => s.id === leaseId)?.advanceIntentional,
   });
 

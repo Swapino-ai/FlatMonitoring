@@ -39,6 +39,27 @@ export interface SnapshotVyuctovani {
   preneseno?: { sluzba: string; od: string; do: string; duvod?: string | null }[];
   /** Do kdy je ktera sluzba vyuctovana — dalsi vyuctovani na to navaze (verze 2) */
   sluzbyDo?: Record<string, string>;
+  /** Zalohy nájemce po mesicich: predpis, kolik a kdy prislo */
+  platby?: PlatbaZalohy[];
+}
+
+export interface PlatbaZalohy {
+  /** rrrr-mm */
+  mesic: string;
+  predpis: number;
+  zaplaceno: number | null;
+  datum: string | null;
+}
+
+/** Zalohy smlouvy po mesicich v rozsahu vyuctovani (z pravidelnych plateb). */
+export function platbyZaloh(
+  navrh: { klic: string; mesic: string; castka: number; zaplaceno?: { datum: string; castka: number } | null }[],
+  leaseId: string, od: string, doDne: string,
+): PlatbaZalohy[] {
+  return navrh
+    .filter((p) => p.klic.startsWith(`zaloha:${leaseId}:`) && p.mesic >= od.slice(0, 7) && p.mesic <= doDne.slice(0, 7))
+    .sort((a, b) => a.mesic.localeCompare(b.mesic))
+    .map((p) => ({ mesic: p.mesic, predpis: Math.abs(p.castka), zaplaceno: p.zaplaceno?.castka ?? null, datum: p.zaplaceno?.datum ?? null }));
 }
 
 /** Cislo dokladu VN-2026-0001; poradi se pocita v ramci roku vydani. */
@@ -111,7 +132,7 @@ export function textZpravy(s: SnapshotVyuctovani, cislo: string, splatnost: stri
   const jmeno = s.najemce.name;
   const radky = [`Dobrý den, ${jmeno},`, "", `v příloze posílám vyúčtování služeb za období ${datum(s.od)} – ${datum(s.do)} (č. ${cislo}).`, ""];
 
-  radky.push(`Náklady na služby: ${kc(s.naklady)}`, `Zaplacené zálohy: ${kc(s.zalohy)}`);
+  radky.push(`Náklady na služby: ${kc(s.naklady)}`, `Zálohy za období: ${kc(s.zalohy)}`);
   if (Math.abs(s.rozdil) < 1) {
     radky.push("", "Zálohy odpovídají nákladům, nic se nedoplácí ani nevrací.");
   } else if (s.rozdil < 0) {
@@ -155,6 +176,8 @@ export function sestavSnapshot(a: {
   aktualniZaloha: number;
   /** Zalohy jsou zamerne jine nez naklady: navrh nove zalohy se nedava. */
   zamerne?: boolean;
+  /** Platby zaloh po mesicich */
+  platby?: PlatbaZalohy[];
 }): SnapshotVyuctovani {
   const { v } = a;
   const vyuctovane = v.sluzby.filter((r) => r.stav === "VYUCTOVANO");
@@ -169,6 +192,6 @@ export function sestavSnapshot(a: {
     od: v.od, do: v.do, radky, naklady: v.naklady, zalohy: v.zalohy, rozdil: v.rozdil,
     nepokryto: nepokrytoZRadku(radky), aktualniZaloha: a.aktualniZaloha,
     doporucenaZaloha: a.zamerne ? null : doporucenaZaloha(v.naklady, v.od, v.do, a.aktualniZaloha),
-    skupiny: v.skupiny, preneseno, sluzbyDo: v.sluzbyDo,
+    skupiny: v.skupiny, preneseno, sluzbyDo: v.sluzbyDo, platby: a.platby ?? [],
   };
 }

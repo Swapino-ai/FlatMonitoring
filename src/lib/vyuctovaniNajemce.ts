@@ -361,3 +361,7 @@ export function sluzbyProNajemce(
     };
   });
 }
+
+/** Od kdy se v tomto vyuctovani pocitaji zalohy (vcetne prenesenych dnu pred obdobim). */
+export const zacatekZaloh = (v: VysledekNajemce) =>
+  v.sluzby.filter((r) => r.stav === "VYUCTOVANO" && r.od).map((r) => r.od!).reduce((a, x) => (x < a ? x : a), v.od);

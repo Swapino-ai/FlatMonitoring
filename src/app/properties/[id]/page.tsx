@@ -698,7 +698,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                 <VyuctovaniNajemceKarta
                   nemovitost={{ nazev: property.name, adresa: `${property.street}, ${property.zip} ${property.city}` }}
                   najmy={najmyProNajemce} sluzby={sluzbyVyuctovani}
-                  vydana={vydana} canEdit diskPripojen={diskPripojen} />
+                  vydana={vydana} canEdit diskPripojen={diskPripojen}
+                  platby={navrhPlateb.filter((p) => p.druh === "ZALOHA").map((p) => ({ klic: p.klic, mesic: p.mesic, castka: p.castka, zaplaceno: p.zaplaceno ?? null }))} />
               </SbalitelnaKarta>
             )}
             </>),

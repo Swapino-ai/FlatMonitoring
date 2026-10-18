@@ -107,7 +107,6 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
                   <div key={z.id} className={`text-xs tabular-nums text-ink-secondary ${vnoreny ? "pl-0" : ""}`}>
                     {obdobi(z.od, z.do)}
                     {z.metoda === "dny" ? ` · ${z.dnu ?? ""} dní` : z.metoda === "cele" ? "" : z.spotreba != null ? ` · ${z.spotreba} ${z.jednotka ?? ""}` : ""} · {czk(z.podil)}
-                    {z.priblizne?.length ? <span className="block text-ink-muted">{z.priblizne.map((o) => `odečet ${dateCz(o.pouzite)} místo ${dateCz(o.chtene)}`).join(", ")}</span> : null}
                   </div>
                 ))}
               </div>
@@ -144,7 +143,7 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
         </tbody>
         <tfoot className="text-sm">
           <tr><td className="pt-3">Náklady na služby celkem</td><td className="pt-3 text-right font-medium tabular-nums">{czk(s.naklady)}</td></tr>
-          <tr><td className="py-1">Zaplacené zálohy</td><td className="py-1 text-right font-medium tabular-nums">{czk(s.zalohy)}</td></tr>
+          <tr><td className="py-1">Zálohy za období</td><td className="py-1 text-right font-medium tabular-nums">{czk(s.zalohy)}</td></tr>
           <tr className="border-t-2 border-line text-base font-bold">
             <td className="pt-2">
               {nedoplatek ? "Nedoplatek k úhradě" : preplatek ? "Přeplatek k vrácení" : "Zálohy odpovídají nákladům"}
@@ -156,12 +155,6 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
         </tfoot>
       </table>
 
-      {s.preneseno && s.preneseno.length > 0 && (
-        <p className="mt-3 text-xs text-ink-secondary">
-          Vyúčtuje se příště (náklady i zálohy):{" "}
-          {s.preneseno.map((p) => `${p.sluzba} ${obdobi(p.od, p.do)}`).join("; ")}.
-        </p>
-      )}
 
       {(nedoplatek || preplatek) && (
         <section className="mt-5 break-inside-avoid rounded-xl bg-accent-soft/60 px-4 py-3 text-sm">
@@ -205,24 +198,31 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
         </p>
       )}
 
-      {s.nepokryto.length > 0 && (
-        <div className="mt-4 break-inside-avoid rounded-xl bg-warn/15 px-4 py-3 text-sm" role="status">
-          <div className="flex items-start gap-2.5">
-            <Ikona nazev="pozor" trida="mt-0.5 h-4 w-4 shrink-0 text-warn" />
-            <div>
-              <div className="font-semibold">Vyúčtování je neúplné</div>
-              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-ink-secondary">
-                {s.nepokryto.map((n, i) => <li key={i}>{n.sluzba}: {n.popis}</li>)}
-              </ul>
-            </div>
-          </div>
-        </div>
+      {s.platby && s.platby.length > 0 && (
+        <section className="mt-5 break-inside-avoid">
+          <h3 className="mb-1.5 text-sm font-semibold">Platby záloh po měsících</h3>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-xs text-ink-muted">
+                <th className="py-1 font-medium">Měsíc</th>
+                <th className="py-1 text-right font-medium">Předpis</th>
+                <th className="py-1 text-right font-medium">Zaplaceno</th>
+                <th className="py-1 text-right font-medium">Přišlo dne</th>
+              </tr>
+            </thead>
+            <tbody>
+              {s.platby.map((p) => (
+                <tr key={p.mesic} className="border-b border-line/50 tabular-nums">
+                  <td className="py-1">{Number(p.mesic.slice(5, 7))}/{p.mesic.slice(0, 4)}</td>
+                  <td className="py-1 text-right">{czk(p.predpis)}</td>
+                  <td className="py-1 text-right">{p.zaplaceno != null ? czk(p.zaplaceno) : "—"}</td>
+                  <td className="py-1 text-right">{p.datum ? dateCz(p.datum) : "nezaplaceno"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
       )}
-
-      <p className="mt-5 text-[11px] text-ink-muted">
-        Zálohy jsou počítané podle nájemní smlouvy a jejích změn za dny, kdy nájem trval. Náklady jsou rozúčtované
-        podle skutečných vyúčtování dodavatelů za dny, kdy jste v bytě bydleli.
-      </p>
     </article>
   );
 }
