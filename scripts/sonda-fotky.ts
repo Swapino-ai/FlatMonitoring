@@ -5,7 +5,8 @@
 import { PrismaClient } from "@prisma/client";
 import { chromium } from "playwright";
 import { HLAVICKY_PROHLIZECE } from "../src/lib/market/util";
-import { nactiDetail, uklidStranku } from "./sreality-detail";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { nactiDetail, snimekStranky, uklidStranku } from "./sreality-detail";
 
 const prisma = new PrismaClient();
 
@@ -28,6 +29,11 @@ async function main() {
       return { prekryvy: prekryvy.slice(0, 5), premium: /Premium je tu/.test(document.body.innerText) };
     })()`) as { prekryvy: string[]; premium: boolean };
     const fotka = d.fotky[0] ? await p.request.get(d.fotky[0]).then(async (r) => `${r.status()} ${r.headers()["content-type"]} ${(await r.body()).length} B`).catch((e) => String(e)) : "—";
+    mkdirSync("sonda", { recursive: true });
+    const snimek = await snimekStranky(p);
+    writeFileSync(`sonda/${i.externalId}.jpg`, snimek);
+    const vyska = await p.evaluate("document.documentElement.scrollHeight");
+    console.log(`${i.externalId}: rozbaleno [${d.rozbaleno.join(" | ")}], výška stránky ${vyska} px, snímek ${Math.round(snimek.length / 1024)} kB, text ${d.text.length} znaků`);
     console.log(`${i.externalId}: stav ${d.stav}, fotek ${d.fotky.length}, formát ${d.fotky[0]?.split("?")[1] ?? "—"}, první fotka ${fotka}; text Premium viditelný: ${zbytek.premium}; velké fixní prvky: ${zbytek.prekryvy.join(", ") || "žádné"}`);
     await p.close();
   }

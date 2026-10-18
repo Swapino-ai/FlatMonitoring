@@ -21,10 +21,13 @@ import { aktualizujSkupinu, najdiShody } from "../src/lib/market/inzeraty";
 import { presunSnimkyNaDisk } from "../src/lib/market/snimky";
 import { jeNastaveno } from "../src/lib/googleDrive";
 import { doplnParametry } from "./ai-parametry";
-import { nactiDetail, uklidStranku } from "./sreality-detail";
+import { nactiDetail, snimekStranky, uklidStranku } from "./sreality-detail";
 import { HLAVICKY_PROHLIZECE, sleep } from "../src/lib/market/util";
 
 const prisma = new PrismaClient();
+
+/** Od teto chvile se fotí cela stranka s rozbalenym popisem; starsi snimky se porizuji znovu. */
+const CELA_STRANKA_OD = new Date("2026-10-18T14:00:00Z");
 
 /**
  * Existuje inzerat? true = ano, false = urcite ne (404/410 nebo presmerovani na Sreality jinam nez na
@@ -71,7 +74,9 @@ async function zarazeneInzeraty() {
   let fotekChyba = 0;
   for (const i of inzeraty) {
     const potrebaFotky = i._count.snimky === 0;
-    const potrebaSnimek = potrebaFotky || !i.snimky[0] || (i.snimky[0].price != null && Math.abs(i.snimky[0].price - i.price) >= 1);
+    // Snimky pred CELA_STRANKA_OD zachycovaly jen horni cast stranky — porizuji se znovu
+    const potrebaSnimek = potrebaFotky || !i.snimky[0] || i.snimky[0].createdAt < CELA_STRANKA_OD
+      || (i.snimky[0].price != null && Math.abs(i.snimky[0].price - i.price) >= 1);
     try {
       const existuje = await inzeratExistuje(i.url!, i.externalId);
       if (existuje === false) {
@@ -104,7 +109,7 @@ async function zarazeneInzeraty() {
               // Okna, ktera vyskocila az po nacteni, jeste jednou zavrit
               await stranka.waitForTimeout(1500);
               await uklidStranku(stranka);
-              const data = await stranka.screenshot({ type: "jpeg", quality: 65 });
+              const data = await snimekStranky(stranka);
               await prisma.inzeratSnimek.create({ data: { inzeratId: i.id, price: i.price, data: new Uint8Array(data) } });
               snimku++;
             }
