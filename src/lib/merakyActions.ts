@@ -40,14 +40,13 @@ export async function upravMerak(id: string, data: { nazev?: string | null; cisl
   return {};
 }
 
-/** Smaze merak i se stavy; kdyz uz ma zapsane stavy, jen ho vyradi (historie zustane). */
+/** Smaze merak i se vsemi stavy (archivuje se vymenou, ne mazanim). */
 export async function smazMerak(id: string): Promise<{ error?: string }> {
   const chyba = await smiMenit();
   if (chyba) return { error: chyba };
-  const m = await prisma.merak.findUnique({ where: { id }, include: { _count: { select: { stavy: true } } } });
+  const m = await prisma.merak.findUnique({ where: { id } });
   if (!m) return {};
-  if (m._count.stavy > 0) await prisma.merak.update({ where: { id }, data: { aktivni: false } });
-  else await prisma.merak.delete({ where: { id } });
+  await prisma.merak.delete({ where: { id } });
   obnov(m.propertyId);
   return {};
 }

@@ -118,6 +118,12 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
     return s ? { hodnota: s.hodnota!, hodnota2: s.hodnota2, datum: s.datum } : null;
   };
   const archiv = meraky.filter((m) => !m.aktivni);
+  const smaz = (m: MerakRadek) => {
+    const n = stavy.filter((x) => x.merakId === m.id).length;
+    const nazev = DRUH_MERAKU_MAP.get(m.druh)?.nazev ?? "";
+    if (!confirm(`Smazat měřák ${nazev}${m.cislo ? ` č. ${m.cislo}` : ""}${n ? ` i s ${n} ${n === 1 ? "zapsaným stavem" : "zapsanými stavy"}` : ""}? Nejde to vrátit.`)) return;
+    spust(async () => { const v = await smazMerak(m.id); setChyba(v.error ?? null); });
+  };
 
   const stav = (r: Radek, merakId: string) => stavy.find((s) => s.merakId === merakId && s.udalost === r.udalost
     && (r.leaseId ? s.leaseId === r.leaseId : s.leaseId == null && s.datum === r.datum));
@@ -300,9 +306,9 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                       {canEdit && (
                         <td className="whitespace-nowrap text-right">
                           <button type="button" className="mr-3 text-sm font-medium text-accent hover:underline" onClick={() => setVymenaId(vymenaId === m.id ? null : m.id)}>Vyměnit</button>
-                          <button type="button" className="align-middle text-ink-muted hover:text-bad" aria-label="Vyřadit měřák"
-                            title="Vyřadit měřák (se zapsanými stavy se jen archivuje)"
-                            onClick={() => { if (confirm(`Vyřadit měřák ${d?.nazev ?? ""}? Se zapsanými stavy zůstane v archivu.`)) spust(async () => { await smazMerak(m.id); }); }}>
+                          <button type="button" className="align-middle text-ink-muted hover:text-bad" aria-label="Smazat měřák"
+                            title="Smazat měřák i se zapsanými stavy (výměna ho místo toho archivuje)"
+                            onClick={() => smaz(m)}>
                             <Ikona nazev="kos" trida="h-4 w-4" />
                           </button>
                         </td>
@@ -321,6 +327,61 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+        {archiv.length > 0 && (
+          <div className="mt-5">
+            <h3 className="label mb-2">Archiv měřáků ({archiv.length})</h3>
+            <div className="table-scroll">
+              <table className="table-base">
+                <thead>
+                  <tr>
+                    <th>Měřák</th>
+                    <th>Výrobní číslo</th>
+                    <th>Archivován</th>
+                    <th className="num">Poslední stav</th>
+                    {canEdit && <th className="w-24"><span className="sr-only">Akce</span></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {archiv.map((m) => {
+                    const d = DRUH_MERAKU_MAP.get(m.druh);
+                    const nastupce = meraky.find((x) => x.nahrazujeId === m.id);
+                    const p = posledniStav(m.id);
+                    return (
+                      <tr key={m.id} className="text-ink-secondary">
+                        <td>
+                          <div className="flex items-center gap-3">
+                            {ikona(m.druh)}
+                            <div className="font-medium text-ink-primary">{d?.nazev ?? m.druh}{m.nazev ? ` · ${m.nazev}` : ""}</div>
+                          </div>
+                        </td>
+                        <td>{m.cislo ?? "—"}</td>
+                        <td>
+                          {m.vymenenAt ? `vyměněn ${m.vymenenAt.split("-").reverse().join("/")}` : "vyřazen"}
+                          {nastupce && <div className="text-xs text-ink-muted">nahrazen měřákem{nastupce.cislo ? ` č. ${nastupce.cislo}` : ""}</div>}
+                        </td>
+                        <td className="num tabular-nums">
+                          {p ? <>{fmt(p.hodnota)}{p.hodnota2 != null ? ` / ${fmt(p.hodnota2)}` : ""} {d?.jednotka}<div className="text-xs text-ink-muted">{p.datum.split("-").reverse().join("/")}</div></> : "—"}
+                        </td>
+                        {canEdit && (
+                          <td className="whitespace-nowrap text-right">
+                            {!nastupce && (
+                              <button type="button" className="mr-3 text-sm font-medium text-accent hover:underline"
+                                onClick={() => spust(async () => { const v = await upravMerak(m.id, { aktivni: true }); setChyba(v.error ?? null); })}>Obnovit</button>
+                            )}
+                            <button type="button" className="align-middle text-ink-muted hover:text-bad" aria-label="Smazat měřák"
+                              title="Smazat měřák i se zapsanými stavy" onClick={() => smaz(m)}>
+                              <Ikona nazev="kos" trida="h-4 w-4" />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4 text-sm">
@@ -343,28 +404,6 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
               : "Vyplň, pokud byt eviduje odečty v aplikaci SVJ domu.")}
           </span>
         </div>
-        {archiv.length > 0 && (
-          <details className="mt-3 text-sm">
-            <summary className="cursor-pointer text-ink-secondary">Archiv měřáků ({archiv.length})</summary>
-            <ul className="mt-2 space-y-1 text-ink-secondary">
-              {archiv.map((m) => {
-                const d = DRUH_MERAKU_MAP.get(m.druh);
-                const nastupce = meraky.find((x) => x.nahrazujeId === m.id);
-                const p = posledniStav(m.id);
-                return (
-                  <li key={m.id} className="flex flex-wrap items-center gap-2">
-                    <Ikona nazev={(d?.ikona ?? "tri") as NazevIkony} trida="h-4 w-4" />
-                    <span className="font-medium text-ink-primary">{d?.nazev}{m.nazev ? ` · ${m.nazev}` : ""}</span>
-                    {m.cislo && <span>č. {m.cislo}</span>}
-                    <Badge>{m.vymenenAt ? `vyměněn ${m.vymenenAt.split("-").reverse().join("/")}` : "vyřazen"}</Badge>
-                    {p && <span className="text-xs">poslední stav {fmt(p.hodnota)}{p.hodnota2 != null ? ` / ${fmt(p.hodnota2)}` : ""} {d?.jednotka}</span>}
-                    {nastupce?.cislo && <span className="text-xs">→ nový č. {nastupce.cislo}</span>}
-                  </li>
-                );
-              })}
-            </ul>
-          </details>
-        )}
         {canEdit && (
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
             <span className="label mr-1">Přidat měřák</span>
