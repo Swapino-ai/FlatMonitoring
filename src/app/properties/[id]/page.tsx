@@ -658,6 +658,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             </SbalitelnaKarta>
             </>),
           },
+          // Stavy meraku (predavaci protokol) maji vlastni stranku
+          { id: "meraky", nazev: "Měřáky", odkaz: `/properties/${property.id}/meraky` },
           {
             id: "sluzby",
             nazev: "Služby",

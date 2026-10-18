@@ -19,6 +19,8 @@ export async function exportujVse(): Promise<Zaloha> {
       propertyOwner: await prisma.propertyOwner.findMany(),
       loan: await prisma.loan.findMany(),
       loanOwner: await prisma.loanOwner.findMany(),
+      merak: await prisma.merak.findMany(),
+      stavMeraku: await prisma.stavMeraku.findMany(),
       lease: await prisma.lease.findMany(),
       leaseAdvanceChange: await prisma.leaseAdvanceChange.findMany(),
       transaction: await prisma.transaction.findMany(),
@@ -93,6 +95,8 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.transaction.deleteMany();
     await tx.lease.deleteMany();
     await tx.tenant.deleteMany();
+    await tx.stavMeraku.deleteMany();
+    await tx.merak.deleteMany();
     await tx.loanOwner.deleteMany();
     await tx.loan.deleteMany();
     await tx.property.deleteMany();
@@ -184,6 +188,17 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       isActive: x.isActive !== false, notes: s(x.notes),
     }));
     if (leases.length) obnoveno.lease = (await tx.lease.createMany({ data: leases })).count;
+
+    const meraky = (t.merak as any[] ?? []).map((x) => ({
+      id: String(x.id), propertyId: String(x.propertyId), druh: String(x.druh), nazev: s(x.nazev), cislo: s(x.cislo),
+      poradi: Math.round(c(x.poradi)), aktivni: x.aktivni !== false, createdAt: dPovinne(x.createdAt ?? new Date()),
+    }));
+    if (meraky.length) obnoveno.merak = (await tx.merak.createMany({ data: meraky })).count;
+    const stavyMeraku = (t.stavMeraku as any[] ?? []).map((x) => ({
+      id: String(x.id), merakId: String(x.merakId), leaseId: s(x.leaseId), udalost: String(x.udalost),
+      datum: dPovinne(x.datum), hodnota: c(x.hodnota), createdAt: dPovinne(x.createdAt ?? new Date()),
+    }));
+    if (stavyMeraku.length) obnoveno.stavMeraku = (await tx.stavMeraku.createMany({ data: stavyMeraku })).count;
 
     const zmenyZaloh = (t.leaseAdvanceChange as any[] ?? []).map((x) => ({
       id: String(x.id), leaseId: String(x.leaseId), validFrom: dPovinne(x.validFrom), amount: c(x.amount),

@@ -145,6 +145,7 @@ model Property {
   updatedAt        DateTime           @updatedAt
   cadastre         CadastreRecord?
   zarazeniInzeratu ZarazeniInzeratu[]
+  meraky           Merak[]
 }
 
 /// Hypoteka / uver — "zda vazne dluh na nich"
@@ -237,6 +238,7 @@ model Lease {
   advanceChanges LeaseAdvanceChange[]
   readings       SettlementReading[]
   statements     TenantStatement[]
+  stavyMeraku    StavMeraku[]
 }
 
 /// Penezni tok — prijmy i vydaje
@@ -842,4 +844,42 @@ model ShodaInzeratu {
 
   @@unique([inzeratId, drivejsiId])
   @@index([drivejsiId])
+}
+
+/// Meridlo v nemovitosti (elektromer, plynomer, vodomer, indikator na radiatoru)
+model Merak {
+  id         String       @id @default(cuid())
+  propertyId String
+  property   Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  /// ELEKTRINA | PLYN | VODA_STUDENA | VODA_TEPLA | RADIATOR — viz lib/meraky
+  druh       String
+  /// Upresneni, napr. "Kuchyň" u radiatoru nebo "Koupelna" u vodomeru
+  nazev      String?
+  /// Vyrobni cislo meridla
+  cislo      String?
+  poradi     Int          @default(0)
+  /// Vymeneny nebo zruseny merak: zustava kvuli historii, nove stavy se k nemu nezapisuji
+  aktivni    Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  stavy      StavMeraku[]
+
+  @@index([propertyId])
+}
+
+/// Stav meraku: pri predani bytu najemci (ZACATEK), pri vraceni (KONEC) nebo jiny odecet
+model StavMeraku {
+  id        String   @id @default(cuid())
+  merakId   String
+  merak     Merak    @relation(fields: [merakId], references: [id], onDelete: Cascade)
+  leaseId   String?
+  lease     Lease?   @relation(fields: [leaseId], references: [id], onDelete: SetNull)
+  /// ZACATEK | KONEC | ODECET
+  udalost   String
+  datum     DateTime
+  hodnota   Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([merakId, datum])
+  @@index([leaseId])
 }

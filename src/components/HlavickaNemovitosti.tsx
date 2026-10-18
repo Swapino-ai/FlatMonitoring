@@ -5,7 +5,7 @@ import { nazevNemovitosti } from "@/lib/catalogs";
 
 /** Zalozky detailu nemovitosti — stejne poradi jako na strance nemovitosti. */
 export const ZALOZKY_NEMOVITOSTI = [
-  ["prehled", "Přehled"], ["katastr", "Katastr"], ["najem", "Nájem"], ["sluzby", "Služby"], ["vyuctovani", "Vyúčtování"],
+  ["prehled", "Přehled"], ["katastr", "Katastr"], ["najem", "Nájem"], ["meraky", "Měřáky"], ["sluzby", "Služby"], ["vyuctovani", "Vyúčtování"],
   ["finance", "Finance"], ["pohyby", "Stav účtu"], ["trh", "Trh"], ["dane", "Daně"],
 ] as const;
 
@@ -42,7 +42,7 @@ export function HlavickaNemovitosti({ property, canEdit, aktivni }: {
       <div className="max-w-full overflow-x-auto pb-1">
         <div className="flex w-fit gap-1 rounded-2xl bg-surface-card p-1 shadow-card">
           {ZALOZKY_NEMOVITOSTI.map(([klic, nazev]) => (
-            <Link key={klic} href={klic === "trh" ? `/properties/${property.id}/trh` : `/properties/${property.id}?list=${klic}`}
+            <Link key={klic} href={klic === "trh" || klic === "meraky" ? `/properties/${property.id}/${klic}` : `/properties/${property.id}?list=${klic}`}
               aria-current={klic === aktivni ? "page" : undefined}
               className={`whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors ${
                 klic === aktivni ? "bg-accent text-white" : "text-ink-secondary hover:bg-surface-sunken hover:text-ink-primary"
