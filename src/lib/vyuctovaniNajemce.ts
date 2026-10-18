@@ -20,6 +20,7 @@ const cas = (iso: string) => Date.parse(`${iso}T00:00:00Z`);
 const naIso = (t: number) => new Date(t).toISOString().slice(0, 10);
 const min = (a: string, b: string) => (a < b ? a : b);
 const max = (a: string, b: string) => (a > b ? a : b);
+const cz = (iso: string) => { const [r, m, d] = iso.split("-"); return `${Number(d)}. ${Number(m)}. ${r}`; };
 
 export interface SluzbaProNajemce {
   id: string;
@@ -61,7 +62,7 @@ export interface ZdrojRadku {
   od: string;
   do: string;
   podil: number;
-  metoda: "dny" | "odecty" | "meraky";
+  metoda: "dny" | "odecty" | "meraky" | "cele";
   spotreba?: number;
   jednotka?: string | null;
   dnu?: number;
@@ -80,6 +81,8 @@ export interface RadekSluzby {
   do: string | null;
   /** Dny, ktere dodavatel jeste nevyuctoval — prenesou se do dalsiho vyuctovani */
   preneseno: [string, string] | null;
+  /** Proc se prenasi (presah vyuctovani dodavatele, chybejici stav meraku, zatim nevyuctovano) */
+  duvodPrenosu?: string | null;
   zdroje: ZdrojRadku[];
   castka: number;
   /** Zalohy pripadajici na vyuctovane dny teto sluzby */
@@ -167,48 +170,78 @@ export function vyuctujNajemci(
     const aktDo = min(konec, s.aktivniDo ?? konec);
     if (aktOd > aktDo) { radky.push({ ...zaklad, stav: "NEPLATILA" }); continue; }
 
-    // Souvisle vyuctovane dny od zacatku; dny, kdy sluzba neplatila, nevadi
-    const kryto = (d: string) => !aktivniVDen(s, d) || s.vyuctovani.some((v) => v.od <= d && d <= v.do);
+    // Vyuctovat jde jen cela vyuctovani dodavatele, ktera konci nejpozdeji koncem obdobi —
+    // kouskovat vyuctovani podle dnu nedava smysl, kdyz neni znama spotreba za zbytek
+    const cela = [...s.vyuctovani].filter((v) => v.do <= konec).sort((x, y) => x.od.localeCompare(y.od));
+    const kryto = (d: string) => !aktivniVDen(s, d) || cela.some((v) => v.od <= d && d <= v.do);
     let posledniKryty: string | null = null;
     for (let t = cas(start); t <= cas(konec); t += DEN) {
       const d = naIso(t);
       if (!kryto(d)) break;
       posledniKryty = d;
     }
-    const prenesOd = posledniKryty ? pridejDny(posledniKryty, 1) : start;
-    const preneseno: [string, string] | null = prenesOd <= aktDo ? [max(prenesOd, aktOd), aktDo] : null;
+    // Proc se zbytek nevyuctuje: vyuctovani presahuje obdobi, nebo zatim neexistuje
+    const duvodPrenosu = (od: string): string => {
+      const presah = s.vyuctovani.find((v) => v.od <= od && od <= v.do && v.do > konec);
+      return presah
+        ? `vyúčtování dodavatele ${cz(presah.od)} – ${cz(presah.do)} přesahuje konec období — vyúčtuje se až s dalším vyúčtováním`
+        : "dodavatel zatím nevyúčtoval — vyúčtuje se, až vyúčtování dodá";
+    };
+    let prenesOd = posledniKryty ? pridejDny(posledniKryty, 1) : start;
     if (!posledniKryty || posledniKryty < aktOd) {
-      radky.push({ ...zaklad, stav: "BEZ_VYUCTOVANI", preneseno });
+      radky.push({ ...zaklad, stav: "BEZ_VYUCTOVANI", preneseno: [aktOd, aktDo], duvodPrenosu: duvodPrenosu(aktOd) });
       continue;
     }
     const vyOd = aktOd;
-    const vyDo = min(posledniKryty, aktDo);
-    if (!vybrana) { radky.push({ ...zaklad, stav: "NEVYBRANA", od: vyOd, do: vyDo, preneseno }); continue; }
+    let vyDo = min(posledniKryty, aktDo);
+    let duvod: string | null = prenesOd <= aktDo ? duvodPrenosu(prenesOd) : null;
+    if (!vybrana) {
+      radky.push({ ...zaklad, stav: "NEVYBRANA", od: vyOd, do: vyDo, preneseno: prenesOd <= aktDo ? [max(prenesOd, aktOd), aktDo] : null, duvodPrenosu: duvod });
+      continue;
+    }
 
-    // Podil najemce z jednotlivych vyuctovani dodavatele
+    // Podil najemce z jednotlivych vyuctovani dodavatele (po poradi)
     const retezce = retezceMeraku(s.meraky);
+    // Spotreba ze stavu meraku presne k hranicim (tolerance 3 dny), jinak null
     const spotrebaMeraku = (z: string, k: string) => {
       let celkem = 0, nalezeno = false;
       for (const r of retezce) for (const t of (r[0].dvoutarif ? [1, 2] : [1]) as (1 | 2)[]) {
-        const x = spotrebaVObdobi(r, z, k, t);
-        if (x) { celkem += x.spotreba; nalezeno = true; }
+        const x = spotrebaVObdobi(r, pridejDny(z, -3), pridejDny(k, 3), t);
+        if (!x) continue;
+        if (Math.abs(cas(x.od) - cas(z)) > 3 * DEN || Math.abs(cas(x.do) - cas(k)) > 3 * DEN) return null;
+        celkem += x.spotreba; nalezeno = true;
       }
       return nalezeno ? celkem : null;
     };
     const zdroje: ZdrojRadku[] = [];
-    for (const v of s.vyuctovani) {
+    for (const v of cela) {
       const I = prunik(v.od, v.do, vyOd, vyDo);
       if (!I) continue;
       const Inajem = prunik(I[0], I[1], najem.od, najem.do ?? I[1]);
       if (!Inajem) continue;
-      // 1) Meraky: spotreba najemce / celkova spotreba za obdobi dodavatele
-      const celk = retezce.length ? spotrebaMeraku(v.od, v.do) : null;
-      const moje = celk ? spotrebaMeraku(Inajem[0], Inajem[1]) : null;
-      if (celk && celk > 0 && moje != null) {
+      const jinyNajemce = najmy.some((n) => n.id !== najem.id && prunik(n.od, n.do ?? v.do, v.od, v.do));
+      // 1) Najemce bydlel cele obdobi dodavatele sam: cele vyuctovani je jeho
+      if (!jinyNajemce && Inajem[0] === v.od && Inajem[1] === v.do) {
+        zdroje.push({ id: v.id, od: v.od, do: v.do, podil: v.naklad, metoda: "cele" });
+        continue;
+      }
+      // 2) Sluzba s meraky: spotreba najemce / celkova spotreba za obdobi dodavatele
+      if (retezce.length) {
+        const moje = spotrebaMeraku(Inajem[0], Inajem[1]);
+        const odectyCelkem = v.rezim === "READINGS" ? Object.values(v.odecty).reduce((a, x) => a + x, 0) + (v.spotrebaVlastnik ?? 0) : 0;
+        const celk = spotrebaMeraku(v.od, v.do) ?? (odectyCelkem > 0 ? odectyCelkem : null);
+        if (moje == null || !celk) {
+          // Bez stavu meraku k hranicim se spotreba neda urcit: vyuctuje se, az budou
+          const chybi = moje == null ? [Inajem[0], Inajem[1]] : [v.od, v.do];
+          duvod = `chybí stav měřáku k ${cz(chybi[0])} nebo ${cz(chybi[1])} — doplň ho na záložce Měřáky, pak půjde vyúčtovat`;
+          vyDo = pridejDny(v.od, -1);
+          prenesOd = v.od;
+          break;
+        }
         zdroje.push({ id: v.id, od: Inajem[0], do: Inajem[1], podil: v.naklad * (moje / celk), metoda: "meraky", spotreba: Math.round(moje * 1000) / 1000, jednotka: s.jednotka });
         continue;
       }
-      // 2) Odecty zadane u vyuctovani dodavatele, 3) podle dnu
+      // 3) Odecty zadane u vyuctovani dodavatele, 4) pevne poplatky podle dnu
       const r = rozuctuj(v, najmy, Inajem);
       const p = r.podily.find((x) => x.leaseId === najem.id);
       if (!p) continue;
@@ -217,8 +250,13 @@ export function vyuctujNajemci(
         spotreba: v.rezim === "READINGS" ? p.spotreba : undefined, jednotka: v.jednotka, dnu: p.dnu, chybiOdecet: p.chybiOdecet,
       });
     }
+    const preneseno: [string, string] | null = prenesOd <= aktDo ? [max(prenesOd, aktOd), aktDo] : null;
+    if (vyDo < vyOd || zdroje.length === 0) {
+      radky.push({ ...zaklad, stav: "BEZ_VYUCTOVANI", preneseno: preneseno ?? [aktOd, aktDo], duvodPrenosu: duvod });
+      continue;
+    }
     sluzbyDo[s.id] = vyDo;
-    radky.push({ ...zaklad, od: vyOd, do: vyDo, preneseno, zdroje, castka: zdroje.reduce((a, z) => a + z.podil, 0) });
+    radky.push({ ...zaklad, od: vyOd, do: vyDo, preneseno, duvodPrenosu: preneseno ? duvod : null, zdroje, castka: zdroje.reduce((a, z) => a + z.podil, 0) });
   }
 
   // Zalohy: kazdy den najmu v obdobi (i prenesene dny pred nim) se rozdeli mezi prectene sluzby

@@ -106,7 +106,7 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
                 {x.zdroje.map((z) => (
                   <div key={z.id} className={`text-xs tabular-nums text-ink-secondary ${vnoreny ? "pl-0" : ""}`}>
                     {obdobi(z.od, z.do)}
-                    {z.metoda === "dny" ? ` · ${z.dnu ?? ""} dní` : z.spotreba != null ? ` · ${z.spotreba} ${z.jednotka ?? ""}` : ""} · {czk(z.podil)}
+                    {z.metoda === "dny" ? ` · ${z.dnu ?? ""} dní` : z.metoda === "cele" ? "" : z.spotreba != null ? ` · ${z.spotreba} ${z.jednotka ?? ""}` : ""} · {czk(z.podil)}
                   </div>
                 ))}
               </div>
@@ -157,7 +157,7 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
 
       {s.preneseno && s.preneseno.length > 0 && (
         <p className="mt-3 text-xs text-ink-secondary">
-          Zatím nevyúčtováno dodavatelem, vyúčtuje se příště (náklady i zálohy):{" "}
+          Vyúčtuje se příště (náklady i zálohy):{" "}
           {s.preneseno.map((p) => `${p.sluzba} ${obdobi(p.od, p.do)}`).join("; ")}.
         </p>
       )}

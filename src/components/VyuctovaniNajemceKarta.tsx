@@ -409,7 +409,7 @@ function Detail({ x, canEdit, diskPripojen, znovu }: { x: VydanoRadek; canEdit: 
   );
 }
 
-const POPIS_METODY = { dny: "podle dnů", odecty: "podle odečtů", meraky: "podle měřáků" } as const;
+const POPIS_METODY = { dny: "podle dnů", odecty: "podle odečtů", meraky: "podle měřáků", cele: "celé vyúčtování dodavatele" } as const;
 const ddmm = (iso: string) => iso.split("-").reverse().join("/");
 
 /** Krok 2: ktere sluzby vyuctovat — po skupinach, s tim, co se s kazdou stane. */
@@ -427,7 +427,7 @@ function KrokSluzby({ radky, prepni, canEdit }: { radky: RadekSluzby[]; prepni: 
         return <>vyúčtuje se {ddmm(r.od!)} – {ddmm(r.do!)}{metody ? ` · ${metody}` : ""} · <strong className="tabular-nums">{czk(r.castka)}</strong></>;
       }
       case "NEVYBRANA": return <>nevyúčtuje se — zálohy za ni zůstanou na příště</>;
-      case "BEZ_VYUCTOVANI": return <span className="text-warn">dodavatel zatím nevyúčtoval — přenese se do dalšího vyúčtování</span>;
+      case "BEZ_VYUCTOVANI": return <span className="text-warn">nevyúčtuje se: {r.duvodPrenosu ?? "dodavatel zatím nevyúčtoval"}</span>;
       case "NEPLATILA": return <>v tomto období neplatila</>;
       case "JIZ_VYUCTOVANO": return <>za toto období už vyúčtováno</>;
     }
@@ -457,7 +457,7 @@ function KrokSluzby({ radky, prepni, canEdit }: { radky: RadekSluzby[]; prepni: 
                     <span className="font-medium">{r.nazev}</span> <span className="text-xs text-ink-muted">· {r.dodavatel}</span>
                     <span className="block text-xs text-ink-secondary">{popis(r)}</span>
                     {r.vybrana && r.stav === "VYUCTOVANO" && r.preneseno && (
-                      <span className="block text-xs text-warn">{ddmm(r.preneseno[0])} – {ddmm(r.preneseno[1])} dodavatel zatím nevyúčtoval — přenese se do dalšího vyúčtování (náklady i zálohy)</span>
+                      <span className="block text-xs text-warn">{ddmm(r.preneseno[0])} – {ddmm(r.preneseno[1])} se přenese do dalšího vyúčtování (náklady i zálohy): {r.duvodPrenosu ?? "dodavatel zatím nevyúčtoval"}</span>
                     )}
                   </span>
                 </label>

@@ -36,9 +36,13 @@ over("zálohy bez přenesené elektřiny", Math.abs(r.zalohy - (zalohyCele - pre
 
 // Dalsi vyuctovani za 2026: elektrina navaze od 1. 10. 2025
 const sluzby2 = sluzby.map((s) => s.id === "elektrina" ? { ...s, vyuctovani: [...s.vyuctovani, v("e2", "2025-10-01", "2026-09-30", 36500)] } : s);
-const r2 = vyuctujNajemci(najem, [najem], sluzby2, "2026-01-01", "2026-06-30", null, [{ od: r.od, do: r.do, sluzbyDo: r.sluzbyDo }]);
+const drive = [{ od: r.od, do: r.do, sluzbyDo: r.sluzbyDo }];
+const r2 = vyuctujNajemci(najem, [najem], sluzby2, "2026-01-01", "2026-06-30", null, drive);
 const e2 = r2.sluzby.find((x) => x.sluzbaId === "elektrina")!;
-over("další vyúčtování: elektřina od 1. 10. 2025 (přenesené dny)", e2.od === "2025-10-01" && e2.do === "2026-06-30", `${e2.od} – ${e2.do}`);
+over("faktura přesahující konec období se nekrájí — přenese se s důvodem", e2.stav === "BEZ_VYUCTOVANI" && /přesahuje/.test(e2.duvodPrenosu ?? ""), e2.duvodPrenosu ?? "");
+const r2b = vyuctujNajemci(najem, [najem], sluzby2, "2026-01-01", "2026-09-30", null, drive);
+const e2b = r2b.sluzby.find((x) => x.sluzbaId === "elektrina")!;
+over("další vyúčtování: elektřina od 1. 10. 2025 celou fakturou", e2b.od === "2025-10-01" && e2b.do === "2026-09-30" && Math.round(e2b.castka) === 36500, `${e2b.od} – ${e2b.do}, ${Math.round(e2b.castka)}`);
 over("další vyúčtování: voda za 2026 bez vyúčtování dodavatele → přenese se", r2.sluzby.find((x) => x.sluzbaId === "voda")!.stav === "BEZ_VYUCTOVANI");
 over("další vyúčtování: internet od 1. 1. 2026 bez faktury → přenese se", r2.sluzby.find((x) => x.sluzbaId === "internet")!.stav === "BEZ_VYUCTOVANI");
 
@@ -46,6 +50,19 @@ over("další vyúčtování: internet od 1. 1. 2026 bez faktury → přenese se
 const r3 = vyuctujNajemci(najem, [najem], sluzby, "2025-07-01", "2025-12-31", ["voda"]);
 over("vybraná jen voda: náklad jen voda", kc(r3.naklady) === 18400);
 over("vybraná jen voda: zálohy jen její třetina", Math.abs(r3.zalohy - 6000) < 2, String(kc(r3.zalohy)));
+
+// Meraky: najemce od 1. 7., faktura za cely rok 2025 (1 000 kWh, 6 000 Kc)
+const merak = (stavy: [string, number][]) => ({ id: "m", druh: "ELEKTRINA", nazev: null, aktivni: true, dvoutarif: false, nahrazujeId: null,
+  stavy: stavy.map(([datum, hodnota]) => ({ datum, hodnota, hodnota2: null })) });
+const el = (stavy: [string, number][]) => [sluzba("el", { vyuctovani: [v("f", "2025-01-01", "2025-12-31", 6000)], meraky: [merak(stavy)], jednotka: "kWh" })];
+const rm = vyuctujNajemci(najem, [najem], el([["2025-01-01", 0], ["2025-07-01", 400], ["2025-12-31", 1000]]), "2025-07-01", "2025-12-31", null);
+const m1 = rm.sluzby[0];
+over("měřáky: 600 z 1 000 kWh → 3 600 Kč", m1.zdroje[0]?.metoda === "meraky" && Math.round(m1.castka) === 3600, `${m1.zdroje[0]?.metoda} ${Math.round(m1.castka)}`);
+const rm2 = vyuctujNajemci(najem, [najem], el([["2025-01-01", 0], ["2025-12-31", 1000]]), "2025-07-01", "2025-12-31", null);
+over("chybí stav k předání → nevyúčtuje se, napíše k jakému dni", rm2.sluzby[0].stav === "BEZ_VYUCTOVANI" && /1\. 7\. 2025/.test(rm2.sluzby[0].duvodPrenosu ?? ""), rm2.sluzby[0].duvodPrenosu ?? "");
+const celyRok = { ...najem, od: "2025-01-01" };
+const rm3 = vyuctujNajemci(celyRok, [celyRok], el([]), "2025-01-01", "2025-12-31", null);
+over("nájemce celou dobu sám → celá faktura bez měřáků", rm3.sluzby[0].zdroje[0]?.metoda === "cele" && Math.round(rm3.sluzby[0].castka) === 6000);
 
 console.log(chyby ? `${chyby} chyb` : "vše v pořádku");
 process.exit(chyby ? 1 : 0);

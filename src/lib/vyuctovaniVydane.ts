@@ -36,7 +36,7 @@ export interface SnapshotVyuctovani {
   /** Vyuctovane sluzby po skupinach (verze 2) */
   skupiny?: SkupinaVyuctovani[];
   /** Co dodavatel jeste nevyuctoval — prenese se do dalsiho vyuctovani (verze 2) */
-  preneseno?: { sluzba: string; od: string; do: string }[];
+  preneseno?: { sluzba: string; od: string; do: string; duvod?: string | null }[];
   /** Do kdy je ktera sluzba vyuctovana — dalsi vyuctovani na to navaze (verze 2) */
   sluzbyDo?: Record<string, string>;
 }
@@ -163,7 +163,7 @@ export function sestavSnapshot(a: {
     sluzbaId: r.sluzbaId, nazev: r.nazev, dodavatel: r.dodavatel, castka: r.castka, chybi: [],
     zdroje: r.zdroje.map((z) => ({ id: z.id, od: z.od, do: z.do, podil: z.podil, spotreba: z.spotreba, jednotka: z.jednotka, chybiOdecet: z.chybiOdecet })),
   }));
-  const preneseno = v.sluzby.filter((r) => r.vybrana && r.preneseno).map((r) => ({ sluzba: r.nazev, od: r.preneseno![0], do: r.preneseno![1] }));
+  const preneseno = v.sluzby.filter((r) => r.vybrana && r.preneseno).map((r) => ({ sluzba: r.nazev, od: r.preneseno![0], do: r.preneseno![1], duvod: r.duvodPrenosu ?? null }));
   return {
     verze: 2, nemovitost: a.nemovitost, najemce: a.najemce, pronajimatel: a.pronajimatel,
     od: v.od, do: v.do, radky, naklady: v.naklady, zalohy: v.zalohy, rozdil: v.rozdil,
