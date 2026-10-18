@@ -30,7 +30,7 @@ export interface SvjMerak {
 }
 
 export type SvjChyba = "nenastaveno" | "klic" | "cloudflare" | "nenalezen" | "vypnuto" | "nedostupne";
-export type SvjVysledek = { ok: true; meraky: SvjMerak[] } | { ok: false; chyba: SvjChyba };
+export type SvjVysledek = { ok: true; meraky: SvjMerak[] } | { ok: false; chyba: SvjChyba; detail?: string };
 
 export const POPIS_CHYBY_SVJ: Record<SvjChyba, string> = {
   nenastaveno: "napojení na SVJ není nastavené (SVJ_API_URL, SVJ_API_KLIC)",
@@ -68,12 +68,19 @@ export async function nactiMerakSvj(cislo: string, limit = 1): Promise<SvjVysled
     if (r.status === 401) return { ok: false, chyba: "klic" };
     if (r.status === 404) return { ok: false, chyba: "nenalezen" };
     if (r.status === 503) return { ok: false, chyba: "vypnuto" };
-    if (!r.ok) return { ok: false, chyba: "nedostupne" };
+    if (!r.ok) return nedostupne(cislo, `server SVJ odpověděl HTTP ${r.status}`);
     const data = (await r.json()) as { meraky?: SvjMerak[] };
-    return Array.isArray(data.meraky) ? { ok: true, meraky: data.meraky } : { ok: false, chyba: "nedostupne" };
-  } catch {
-    return { ok: false, chyba: "nedostupne" };
+    return Array.isArray(data.meraky) ? { ok: true, meraky: data.meraky } : nedostupne(cislo, "odpověď SVJ nemá seznam měřáků");
+  } catch (e) {
+    const zprava = e instanceof Error ? `${e.name === "TimeoutError" ? "SVJ neodpovědělo do 8 s" : e.message}${e.cause instanceof Error ? ` (${e.cause.message})` : ""}` : String(e);
+    return nedostupne(cislo, /invalid url|failed to parse url/i.test(zprava) ? `neplatná adresa SVJ_API_URL — musí začínat https://` : zprava);
   }
+}
+
+/** Nedostupne s duvodem: ukaze se v aplikaci a zapise do logu Vercelu (bez klicu). */
+function nedostupne(cislo: string, detail: string): SvjVysledek {
+  console.error(`[SVJ] měřák ${cislo}: ${detail}`);
+  return { ok: false, chyba: "nedostupne", detail };
 }
 
 /** Vyber spravneho meraku, kdyz ma stejne cislo vic mericich mist (jiny byt, kategorie). */
@@ -133,7 +140,7 @@ export async function synchronizujSvj(propertyId: string): Promise<Record<string
 
     for (const m of meraky) {
       const odp = await nactiMerakSvj(m.cislo!.trim(), 500);
-      if (!odp.ok) { vysledek[m.id] = { posledni: null, chyba: POPIS_CHYBY_SVJ[odp.chyba], prevzato: 0 }; continue; }
+      if (!odp.ok) { vysledek[m.id] = { posledni: null, chyba: POPIS_CHYBY_SVJ[odp.chyba] + (odp.detail ? ` (${odp.detail})` : ""), prevzato: 0 }; continue; }
       const svj = vyberMerak(odp.meraky, byt);
       if (!svj) {
         vysledek[m.id] = { posledni: null, chyba: `stav nedostupný — v SVJ není měřák č. ${m.cislo} u bytu ${byt}`, prevzato: 0 };
@@ -173,8 +180,9 @@ export async function synchronizujSvj(propertyId: string): Promise<Record<string
         vysledek[m.id].prevzato++;
       }
     }
-  } catch {
-    /* SVJ nesmi shodit stranku — stav se jen neprevezme */
+  } catch (e) {
+    // SVJ nesmi shodit stranku — stav se jen neprevezme
+    console.error("[SVJ] převzetí odečtů selhalo:", e instanceof Error ? e.message : e);
   }
   return vysledek;
 }
