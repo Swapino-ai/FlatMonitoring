@@ -20,6 +20,8 @@ import { nasobitel, podilNaUveru, podilUzivatele } from "@/lib/ownership";
 import { aktualniPohled } from "@/lib/ownership.server";
 import { prisma } from "@/lib/db";
 import { synchronizujSvjKdyzJeCas } from "@/lib/svj";
+import { sluzbyProNajemce } from "@/lib/vyuctovaniNajemce";
+import { DRUH_MERAKU_MAP, druhyMerakuProSluzbu } from "@/lib/meraky";
 import { after } from "next/server";
 import { odhadNemovitosti } from "@/lib/market/inzeraty";
 import { OwnerManager } from "@/components/OwnerManager";
@@ -195,7 +197,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     return {
       id: n.id, nazev: t?.name ?? n.tenantName, od: iso(new Date(n.startDate)), do: n.endDate ? iso(new Date(n.endDate)) : null,
       utilitiesMonthly: n.utilitiesMonthly,
-      historieZaloh: (historieZaloh[n.id] ?? []).map((z) => ({ validFrom: z.validFrom, amount: z.amount })),
+      historieZaloh: (historieZaloh[n.id] ?? []).map((z) => ({ validFrom: z.validFrom, amount: z.amount, items: z.items as PolozkaZalohy[] | null })),
+      advanceItems: n.advanceItems as PolozkaZalohy[] | null,
       tenantId: n.tenantId, cislo: t ? cisloNajemce(t.cislo) : null,
       email: t?.email ?? n.tenantEmail, phone: t?.phone ?? n.tenantPhone,
       adresa: [t?.street ?? n.tenantStreet, [t?.zip ?? n.tenantZip, t?.city ?? n.tenantCity].filter(Boolean).join(" ")].filter(Boolean).join(", "),
@@ -214,10 +217,11 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     historieZaloh: (historieZaloh[n.id] ?? []).map((z) => ({ validFrom: z.validFrom, amount: z.amount })),
     tenantStreet: n.tenantStreet, tenantCity: n.tenantCity, tenantZip: n.tenantZip, tenantAccount: user.role === "OWNER" ? n.tenantAccount : null,
   }));
-  const sluzbyVyuctovani: SluzbaVyuctovani[] = property.services.map((sl) => ({
-    id: sl.id, nazev: nazevDruhu(typy, sl.type), dodavatel: sl.provider, prectena: sl.chargedToTenant,
-    vyuctovani: vyuctovani.filter((v) => v.serviceId === sl.id),
-  }));
+  // Pruvodce vyuctovanim pro najemce: sluzby se skupinami, platnosti a meraky
+  const sluzbyVyuctovani = sluzbyProNajemce(
+    property.services, vyuctovani, typy, merakyVyuctovani,
+    druhyMerakuProSluzbu, (d) => DRUH_MERAKU_MAP.get(d)?.jednotka ?? null, (t) => nazevDruhu(typy, t),
+  );
 
   const sluzbyVstup: SluzbaVstup[] = property.services.map((sl) => ({
     ...sl,

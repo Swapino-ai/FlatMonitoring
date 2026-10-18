@@ -5,9 +5,10 @@ import {
   nastavSplatnost, oznacOdeslano, oznacVyporadano, smazVyuctovani, stornoVyuctovani, vydejVyuctovani, zrusVyporadani,
   type VydaniState,
 } from "@/lib/vyuctovaniNajemceActions";
-import { pridejDny, vyuctovaniNajemce, type NajemVstup, type SluzbaVyuctovani } from "@/lib/vyuctovani";
+import { pridejDny, type NajemVstup } from "@/lib/vyuctovani";
+import { vyuctujNajemci, type NajemProVyuctovani, type RadekSluzby, type SluzbaProNajemce } from "@/lib/vyuctovaniNajemce";
 import {
-  kolize, lhutaDoruceni, NAZVY_STAVU, NAZVY_ZPUSOBU, odkazMailto, sestavSnapshot, stavLhuty, textZpravy,
+  lhutaDoruceni, NAZVY_STAVU, NAZVY_ZPUSOBU, odkazMailto, sestavSnapshot, stavLhuty, textZpravy,
   vychoziSplatnost, type SnapshotVyuctovani, type StavVyuctovani,
 } from "@/lib/vyuctovaniVydane";
 import { czk, dateCz } from "@/lib/format";
@@ -18,7 +19,7 @@ import { Ikona } from "./Ikony";
 import { Badge } from "./Stat";
 import { VyuctovaniDokument, vytisknout } from "./VyuctovaniDokument";
 
-export interface NajemceNajem extends NajemVstup {
+export interface NajemceNajem extends NajemProVyuctovani {
   tenantId: string | null;
   cislo: string | null;
   email: string | null;
@@ -62,7 +63,7 @@ const TON: Record<StavVyuctovani, "neutral" | "good" | "warn" | "bad"> = {
 export function VyuctovaniNajemceKarta({ nemovitost, najmy, sluzby, vydana, canEdit, diskPripojen }: {
   nemovitost: { nazev: string; adresa: string };
   najmy: NajemceNajem[];
-  sluzby: SluzbaVyuctovani[];
+  sluzby: SluzbaProNajemce[];
   vydana: VydanoRadek[];
   canEdit: boolean;
   diskPripojen: boolean;
@@ -78,6 +79,8 @@ export function VyuctovaniNajemceKarta({ nemovitost, najmy, sluzby, vydana, canE
   const [klic, setKlic] = useState(0);
   const [splatnost, setSplatnost] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  // Vybrane sluzby (null = predvyber: hrazene najemcem)
+  const [vybrane, setVybrane] = useState<string[] | null>(null);
 
   const [stav, akce, vydavam] = useActionState<VydaniState, FormData>(vydejVyuctovani, {});
   useEffect(() => { if (stav.success) setKlic((k) => k + 1); }, [stav.success]);
@@ -85,11 +88,21 @@ export function VyuctovaniNajemceKarta({ nemovitost, najmy, sluzby, vydana, canE
   function nastav(o: string, d: string) { setOd(o); setDoDne(d); setKlic((k) => k + 1); }
   function vyber(id: string) {
     setNajemId(id);
+    setVybrane(null);
     const n = razene.find((x) => x.id === id);
     if (n) nastav(n.od, vychoziKonec(n));
   }
 
-  const v = najem && od && doDne && od <= doDne ? vyuctovaniNajemce(najem, najmy, sluzby, od, doDne) : null;
+  // Kazda sluzba navazuje na sve posledni vydane vyuctovani teto smlouvy
+  const drivejsi = najem ? vydana.filter((x) => x.leaseId === najem.id && x.status !== "STORNO")
+    .map((x) => ({ od: x.od, do: x.do, sluzbyDo: x.snapshot.sluzbyDo ?? null })) : [];
+  const v = najem && od && doDne && od <= doDne ? vyuctujNajemci(najem, najmy, sluzby, od, doDne, vybrane, drivejsi) : null;
+  const vybraneIds = v ? v.sluzby.filter((r) => r.vybrana).map((r) => r.sluzbaId) : [];
+  const prepniSluzby = (ids: string[], zapnout: boolean) => setVybrane(() => {
+    const zaklad = new Set(vybraneIds);
+    for (const id of ids) { if (zapnout) zaklad.add(id); else zaklad.delete(id); }
+    return [...zaklad];
+  });
   const platne = v && !v.chyba && najem ? v : null;
   const snapshot = platne && najem
     ? sestavSnapshot({
@@ -102,9 +115,6 @@ export function VyuctovaniNajemceKarta({ nemovitost, najmy, sluzby, vydana, canE
   const splatnostVychozi = pridejDny(dnes, 30);
   const hodnotaSplatnosti = splatnost ?? splatnostVychozi;
   const ostra = snapshot ? snapshot.rozdil : 0;
-  const kolizeSVydanym = platne && najem
-    ? kolize(vydana.filter((x) => x.leaseId === najem.id).map((x) => ({ cislo: x.cislo, od: x.od, do: x.do, status: x.status })), platne.od, platne.do)
-    : null;
   const neuplne = snapshot ? snapshot.nepokryto.length > 0 : false;
   const rok = new Date().getFullYear();
 
@@ -118,6 +128,7 @@ export function VyuctovaniNajemceKarta({ nemovitost, najmy, sluzby, vydana, canE
     <div className="space-y-6">
       {/* 1) Priprava */}
       <section>
+        <h4 className="mb-2 text-sm font-semibold print:hidden">1 · Nájemce a období</h4>
         <div className="grid gap-3 sm:grid-cols-3 print:hidden">
           <Vyber label="Nájemce" name="najemce" defaultValue={najemId} onChange={vyber} sirka="sm:col-span-3"
             options={razene.map((n) => [n.id, `${n.nazev} (${dateCz(n.od)} – ${n.do ? dateCz(n.do) : "dosud"})`])} />
@@ -132,8 +143,11 @@ export function VyuctovaniNajemceKarta({ nemovitost, najmy, sluzby, vydana, canE
 
         {v?.chyba && <p className="mt-4 rounded-lg bg-warn/15 px-3 py-2 text-sm">{v.chyba}</p>}
 
+        {v && !v.chyba && <KrokSluzby radky={v.sluzby} prepni={prepniSluzby} canEdit={canEdit} />}
+
         {snapshot && platne && (
           <div className="mt-5 space-y-3">
+            <h4 className="text-sm font-semibold print:hidden">3 · Náhled vyúčtování</h4>
             {neuplne && (
               <div className="rounded-xl bg-warn/15 px-4 py-3 text-sm print:hidden" role="status">
                 <div className="flex items-start gap-2.5">
@@ -163,6 +177,7 @@ export function VyuctovaniNajemceKarta({ nemovitost, najmy, sluzby, vydana, canE
                 <input type="hidden" name="leaseId" value={najem!.id} />
                 <input type="hidden" name="od" value={platne.od} />
                 <input type="hidden" name="do" value={platne.do} />
+                <input type="hidden" name="sluzby" value={vybraneIds.join(",")} />
                 <h4 className="text-sm font-semibold">Vydat vyúčtování nájemci</h4>
                 <p className="text-xs text-ink-secondary">
                   Vydáním se čísla zmrazí a dokladu se přidělí číslo a variabilní symbol. Pozdější úprava vyúčtování
@@ -179,14 +194,8 @@ export function VyuctovaniNajemceKarta({ nemovitost, najmy, sluzby, vydana, canE
                     <span>Rozumím, že chybí údaje, a přesto chci vydat <strong>neúplné</strong> vyúčtování.</span>
                   </label>
                 )}
-                {kolizeSVydanym && (
-                  <p className="text-sm text-bad">
-                    Období se překrývá s vyúčtováním {kolizeSVydanym.cislo} ({obdobi(kolizeSVydanym.od, kolizeSVydanym.do)}).
-                    Nejdřív ho stornuj.
-                  </p>
-                )}
                 <Hlaska state={stav} />
-                <button type="submit" disabled={vydavam || !!kolizeSVydanym || platne.radky.length === 0} className="btn btn-primary">
+                <button type="submit" disabled={vydavam || !platne.sluzby.some((r) => r.stav === "VYUCTOVANO")} className="btn btn-primary">
                   {vydavam ? "Vydávám…" : "Vydat vyúčtování"}
                 </button>
               </form>
@@ -396,6 +405,67 @@ function Detail({ x, canEdit, diskPripojen, znovu }: { x: VydanoRadek; canEdit: 
           </button>
         </form>
       )}
+    </div>
+  );
+}
+
+const POPIS_METODY = { dny: "podle dnů", odecty: "podle odečtů", meraky: "podle měřáků" } as const;
+const ddmm = (iso: string) => iso.split("-").reverse().join("/");
+
+/** Krok 2: ktere sluzby vyuctovat — po skupinach, s tim, co se s kazdou stane. */
+function KrokSluzby({ radky, prepni, canEdit }: { radky: RadekSluzby[]; prepni: (ids: string[], zapnout: boolean) => void; canEdit: boolean }) {
+  const skupiny: { nazev: string | null; radky: RadekSluzby[] }[] = [];
+  for (const r of radky) {
+    const g = r.skupina ? skupiny.find((x) => x.nazev === r.skupina) : null;
+    if (g) g.radky.push(r); else skupiny.push({ nazev: r.skupina, radky: [r] });
+  }
+  const lzeVybrat = (r: RadekSluzby) => r.stav !== "NEPLATILA" && r.stav !== "JIZ_VYUCTOVANO";
+  const popis = (r: RadekSluzby) => {
+    switch (r.stav) {
+      case "VYUCTOVANO": {
+        const metody = [...new Set(r.zdroje.map((z) => POPIS_METODY[z.metoda]))].join(", ");
+        return <>vyúčtuje se {ddmm(r.od!)} – {ddmm(r.do!)}{metody ? ` · ${metody}` : ""} · <strong className="tabular-nums">{czk(r.castka)}</strong></>;
+      }
+      case "NEVYBRANA": return <>nevyúčtuje se — zálohy za ni zůstanou na příště</>;
+      case "BEZ_VYUCTOVANI": return <span className="text-warn">dodavatel zatím nevyúčtoval — přenese se do dalšího vyúčtování</span>;
+      case "NEPLATILA": return <>v tomto období neplatila</>;
+      case "JIZ_VYUCTOVANO": return <>za toto období už vyúčtováno</>;
+    }
+  };
+  return (
+    <div className="mt-5 print:hidden">
+      <h4 className="mb-2 text-sm font-semibold">2 · Služby</h4>
+      <div className="divide-y divide-line/70 rounded-xl border border-line">
+        {skupiny.map((g, i) => {
+          const volitelne = g.radky.filter(lzeVybrat);
+          const vse = volitelne.length > 0 && volitelne.every((r) => r.vybrana);
+          return (
+            <div key={g.nazev ?? `s${i}`} className="px-3.5 py-2.5">
+              {g.nazev && (
+                <label className="mb-1 flex items-center gap-2 text-sm font-semibold">
+                  <input type="checkbox" checked={vse} disabled={!canEdit || volitelne.length === 0}
+                    onChange={(e) => prepni(volitelne.map((r) => r.sluzbaId), e.target.checked)} />
+                  {g.nazev}
+                  <span className="font-normal text-ink-muted">· {czk(g.radky.filter((r) => r.stav === "VYUCTOVANO").reduce((a, r) => a + r.castka, 0))}</span>
+                </label>
+              )}
+              {g.radky.map((r) => (
+                <label key={r.sluzbaId} className={`flex items-start gap-2 py-1 text-sm ${g.nazev ? "pl-6" : ""} ${lzeVybrat(r) ? "" : "opacity-60"}`}>
+                  <input type="checkbox" className="mt-1" checked={r.vybrana && lzeVybrat(r)} disabled={!canEdit || !lzeVybrat(r)}
+                    onChange={(e) => prepni([r.sluzbaId], e.target.checked)} />
+                  <span className="min-w-0">
+                    <span className="font-medium">{r.nazev}</span> <span className="text-xs text-ink-muted">· {r.dodavatel}</span>
+                    <span className="block text-xs text-ink-secondary">{popis(r)}</span>
+                    {r.vybrana && r.stav === "VYUCTOVANO" && r.preneseno && (
+                      <span className="block text-xs text-warn">{ddmm(r.preneseno[0])} – {ddmm(r.preneseno[1])} dodavatel zatím nevyúčtoval — přenese se do dalšího vyúčtování (náklady i zálohy)</span>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

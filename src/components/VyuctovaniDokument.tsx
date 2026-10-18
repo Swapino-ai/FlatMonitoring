@@ -96,7 +96,35 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
           </tr>
         </thead>
         <tbody>
-          {s.radky.map((x) => (
+          {s.skupiny ? s.skupiny.map((g, i) => {
+            const radek = (x: (typeof g.radky)[number], vnoreny: boolean) => (
+              <div key={x.sluzbaId} className={vnoreny ? "mt-1.5 pl-3" : ""}>
+                <div className={vnoreny ? "flex justify-between gap-3 text-sm" : "font-medium"}>
+                  <span>{x.nazev} <span className="text-xs font-normal text-ink-muted">· {x.dodavatel}</span></span>
+                  {vnoreny && <span className="tabular-nums">{czk(x.castka)}</span>}
+                </div>
+                {x.zdroje.map((z) => (
+                  <div key={z.id} className={`text-xs tabular-nums text-ink-secondary ${vnoreny ? "pl-0" : ""}`}>
+                    {obdobi(z.od, z.do)}
+                    {z.metoda === "dny" ? ` · ${z.dnu ?? ""} dní` : z.spotreba != null ? ` · ${z.spotreba} ${z.jednotka ?? ""}` : ""} · {czk(z.podil)}
+                  </div>
+                ))}
+              </div>
+            );
+            return (
+              <tr key={g.nazev ?? `s${i}`} className="break-inside-avoid border-b border-line/60 align-top">
+                <td className="py-2">
+                  {g.nazev ? (
+                    <>
+                      <div className="font-medium">{g.nazev}</div>
+                      {g.radky.map((x) => radek(x, true))}
+                    </>
+                  ) : g.radky.map((x) => radek(x, false))}
+                </td>
+                <td className="py-2 text-right font-medium tabular-nums">{czk(g.castka)}</td>
+              </tr>
+            );
+          }) : s.radky.map((x) => (
             <tr key={x.sluzbaId} className="break-inside-avoid border-b border-line/60 align-top">
               <td className="py-2">
                 <div className="font-medium">{x.nazev}</div>
@@ -126,6 +154,13 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
           </tr>
         </tfoot>
       </table>
+
+      {s.preneseno && s.preneseno.length > 0 && (
+        <p className="mt-3 text-xs text-ink-secondary">
+          Zatím nevyúčtováno dodavatelem, vyúčtuje se příště (náklady i zálohy):{" "}
+          {s.preneseno.map((p) => `${p.sluzba} ${obdobi(p.od, p.do)}`).join("; ")}.
+        </p>
+      )}
 
       {(nedoplatek || preplatek) && (
         <section className="mt-5 break-inside-avoid rounded-xl bg-accent-soft/60 px-4 py-3 text-sm">

@@ -4,10 +4,10 @@ import { revalidatePath } from "next/cache";
 import { getSession } from "./auth";
 import { prisma } from "./db";
 import { doKose } from "./googleDrive";
-import { vyuctovaniNajemce } from "./vyuctovani";
+import { vyuctujNajemci } from "./vyuctovaniNajemce";
 import { nactiVstupyVyuctovani } from "./vyuctovaniData";
 import {
-  dalsiCislo, kolize, nepokrytoZRadku, sestavSnapshot, variabilniSymbol, vychoziSplatnost,
+  dalsiCislo, sestavSnapshot, variabilniSymbol, vychoziSplatnost,
 } from "./vyuctovaniVydane";
 
 export interface VydaniState {
@@ -51,22 +51,16 @@ export async function vydejVyuctovani(_prev: VydaniState, formData: FormData): P
   const najem = vstupy.najmy.find((n) => n.id === leaseId);
   if (!najem) return { error: "Smlouva neexistuje." };
 
-  const v = vyuctovaniNajemce(najem, vstupy.najmy, vstupy.sluzby, od, doDne);
+  // Vybrane sluzby z pruvodce; vypocet se dela znovu ze serverovych dat
+  const vybrane = String(formData.get("sluzby") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  // Kazda sluzba navazuje na sve posledni vyuctovani, takze se nic nevyuctuje dvakrat
+  const v = vyuctujNajemci(najem, vstupy.najmy, vstupy.sluzbyNajemce, od, doDne, vybrane, vstupy.drivejsiPro(leaseId));
   if (v.chyba) return { error: v.chyba };
-  if (v.radky.length === 0) return { error: "Žádná služba není přeúčtovaná nájemci, není co vyúčtovat." };
+  if (!v.sluzby.some((r) => r.stav === "VYUCTOVANO")) return { error: "Za toto období není co vyúčtovat (služby nejsou vybrané, už jsou vyúčtované, nebo k nim chybí vyúčtování dodavatele)." };
 
-  const chybi = nepokrytoZRadku(v.radky);
-  if (chybi.length > 0 && formData.get("potvrditNeuplne") !== "on") {
-    return { error: `Vyúčtování je neúplné (${chybi.length} chybějících údajů). Doplň vyúčtování dodavatelů, nebo potvrď vydání i tak.` };
+  if (v.chybiOdecet && formData.get("potvrditNeuplne") !== "on") {
+    return { error: "U některé služby chybí odečet nájemce. Doplň ho, nebo potvrď vydání i tak." };
   }
-
-  // Dve vyuctovani za stejne obdobi by najemci uctovala dvakrat
-  const stavajici = await prisma.tenantStatement.findMany({ where: { leaseId }, select: { cislo: true, periodFrom: true, periodTo: true, status: true } });
-  const k = kolize(
-    stavajici.map((s) => ({ cislo: s.cislo, od: s.periodFrom.toISOString().slice(0, 10), do: s.periodTo.toISOString().slice(0, 10), status: s.status })),
-    v.od, v.do,
-  );
-  if (k) return { error: `Období se překrývá s vydaným vyúčtováním ${k.cislo} (${k.od} – ${k.do}). Nejdřív ho stornuj.` };
 
   const info = vstupy.najemceInfo(vstupy.smlouvy.find((s) => s.id === leaseId)!);
   const snapshot = sestavSnapshot({
@@ -94,7 +88,7 @@ export async function vydejVyuctovani(_prev: VydaniState, formData: FormData): P
       obnov(lease.propertyId);
       return {
         success: `Vyúčtování ${z.cislo} vydáno.`,
-        warning: chybi.length ? `Vydáno jako neúplné (${chybi.length} chybějících údajů).` : undefined,
+        warning: v.chybiOdecet ? "Vydáno bez některých odečtů nájemce." : snapshot.preneseno?.length ? `Část služeb se přenese do dalšího vyúčtování (${snapshot.preneseno.map((p) => p.sluzba).join(", ")}).` : undefined,
       };
     } catch (e) {
       if (pokus === 3 || !(e instanceof Error) || !/Unique/i.test(e.message)) throw e;

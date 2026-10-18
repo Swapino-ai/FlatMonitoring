@@ -1,4 +1,5 @@
-import { dnuVObdobi, pridejDny, prunik, type RadekNajemce, type VyuctovaniNajemce } from "./vyuctovani";
+import { dnuVObdobi, pridejDny, prunik, type RadekNajemce } from "./vyuctovani";
+import type { SkupinaVyuctovani, VysledekNajemce } from "./vyuctovaniNajemce";
 
 /**
  * Vyuctovani vydane najemci: zmrazeny obsah (snapshot), cisla, lhuty a text zpravy.
@@ -16,7 +17,8 @@ export const NAZVY_ZPUSOBU: Record<ZpusobOdeslani, string> = {
 };
 
 export interface SnapshotVyuctovani {
-  verze: 1;
+  /** 1 = starsi doklady (bez skupin a prenosu), 2 = pruvodce */
+  verze: 1 | 2;
   nemovitost: { nazev: string; adresa: string };
   najemce: { cislo: string | null; name: string; adresa: string; email: string | null; phone: string | null; ucet: string | null };
   pronajimatel: { name: string; adresa: string; ucet: string | null; ico?: string | null; dic?: string | null } | null;
@@ -31,6 +33,12 @@ export interface SnapshotVyuctovani {
   nepokryto: { sluzba: string; popis: string }[];
   aktualniZaloha: number;
   doporucenaZaloha: number | null;
+  /** Vyuctovane sluzby po skupinach (verze 2) */
+  skupiny?: SkupinaVyuctovani[];
+  /** Co dodavatel jeste nevyuctoval — prenese se do dalsiho vyuctovani (verze 2) */
+  preneseno?: { sluzba: string; od: string; do: string }[];
+  /** Do kdy je ktera sluzba vyuctovana — dalsi vyuctovani na to navaze (verze 2) */
+  sluzbyDo?: Record<string, string>;
 }
 
 /** Cislo dokladu VN-2026-0001; poradi se pocita v ramci roku vydani. */
@@ -138,21 +146,29 @@ export function nepokrytoZRadku(radky: RadekNajemce[]): { sluzba: string; popis:
   return out;
 }
 
-/** Slozi zmrazeny obsah vyuctovani z vysledku vypoctu a udaju o stranach. */
+/** Slozi zmrazeny obsah vyuctovani z vysledku pruvodce a udaju o stranach. */
 export function sestavSnapshot(a: {
   nemovitost: SnapshotVyuctovani["nemovitost"];
   najemce: SnapshotVyuctovani["najemce"];
   pronajimatel: SnapshotVyuctovani["pronajimatel"];
-  v: VyuctovaniNajemce;
+  v: VysledekNajemce;
   aktualniZaloha: number;
   /** Zalohy jsou zamerne jine nez naklady: navrh nove zalohy se nedava. */
   zamerne?: boolean;
 }): SnapshotVyuctovani {
   const { v } = a;
+  const vyuctovane = v.sluzby.filter((r) => r.stav === "VYUCTOVANO");
+  // Ploche radky kvuli starsim zobrazenim a kontrolam
+  const radky: RadekNajemce[] = vyuctovane.map((r) => ({
+    sluzbaId: r.sluzbaId, nazev: r.nazev, dodavatel: r.dodavatel, castka: r.castka, chybi: [],
+    zdroje: r.zdroje.map((z) => ({ id: z.id, od: z.od, do: z.do, podil: z.podil, spotreba: z.spotreba, jednotka: z.jednotka, chybiOdecet: z.chybiOdecet })),
+  }));
+  const preneseno = v.sluzby.filter((r) => r.vybrana && r.preneseno).map((r) => ({ sluzba: r.nazev, od: r.preneseno![0], do: r.preneseno![1] }));
   return {
-    verze: 1, nemovitost: a.nemovitost, najemce: a.najemce, pronajimatel: a.pronajimatel,
-    od: v.od, do: v.do, radky: v.radky, naklady: v.naklady, zalohy: v.zalohy, rozdil: v.rozdil,
-    nepokryto: nepokrytoZRadku(v.radky), aktualniZaloha: a.aktualniZaloha,
+    verze: 2, nemovitost: a.nemovitost, najemce: a.najemce, pronajimatel: a.pronajimatel,
+    od: v.od, do: v.do, radky, naklady: v.naklady, zalohy: v.zalohy, rozdil: v.rozdil,
+    nepokryto: nepokrytoZRadku(radky), aktualniZaloha: a.aktualniZaloha,
     doporucenaZaloha: a.zamerne ? null : doporucenaZaloha(v.naklady, v.od, v.do, a.aktualniZaloha),
+    skupiny: v.skupiny, preneseno, sluzbyDo: v.sluzbyDo,
   };
 }
