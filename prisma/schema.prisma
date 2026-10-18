@@ -848,22 +848,28 @@ model ShodaInzeratu {
 
 /// Meridlo v nemovitosti (elektromer, plynomer, vodomer, indikator na radiatoru)
 model Merak {
-  id         String       @id @default(cuid())
-  propertyId String
-  property   Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  id          String       @id @default(cuid())
+  propertyId  String
+  property    Property     @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   /// ELEKTRINA | PLYN | VODA_STUDENA | VODA_TEPLA | RADIATOR — viz lib/meraky
-  druh       String
+  druh        String
   /// Upresneni, napr. "Kuchyň" u radiatoru nebo "Koupelna" u vodomeru
-  nazev      String?
+  nazev       String?
   /// Vyrobni cislo meridla
-  cislo      String?
-  poradi     Int          @default(0)
+  cislo       String?
+  poradi      Int          @default(0)
   /// Elektromer s dvoutarifem: stav ma T1 (vysoky tarif) a T2 (nizky tarif)
-  dvoutarif  Boolean  @default(false)
+  dvoutarif   Boolean      @default(false)
+  /// Vymena: novy merak odkazuje na ten, ktery nahradil (spotreba se pocita pres oba)
+  nahrazujeId String?
+  nahrazuje   Merak?       @relation("VymenaMeraku", fields: [nahrazujeId], references: [id], onDelete: SetNull)
+  nahrazen    Merak[]      @relation("VymenaMeraku")
+  /// Den vymeny (u stareho meraku)
+  vymenenAt   DateTime?
   /// Vymeneny nebo zruseny merak: zustava kvuli historii, nove stavy se k nemu nezapisuji
-  aktivni    Boolean      @default(true)
-  createdAt  DateTime     @default(now())
-  stavy      StavMeraku[]
+  aktivni     Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  stavy       StavMeraku[]
 
   @@index([propertyId])
 }
@@ -875,7 +881,7 @@ model StavMeraku {
   merak     Merak    @relation(fields: [merakId], references: [id], onDelete: Cascade)
   leaseId   String?
   lease     Lease?   @relation(fields: [leaseId], references: [id], onDelete: SetNull)
-  /// ZACATEK | KONEC | ODECET
+  /// ZACATEK | KONEC | ODECET | VYMENA (konecny stav stareho / pocatecni noveho meraku)
   udalost   String
   datum     DateTime
   /// Stav (u dvoutarifu T1 — vysoky tarif)

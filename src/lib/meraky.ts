@@ -74,3 +74,73 @@ export function udalostiNajmu(smlouvy: SmlouvaProMeraky[], dnes = new Date()): U
   });
   return out.sort((a, b) => (b.datum ?? "9999").localeCompare(a.datum ?? "9999") || (a.udalost === "ZACATEK" ? -1 : 1));
 }
+
+export interface MerakSeStavy {
+  id: string;
+  druh: string;
+  nazev: string | null;
+  aktivni: boolean;
+  dvoutarif: boolean;
+  nahrazujeId: string | null;
+  stavy: { datum: string; hodnota: number | null; hodnota2: number | null }[];
+}
+
+/**
+ * Meraky seskupene podle mista: aktualni merak a pred nim ty, ktere nahradil
+ * (od nejnovejsiho). Vyrazeny merak bez nastupce je samostatne misto.
+ */
+export function retezceMeraku<T extends { id: string; aktivni: boolean; nahrazujeId: string | null }>(meraky: T[]): T[][] {
+  const podleId = new Map(meraky.map((m) => [m.id, m]));
+  const nahrazene = new Set(meraky.map((m) => m.nahrazujeId).filter(Boolean));
+  // Konec retezce = merak, ktery nikdo nenahradil
+  return meraky.filter((m) => !nahrazene.has(m.id)).map((posledni) => {
+    const retezec = [posledni];
+    let m = posledni;
+    while (m.nahrazujeId && podleId.has(m.nahrazujeId) && !retezec.includes(podleId.get(m.nahrazujeId)!)) {
+      m = podleId.get(m.nahrazujeId)!;
+      retezec.push(m);
+    }
+    return retezec;
+  });
+}
+
+export interface SpotrebaVObdobi {
+  spotreba: number;
+  /** Prvni a posledni pouzity odecet — kdyz se lisi od hranic obdobi, je to jen cast */
+  od: string;
+  do: string;
+}
+
+/**
+ * Spotreba mista (retezce meraku) mezi dvema dny vcetne vymen: u kazdeho meraku
+ * posledni minus prvni stav v obdobi. Null, kdyz v obdobi nejsou aspon dva stavy.
+ */
+export function spotrebaVObdobi(retezec: MerakSeStavy[], od: string, doDne: string, tarif: 1 | 2 = 1): SpotrebaVObdobi | null {
+  let spotreba = 0;
+  let prvni: string | null = null;
+  let posledni: string | null = null;
+  let pouzito = false;
+  for (const m of retezec) {
+    const stavy = m.stavy
+      .map((s) => ({ datum: s.datum, h: tarif === 2 ? s.hodnota2 : s.hodnota }))
+      .filter((s): s is { datum: string; h: number } => s.h != null && s.datum >= od && s.datum <= doDne)
+      .sort((a, b) => a.datum.localeCompare(b.datum));
+    if (stavy.length < 2) continue;
+    spotreba += stavy[stavy.length - 1].h - stavy[0].h;
+    pouzito = true;
+    if (!prvni || stavy[0].datum < prvni) prvni = stavy[0].datum;
+    if (!posledni || stavy[stavy.length - 1].datum > posledni) posledni = stavy[stavy.length - 1].datum;
+  }
+  return pouzito ? { spotreba: Math.round(spotreba * 1000) / 1000, od: prvni!, do: posledni! } : null;
+}
+
+/** Ktere meraky patri ke sluzbe (podle ikony druhu sluzby — plati i pro vlastni druhy). */
+export function druhyMerakuProSluzbu(ikonaSluzby: string | undefined): string[] {
+  switch (ikonaSluzby) {
+    case "blesk": return ["ELEKTRINA"];
+    case "plamen": return ["PLYN"];
+    case "kapka": case "kohoutek": return ["VODA_STUDENA", "VODA_TEPLA"];
+    case "radiator": case "teplomer": return ["RADIATOR"];
+    default: return [];
+  }
+}

@@ -56,7 +56,7 @@ export async function smazMerak(id: string): Promise<{ error?: string }> {
  * doplni se tam taky, at se nemusi psat dvakrat.
  */
 export async function ulozStav(propertyId: string, v: {
-  merakId: string; leaseId: string | null; udalost: "ZACATEK" | "KONEC" | "ODECET";
+  merakId: string; leaseId: string | null; udalost: "ZACATEK" | "KONEC" | "ODECET" | "VYMENA";
   datum: string; hodnota: number | null; stavId?: string; tarif?: 1 | 2;
 }): Promise<{ error?: string; id?: string }> {
   const chyba = await smiMenit();
@@ -91,7 +91,7 @@ export async function ulozStav(propertyId: string, v: {
     : await prisma.stavMeraku.create({ data: { merakId: v.merakId, leaseId: v.leaseId, udalost: v.udalost, datum, [pole]: hodnota } });
 
   // Vraceni a predani dalsimu najemci tyz den: stejny stav
-  if (v.udalost !== "ODECET") {
+  if (v.udalost === "ZACATEK" || v.udalost === "KONEC") {
     const druha = v.udalost === "KONEC" ? "ZACATEK" : "KONEC";
     const smlouvy = await prisma.lease.findMany({
       where: { propertyId, id: { not: v.leaseId ?? undefined }, ...(druha === "ZACATEK" ? { startDate: datum } : { endDate: datum }) },
@@ -117,5 +117,44 @@ export async function zmenDatumUdalosti(propertyId: string, v: { leaseId: string
     data: { datum: new Date(`${v.datum}T00:00:00Z`) },
   });
   obnov(propertyId);
+  return {};
+}
+
+/**
+ * Vymena meraku: stary se archivuje (zustane se stavy v historii), novy ho nahradi.
+ * K datu vymeny se zapise konecny stav stareho a pocatecni stav noveho — spotreba
+ * se pak pocita pres oba (najem i vyuctovani).
+ */
+export async function vymenMerak(propertyId: string, v: {
+  merakId: string; datum: string;
+  konecny: number | null; konecny2?: number | null;
+  pocatecni: number | null; pocatecni2?: number | null;
+  cislo?: string | null;
+}): Promise<{ error?: string }> {
+  const chyba = await smiMenit();
+  if (chyba) return { error: chyba };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v.datum)) return { error: "Vyplň datum výměny." };
+  const cisty = (n: number | null | undefined) => (n != null && Number.isFinite(n) ? n : null);
+  v = { ...v, konecny: cisty(v.konecny), konecny2: cisty(v.konecny2), pocatecni: cisty(v.pocatecni), pocatecni2: cisty(v.pocatecni2) };
+  const stary = await prisma.merak.findFirst({ where: { id: v.merakId, propertyId, aktivni: true } });
+  if (!stary) return { error: "Měřák nenalezen." };
+  if (v.konecny == null) return { error: "Vyplň konečný stav starého měřáku." };
+  if (stary.dvoutarif && v.konecny2 == null) return { error: "Vyplň konečný stav T2 starého měřáku." };
+  const datum = new Date(`${v.datum}T00:00:00Z`);
+  await prisma.$transaction(async (tx) => {
+    await tx.merak.update({ where: { id: stary.id }, data: { aktivni: false, vymenenAt: datum } });
+    const novy = await tx.merak.create({
+      data: {
+        propertyId, druh: stary.druh, nazev: stary.nazev, dvoutarif: stary.dvoutarif, poradi: stary.poradi,
+        cislo: v.cislo?.trim() || null, nahrazujeId: stary.id,
+      },
+    });
+    await tx.stavMeraku.create({ data: { merakId: stary.id, udalost: "VYMENA", datum, hodnota: v.konecny, hodnota2: stary.dvoutarif ? v.konecny2 ?? null : null } });
+    await tx.stavMeraku.create({
+      data: { merakId: novy.id, udalost: "VYMENA", datum, hodnota: v.pocatecni ?? 0, hodnota2: stary.dvoutarif ? v.pocatecni2 ?? 0 : null },
+    });
+  });
+  obnov(propertyId);
+  revalidatePath(`/properties/${propertyId}`);
   return {};
 }

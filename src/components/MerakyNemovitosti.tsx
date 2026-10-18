@@ -1,14 +1,20 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { DRUHY_MERAKU, DRUH_MERAKU_MAP, type UdalostNajmu } from "@/lib/meraky";
-import { pridejMerak, smazMerak, ulozStav, upravMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
+import { Fragment, useState, useTransition } from "react";
+import { DRUHY_MERAKU, DRUH_MERAKU_MAP, retezceMeraku, spotrebaVObdobi, type MerakSeStavy, type UdalostNajmu } from "@/lib/meraky";
+import { pridejMerak, smazMerak, ulozStav, upravMerak, vymenMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
 import { denISO } from "@/lib/format";
 import { DatumPole } from "./DatumPole";
 import { Ikona, type NazevIkony } from "./Ikony";
 import { Badge, Card } from "./Stat";
 
-export interface MerakRadek { id: string; druh: string; nazev: string | null; cislo: string | null; aktivni: boolean; dvoutarif: boolean }
+export interface MerakRadek {
+  id: string; druh: string; nazev: string | null; cislo: string | null; aktivni: boolean; dvoutarif: boolean;
+  /** Merak, ktery tento nahradil (vymena) */
+  nahrazujeId: string | null;
+  /** Den vymeny (u vymeneneho meraku) */
+  vymenenAt: string | null;
+}
 export interface StavRadek { id: string; merakId: string; leaseId: string | null; udalost: string; datum: string; hodnota: number | null; hodnota2: number | null }
 
 /** Ctene hodnoty meraku: dvoutarif T1 a T2, jinak jedna. */
@@ -18,7 +24,7 @@ const tarify = (m: MerakRadek): (1 | 2)[] => (m.dvoutarif ? [1, 2] : [1]);
 interface Radek {
   klic: string;
   leaseId: string | null;
-  udalost: "ZACATEK" | "KONEC" | "ODECET";
+  udalost: "ZACATEK" | "KONEC" | "ODECET" | "VYMENA";
   datum: string | null;
   popis: string;
   budouci: boolean;
@@ -52,12 +58,15 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
   const [hodnoty, setHodnoty] = useState<Record<string, number | null>>({});
   const [datumy, setDatumy] = useState<Record<string, string>>({});
   const [noveOdecty, setNoveOdecty] = useState<string[]>([]);
+  // Radek otevreny k zapisu (null = prvni, kde chybi stavy)
+  const [vybrany, setVybrany] = useState<string | null>(null);
 
   const zobrazene = meraky.filter((m) => m.aktivni || stavy.some((s) => s.merakId === m.id));
   const aktivni = meraky.filter((m) => m.aktivni);
 
   // Radky: udalosti najmu + jine odecty (po dnech) + nove pridane
   const odecty = [...new Set(stavy.filter((s) => s.udalost === "ODECET").map((s) => s.datum))];
+  const vymeny = [...new Set(stavy.filter((s) => s.udalost === "VYMENA").map((s) => s.datum))];
   const radky: Radek[] = [
     ...noveOdecty.map((d) => ({ klic: `ODECET|${d}`, leaseId: null, udalost: "ODECET" as const, datum: d, popis: "Jiný odečet", budouci: false })),
     ...udalosti.map((u) => ({
@@ -67,7 +76,21 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
       popis: `${u.udalost === "ZACATEK" ? "Předání" : "Vrácení"} · ${u.najemce}`, budouci: u.budouci,
     })),
     ...odecty.filter((d) => !noveOdecty.includes(d)).map((d) => ({ klic: `ODECET|${d}`, leaseId: null, udalost: "ODECET" as const, datum: d, popis: "Jiný odečet", budouci: false })),
+    ...vymeny.map((d) => ({ klic: `VYMENA|${d}`, leaseId: null, udalost: "VYMENA" as const, datum: d, popis: "Výměna měřáku", budouci: false })),
   ].sort((a, b) => (b.datum ?? "9999").localeCompare(a.datum ?? "9999"));
+  const nazevRadku = (r: Radek) => ({ ZACATEK: "Předání", KONEC: "Vrácení", ODECET: "Jiný odečet", VYMENA: "Výměna měřáku" })[r.udalost];
+  // Sloupce historie: misto = aktualni merak + meraky, ktere nahradil
+  const retezce = retezceMeraku(zobrazene);
+  const sMerakem = (m: MerakRadek): MerakSeStavy => ({
+    ...m, stavy: stavy.filter((x) => x.merakId === m.id).map((x) => ({ datum: x.datum, hodnota: x.hodnota, hodnota2: x.hodnota2 })),
+  });
+  const [vymenaId, setVymenaId] = useState<string | null>(null);
+  /** Posledni zapsany stav meraku (navrh pro konecny stav pri vymene). */
+  const posledniStav = (merakId: string) => {
+    const s = stavy.filter((x) => x.merakId === merakId && x.hodnota != null).sort((a, b) => b.datum.localeCompare(a.datum))[0];
+    return s ? { hodnota: s.hodnota!, hodnota2: s.hodnota2, datum: s.datum } : null;
+  };
+  const archiv = meraky.filter((m) => !m.aktivni);
 
   const stav = (r: Radek, merakId: string) => stavy.find((s) => s.merakId === merakId && s.udalost === r.udalost
     && (r.leaseId ? s.leaseId === r.leaseId : s.leaseId == null && s.datum === r.datum));
@@ -97,9 +120,15 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
 
   const zmenDatum = (r: Radek, datum: string) => {
     const puvodni = datumRadku(r);
-    setDatumy((d) => ({ ...d, [r.klic]: datum }));
-    if (!datum || datum === puvodni) return;
+    if (!datum || datum === puvodni || r.udalost === "VYMENA") return;
     const maStavy = zobrazene.some((m) => tarify(m).some((t) => hodnota(r, m.id, t) != null));
+    if (r.udalost === "ODECET") {
+      // Jiny odecet je dany dnem: radek se presune pod nove datum (i s ulozenymi stavy)
+      setNoveOdecty((o) => [datum, ...o.filter((d) => d !== puvodni && d !== datum)]);
+      setVybrany(`ODECET|${datum}`);
+    } else {
+      setDatumy((d) => ({ ...d, [r.klic]: datum }));
+    }
     if (!maStavy) return;
     spust(async () => {
       const v = await zmenDatumUdalosti(propertyId, { leaseId: r.leaseId, udalost: r.udalost, puvodni, datum });
@@ -108,12 +137,45 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
   };
 
   // Spotreba za najem: vraceni minus predani teze smlouvy
-  const spotreba = (r: Radek, merakId: string, tarif: 1 | 2) => {
-    if (r.udalost !== "KONEC" || !r.leaseId) return null;
-    const konec = hodnota(r, merakId, tarif);
+  const spotreba = (r: Radek, ret: MerakRadek[], tarif: 1 | 2) => {
+    if (r.udalost !== "KONEC" || !r.leaseId || !ret.some((m) => maHodnotu(r, m))) return null;
     const zacatek = radky.find((x) => x.udalost === "ZACATEK" && x.leaseId === r.leaseId);
-    const z = zacatek ? hodnota(zacatek, merakId, tarif) : null;
-    return konec != null && z != null ? konec - z : null;
+    const od = zacatek ? datumRadku(zacatek) : "";
+    const doDne = datumRadku(r);
+    if (!od || !doDne) return null;
+    return spotrebaVObdobi(ret.map(sMerakem), od, doDne, tarif)?.spotreba ?? null;
+  };
+
+  // Predani a vraceni potrebuji stav vsech meraku; jiny odecet muze byt jen nektery
+  const maHodnotu = (r: Radek, m: MerakRadek) => tarify(m).some((t) => hodnota(r, m.id, t) != null);
+  /**
+   * Meraky mista platne v danem radku: ty, ktere v nem maji stav, jinak ten, ktery tehdy
+   * visel (pred vymenou stary, po ni novy). U vymeny jen meraky, kterych se tyka.
+   */
+  const merakyRadku = (ret: MerakRadek[], r: Radek): MerakRadek[] => {
+    const se = ret.filter((m) => maHodnotu(r, m));
+    if (se.length || r.udalost === "VYMENA") return se;
+    const datum = datumRadku(r);
+    const tehdy = [...ret].reverse().find((m) => !m.vymenenAt || !datum || m.vymenenAt > datum);
+    return tehdy && (tehdy.aktivni || tehdy.vymenenAt) ? [tehdy] : [];
+  };
+  // Predani a vraceni potrebuji stav kazdeho mista; jiny odecet a vymena jen nektere
+  const jeNeuplny = (r: Radek) => (r.udalost === "ZACATEK" || r.udalost === "KONEC") && !r.budouci
+    && retezce.some((ret) => merakyRadku(ret, r).some((m) => chybiHodnota(r, m)));
+  const otevreny = radky.find((r) => r.klic === vybrany) ?? radky.find(jeNeuplny) ?? radky.find((r) => !r.budouci) ?? radky[0];
+  /** Posledni starsi zapsany stav meraku (pro kontrolu a spotrebu od minule). */
+  const predchozi = (r: Radek, merakId: string, tarif: 1 | 2) => {
+    const i = radky.indexOf(r);
+    for (const x of radky.slice(i + 1)) {
+      const h = hodnota(x, merakId, tarif);
+      if (h != null) return { hodnota: h, datum: datumRadku(x) };
+    }
+    return null;
+  };
+  const jinyOdecet = () => {
+    const dnes = denISO(new Date());
+    setNoveOdecty((o) => [dnes, ...o.filter((d) => d !== dnes)]);
+    setVybrany(`ODECET|${dnes}`);
   };
 
   const pridej = (druhy: string[]) => spust(async () => {
@@ -144,14 +206,15 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                   <th>Měřák</th>
                   <th>Upřesnění</th>
                   <th>Výrobní číslo</th>
-                  {canEdit && <th className="w-12"><span className="sr-only">Akce</span></th>}
+                  {canEdit && <th className="w-36"><span className="sr-only">Akce</span></th>}
                 </tr>
               </thead>
               <tbody>
                 {aktivni.map((m) => {
                   const d = DRUH_MERAKU_MAP.get(m.druh);
                   return (
-                    <tr key={m.id}>
+                    <Fragment key={m.id}>
+                    <tr className={vymenaId === m.id ? "!bg-accent-soft/60" : ""}>
                       <td>
                         <div className="flex items-center gap-3">
                           {ikona(m.druh)}
@@ -177,20 +240,52 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                           onBlur={(e) => e.target.value !== (m.cislo ?? "") && spust(async () => { await upravMerak(m.id, { cislo: e.target.value }); })} />
                       </td>
                       {canEdit && (
-                        <td className="text-right">
-                          <button type="button" className="text-ink-muted hover:text-bad" aria-label="Odebrat měřák"
-                            title="Odebrat měřák (se zapsanými stavy zůstane v historii)"
-                            onClick={() => { if (confirm(`Odebrat měřák ${d?.nazev ?? ""}?`)) spust(async () => { await smazMerak(m.id); }); }}>
+                        <td className="whitespace-nowrap text-right">
+                          <button type="button" className="mr-3 text-sm font-medium text-accent hover:underline" onClick={() => setVymenaId(vymenaId === m.id ? null : m.id)}>Vyměnit</button>
+                          <button type="button" className="align-middle text-ink-muted hover:text-bad" aria-label="Vyřadit měřák"
+                            title="Vyřadit měřák (se zapsanými stavy se jen archivuje)"
+                            onClick={() => { if (confirm(`Vyřadit měřák ${d?.nazev ?? ""}? Se zapsanými stavy zůstane v archivu.`)) spust(async () => { await smazMerak(m.id); }); }}>
                             <Ikona nazev="kos" trida="h-4 w-4" />
                           </button>
                         </td>
                       )}
                     </tr>
+                    {vymenaId === m.id && (
+                      <tr className="!bg-accent-soft/30">
+                        <td colSpan={canEdit ? 4 : 3}>
+                          <VymenaFormular merak={m} posledni={posledniStav(m.id)} onHotovo={(e) => { setChyba(e); if (!e) setVymenaId(null); }}
+                            propertyId={propertyId} />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
             </table>
           </div>
+        )}
+        {archiv.length > 0 && (
+          <details className="mt-3 text-sm">
+            <summary className="cursor-pointer text-ink-secondary">Archiv měřáků ({archiv.length})</summary>
+            <ul className="mt-2 space-y-1 text-ink-secondary">
+              {archiv.map((m) => {
+                const d = DRUH_MERAKU_MAP.get(m.druh);
+                const nastupce = meraky.find((x) => x.nahrazujeId === m.id);
+                const p = posledniStav(m.id);
+                return (
+                  <li key={m.id} className="flex flex-wrap items-center gap-2">
+                    <Ikona nazev={(d?.ikona ?? "tri") as NazevIkony} trida="h-4 w-4" />
+                    <span className="font-medium text-ink-primary">{d?.nazev}{m.nazev ? ` · ${m.nazev}` : ""}</span>
+                    {m.cislo && <span>č. {m.cislo}</span>}
+                    <Badge>{m.vymenenAt ? `vyměněn ${m.vymenenAt.split("-").reverse().join("/")}` : "vyřazen"}</Badge>
+                    {p && <span className="text-xs">poslední stav {fmt(p.hodnota)}{p.hodnota2 != null ? ` / ${fmt(p.hodnota2)}` : ""} {d?.jednotka}</span>}
+                    {nastupce?.cislo && <span className="text-xs">→ nový č. {nastupce.cislo}</span>}
+                  </li>
+                );
+              })}
+            </ul>
+          </details>
         )}
         {canEdit && (
           <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
@@ -207,87 +302,187 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
         )}
       </Card>
 
-      {zobrazene.length > 0 && (
-        <Card title="Stavy při předání a vrácení" action={canEdit ? (
-          <button type="button" className="btn" onClick={() => setNoveOdecty((o) => [denISO(new Date()), ...o.filter((d) => d !== denISO(new Date()))])}>Jiný odečet</button>
-        ) : undefined}>
-          <p className="-mt-2 mb-3 text-xs text-ink-muted">
-            Řádky vznikají z nájemních smluv. Hodnota se uloží po opuštění políčka; stav při vrácení se ve stejný den doplní i k předání dalšímu nájemci.
-            Prodloužení smlouvy téhož nájemníka se nepředává, takže řádek nemá.
-          </p>
-          {radky.length === 0 ? (
-            <p className="py-3 text-center text-sm text-ink-muted">Nemovitost zatím nemá nájemní smlouvu.</p>
-          ) : (
-            <div className="table-scroll">
-              <table className="table-base">
-                <thead>
-                  <tr>
-                    <th>Událost</th>
-                    {zobrazene.map((m) => {
-                      const d = DRUH_MERAKU_MAP.get(m.druh);
-                      return (
-                        <th key={m.id} className={`num ${m.aktivni ? "" : "opacity-60"}`}>
-                          <span className="inline-flex items-center gap-1.5"><Ikona nazev={(d?.ikona ?? "tri") as NazevIkony} trida="h-3.5 w-3.5" />{d?.nazev}{m.nazev ? ` · ${m.nazev}` : ""}</span>
-                          <div className="font-normal normal-case tracking-normal">{m.dvoutarif ? "T1 / T2 · " : ""}{d?.jednotka}{m.cislo ? ` · č. ${m.cislo}` : ""}{m.aktivni ? "" : " · vyřazený"}</div>
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  {radky.map((r) => {
-                    const chybi = !r.budouci && zobrazene.some((m) => m.aktivni && chybiHodnota(r, m));
-                    return (
-                      <tr key={r.klic} className={r.budouci ? "opacity-60" : ""}>
-                        <td className="align-top">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium">{r.udalost === "ZACATEK" ? "Předání" : r.udalost === "KONEC" ? "Vrácení" : "Jiný odečet"}</span>
-                            {r.budouci && <Badge>plánováno</Badge>}
-                            {chybi && <Badge tone="warn">chybí stavy</Badge>}
-                          </div>
-                          {r.udalost !== "ODECET" && <div className="text-xs text-ink-muted">{r.popis.split(" · ").slice(1).join(" · ")}</div>}
-                          <div className="mt-1.5 w-36">
-                            <DatumPole label="Datum" skrytLabel name={`datum-${r.klic}`} defaultValue={datumRadku(r)}
-                              onChange={(iso) => { if (iso && canEdit) zmenDatum(r, iso); }} />
-                          </div>
-                        </td>
-                        {zobrazene.map((m) => (
-                          <td key={m.id} className="num align-top">
-                            <div className="space-y-1.5">
-                              {tarify(m).map((t) => {
-                                const k = `${r.klic}|${m.id}|${t}`;
-                                const h = hodnota(r, m.id, t);
-                                const sp = spotreba(r, m.id, t);
-                                const b = bunky[k];
-                                const jednotka = DRUH_MERAKU_MAP.get(m.druh)?.jednotka ?? "";
-                                return (
-                                  <div key={t}>
-                                    <div className="flex items-center justify-end gap-2">
-                                      {m.dvoutarif && <span className="w-5 text-xs font-medium text-ink-muted">T{t}</span>}
-                                      <input key={`${k}|${h ?? ""}`} inputMode="decimal" defaultValue={h != null ? fmt(h) : ""} disabled={!canEdit || (!m.aktivni && h == null)}
-                                        aria-label={`${DRUH_MERAKU_MAP.get(m.druh)?.nazev ?? ""}${m.dvoutarif ? ` T${t}` : ""} — ${r.popis}`}
-                                        className={`input w-32 py-1.5 text-right tabular-nums ${b === "chyba" ? "!border-bad" : ""}`}
-                                        onBlur={(e) => uloz(r, m.id, t, e.target.value)}
-                                        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
-                                    </div>
-                                    <div className="mt-0.5 h-4 text-xs text-ink-muted">
-                                      {b === "uklada" ? "ukládám…" : b === "chyba" ? <span className="text-bad">neuloženo</span> : sp != null ? `spotřeba ${fmt(sp)} ${jednotka}` : b === "ok" ? <span className="text-good">uloženo</span> : ""}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+      {zobrazene.length > 0 && radky.length === 0 && (
+        <Card title="Stavy měřáků">
+          <p className="py-3 text-center text-sm text-ink-muted">Nemovitost zatím nemá nájemní smlouvu. Můžeš zapsat <button type="button" className="text-accent hover:underline" onClick={jinyOdecet}>jiný odečet</button>.</p>
         </Card>
       )}
+
+      {zobrazene.length > 0 && otevreny && (
+        <Card title="Zapsat stavy" action={canEdit ? <button type="button" className="btn" onClick={jinyOdecet}>Jiný odečet</button> : undefined}>
+          {/* Ktera udalost a kdy */}
+          <div className="flex flex-wrap items-end gap-3 border-b border-line pb-4">
+            <div className="min-w-[16rem] flex-1">
+              <label className="label mb-1.5 block" htmlFor="udalost-meraku">Událost</label>
+              <select id="udalost-meraku" className="input" value={otevreny.klic} onChange={(e) => setVybrany(e.target.value)}>
+                {radky.map((r) => (
+                  <option key={r.klic} value={r.klic}>
+                    {nazevRadku(r)}{r.popis.includes(" · ") ? ` · ${r.popis.split(" · ").slice(1).join(" · ")}` : ""}{datumRadku(r) ? ` · ${datumRadku(r).split("-").reverse().join("/")}` : ""}{r.budouci ? " (plánováno)" : jeNeuplny(r) ? " — chybí stavy" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="w-44">
+              <DatumPole key={otevreny.klic} label="Datum odečtu" name="datum-odectu" defaultValue={datumRadku(otevreny)}
+                onChange={(iso) => { if (iso && canEdit) zmenDatum(otevreny, iso); }} />
+            </div>
+          </div>
+
+          {/* Meraky pod sebou: hodnota, predchozi stav a spotreba od minule */}
+          <div className="divide-y divide-line/70">
+            {retezce.flatMap((ret) => merakyRadku(ret, otevreny)).map((m) => {
+              const d = DRUH_MERAKU_MAP.get(m.druh);
+              return (
+                <div key={m.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
+                  <div className="flex min-w-[13rem] flex-1 items-center gap-3">
+                    {ikona(m.druh)}
+                    <div>
+                      <div className="font-medium leading-tight">{d?.nazev ?? m.druh}{m.nazev ? ` · ${m.nazev}` : ""}{!m.aktivni && <span className="ml-1.5 align-middle"><Badge>{m.vymenenAt ? "starý, vyměněný" : "vyřazený"}</Badge></span>}</div>
+                      <div className="text-xs text-ink-muted">{d?.jednotka}{m.cislo ? ` · č. ${m.cislo}` : ""}{otevreny.udalost === "VYMENA" ? (m.vymenenAt === datumRadku(otevreny) ? " · konečný stav" : " · počáteční stav nového") : ""}</div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-4">
+                    {tarify(m).map((t) => {
+                      const k = `${otevreny.klic}|${m.id}|${t}`;
+                      const h = hodnota(otevreny, m.id, t);
+                      const b = bunky[k];
+                      const pred = predchozi(otevreny, m.id, t);
+                      return (
+                        <div key={t} className="flex items-center gap-3">
+                          {m.dvoutarif && <span className="w-5 text-xs font-medium text-ink-muted">T{t}</span>}
+                          <input key={`${k}|${h ?? ""}`} inputMode="decimal" defaultValue={h != null ? fmt(h) : ""} disabled={!canEdit}
+                            aria-label={`${d?.nazev ?? ""}${m.dvoutarif ? ` T${t}` : ""}`} placeholder="stav"
+                            className={`input w-36 text-right tabular-nums ${b === "chyba" ? "!border-bad" : b === "ok" ? "!border-good" : ""}`}
+                            onBlur={(e) => uloz(otevreny, m.id, t, e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+                          <div className="w-44 text-xs leading-snug">
+                            {b === "uklada" ? <span className="text-ink-muted">ukládám…</span>
+                              : b === "chyba" ? <span className="text-bad">neuloženo — zkontroluj číslo</span>
+                              : b === "ok" ? <span className="flex items-center gap-1 font-medium text-good"><Ikona nazev="ok" trida="h-3.5 w-3.5" />uloženo</span> : null}
+                            {pred && (
+                              <div className="text-ink-muted">
+                                minule {fmt(pred.hodnota)} ({pred.datum.split("-").reverse().join("/")})
+                                {h != null && <> · <span className={h < pred.hodnota ? "text-bad" : ""}>{h < pred.hodnota ? "menší než minule!" : `+${fmt(h - pred.hodnota)} ${d?.jednotka ?? ""}`}</span></>}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-ink-muted">Hodnota se uloží sama po opuštění políčka (nebo Enter). Stav při vrácení se ve stejný den doplní i k předání dalšímu nájemci.</p>
+        </Card>
+      )}
+
+      {zobrazene.length > 0 && radky.length > 0 && (
+        <Card title="Historie stavů">
+          <div className="table-scroll">
+            <table className="table-base">
+              <thead>
+                <tr>
+                  <th>Událost</th>
+                  <th>Datum</th>
+                  {retezce.map((ret) => {
+                    const m = ret[0];
+                    const d = DRUH_MERAKU_MAP.get(m.druh);
+                    return (
+                      <th key={m.id} className={`num ${m.aktivni ? "" : "opacity-60"}`}>
+                        <span className="inline-flex items-center gap-1.5"><Ikona nazev={(d?.ikona ?? "tri") as NazevIkony} trida="h-3.5 w-3.5" />{d?.nazev}{m.nazev ? ` · ${m.nazev}` : ""}</span>
+                        <div className="font-normal normal-case tracking-normal">{m.dvoutarif ? "T1 / T2 · " : ""}{d?.jednotka}{m.aktivni ? "" : " · vyřazený"}</div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                {radky.map((r) => (
+                  <tr key={r.klic} onClick={() => setVybrany(r.klic)}
+                    className={`cursor-pointer ${r.klic === otevreny?.klic ? "!bg-accent-soft/60" : ""} ${r.budouci ? "opacity-60" : ""}`}>
+                    <td>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{nazevRadku(r)}</span>
+                        {r.budouci && <Badge>plánováno</Badge>}
+                        {jeNeuplny(r) && <Badge tone="warn">chybí stavy</Badge>}
+                      </div>
+                      {r.udalost !== "ODECET" && <div className="text-xs text-ink-muted">{r.popis.split(" · ").slice(1).join(" · ")}</div>}
+                    </td>
+                    <td className="whitespace-nowrap tabular-nums">{datumRadku(r) ? datumRadku(r).split("-").reverse().join("/") : "—"}</td>
+                    {retezce.map((ret) => (
+                      <td key={ret[0].id} className="num whitespace-nowrap tabular-nums">
+                        {tarify(ret[0]).map((t) => {
+                          // Pri vymene ma stav stary i novy merak: "konecny → pocatecni"
+                          const hodnotyRetezce = [...ret].reverse().map((m) => hodnota(r, m.id, t)).filter((h): h is number => h != null);
+                          const sp = spotreba(r, ret, t);
+                          return (
+                            <div key={t}>
+                              {ret[0].dvoutarif && <span className="mr-1 text-xs text-ink-muted">T{t}</span>}
+                              {hodnotyRetezce.length ? hodnotyRetezce.map(fmt).join(" → ") : <span className="text-ink-muted">—</span>}
+                              {sp != null && <div className="text-xs text-ink-muted">spotřeba {fmt(sp)}</div>}
+                            </div>
+                          );
+                        })}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-2 text-xs text-ink-muted">Kliknutím na řádek ho otevřeš k zápisu. Prodloužení smlouvy téhož nájemníka se nepředává, takže řádek nemá.</p>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/** Formular vymeny meraku: datum, konecny stav stareho, pocatecni stav a cislo noveho. */
+function VymenaFormular({ propertyId, merak, posledni, onHotovo }: {
+  propertyId: string;
+  merak: MerakRadek;
+  posledni: { hodnota: number; hodnota2: number | null; datum: string } | null;
+  onHotovo: (chyba: string | null) => void;
+}) {
+  const [datum, setDatum] = useState<string | null>(denISO(new Date()));
+  const [pole, setPole] = useState({ konecny: "", konecny2: "", pocatecni: "0", pocatecni2: "0", cislo: "" });
+  const [bezi, spust] = useTransition();
+  const jednotka = DRUH_MERAKU_MAP.get(merak.druh)?.jednotka ?? "";
+  const vstup = (klic: keyof typeof pole, label: string, hint?: string) => (
+    <label className="block">
+      <span className="label mb-1.5 block">{label}</span>
+      <input className="input w-40 text-right tabular-nums" inputMode={klic === "cislo" ? "text" : "decimal"} value={pole[klic]}
+        onChange={(e) => setPole((p) => ({ ...p, [klic]: e.target.value }))} placeholder={klic === "cislo" ? "nepovinné" : jednotka} />
+      {hint && <span className="mt-1 block text-xs text-ink-muted">{hint}</span>}
+    </label>
+  );
+  const odeslat = () => spust(async () => {
+    const v = await vymenMerak(propertyId, {
+      merakId: merak.id, datum: datum ?? "",
+      konecny: cislo(pole.konecny), konecny2: merak.dvoutarif ? cislo(pole.konecny2) : null,
+      pocatecni: cislo(pole.pocatecni), pocatecni2: merak.dvoutarif ? cislo(pole.pocatecni2) : null,
+      cislo: pole.cislo,
+    });
+    onHotovo(v.error ?? null);
+  });
+  return (
+    <div className="space-y-3 py-1">
+      <div className="text-sm font-medium">Výměna měřáku — starý se archivuje i se stavy, spotřeba se dál počítá přes oba.</div>
+      <div className="flex flex-wrap items-start gap-4">
+        <div className="w-44"><DatumPole label="Datum výměny" name="datum-vymeny" defaultValue={datum ?? ""} onChange={setDatum} /></div>
+        {vstup("konecny", merak.dvoutarif ? "Konečný stav starého T1" : "Konečný stav starého",
+          posledni ? `naposledy ${fmt(posledni.hodnota)} (${posledni.datum.split("-").reverse().join("/")})` : undefined)}
+        {merak.dvoutarif && vstup("konecny2", "Konečný stav starého T2", posledni?.hodnota2 != null ? `naposledy ${fmt(posledni.hodnota2)}` : undefined)}
+        {vstup("pocatecni", merak.dvoutarif ? "Počáteční stav nového T1" : "Počáteční stav nového")}
+        {merak.dvoutarif && vstup("pocatecni2", "Počáteční stav nového T2")}
+        {vstup("cislo", "Výrobní číslo nového")}
+      </div>
+      <div className="flex gap-2">
+        <button type="button" className="btn btn-primary" disabled={bezi} onClick={odeslat}>{bezi ? "Ukládám…" : "Vyměnit měřák"}</button>
+        <button type="button" className="btn" onClick={() => onHotovo(null)}>Zrušit</button>
+      </div>
     </div>
   );
 }

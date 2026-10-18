@@ -107,6 +107,11 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   if (!property) notFound();
 
   const podil = nasobitel(pohled, property.owners, user.id);
+  // Meraky se stavy: spotreba najemcu do vyuctovani podle odectu
+  const merakyVyuctovani = (await prisma.merak.findMany({ where: { propertyId: id }, include: { stavy: true } })).map((m) => ({
+    id: m.id, druh: m.druh, nazev: m.nazev, aktivni: m.aktivni, dvoutarif: m.dvoutarif, nahrazujeId: m.nahrazujeId,
+    stavy: m.stavy.map((x) => ({ datum: denISO(x.datum), hodnota: x.hodnota, hodnota2: x.hodnota2 })),
+  }));
   // Na trhu ceka ke schvaleni: navrhy k zarazeni a mozne shody stejneho bytu (u propojeneho oceneni u korene)
   const korenTrhu = property.oceneniPodle ?? property.id;
   const [navrhuTrhu, shodTrhu] = await Promise.all([
@@ -676,7 +681,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             obsah: (<>
             <SbalitelnaKarta klic="vyuctovani-sluzeb" title="Vyúčtování služeb od dodavatelů">
               <VyuctovaniSluzeb typy={typy} dokumenty={dokumentyVyuctovani} diskPripojen={diskPripojen} services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant, groupName: sl.groupName, notes: sl.notes }))}
-                leases={najmyVyuctovani} vyuctovani={vyuctovani} canEdit={user.role === "OWNER"} />
+                leases={najmyVyuctovani} vyuctovani={vyuctovani} canEdit={user.role === "OWNER"} meraky={merakyVyuctovani} />
             </SbalitelnaKarta>
             {jeMajitel && (
               <SbalitelnaKarta klic="vyuctovani-najemce" title="Vyúčtování pro nájemce"

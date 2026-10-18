@@ -12,6 +12,7 @@ import { nazevDruhu, type TypySluzeb } from "@/lib/categories";
 import { czk, dateCz } from "@/lib/format";
 import { Hlaska, Pole, Rozbalovaci, SmazatTlacitko, TextPole, UpravaPanel, UpravitTlacitko, Vyber } from "./form";
 import { DatumPole } from "./DatumPole";
+import { DRUH_MERAKU_MAP, druhyMerakuProSluzbu, retezceMeraku, spotrebaVObdobi, type MerakSeStavy } from "@/lib/meraky";
 import { Ikona, type NazevIkony } from "./Ikony";
 import { Badge } from "./Stat";
 import { Dokumenty, type DokumentRadek } from "./Dokumenty";
@@ -38,7 +39,9 @@ const obdobi = (od: string, doDne: string) => `${dateCz(od)} – ${dateCz(doDne)
 
 // --- Vyuctovani sluzeb od dodavatelu ---
 
-export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, dokumenty, diskPripojen }: {
+export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, dokumenty, diskPripojen, meraky = [] }: {
+  /** Meraky nemovitosti se stavy — z nich se doplnuje spotreba najemcu */
+  meraky?: MerakSeStavy[];
   /** Dokumenty k vyuctovanim podle id vyuctovani. */
   dokumenty: Record<string, DokumentRadek[]>;
   diskPripojen: boolean;
@@ -318,14 +321,14 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
 
       {canEdit && upravovane && (
         <UpravaPanel nadpis={`Upravit vyúčtování ${obdobi(upravovane.od, upravovane.do)}`} onZavrit={() => setUpravaId(null)}>
-          <Formular typy={typy} key={upravovane.id} r={upravovane} services={services} leases={leases} vyuctovani={vyuctovani}
+          <Formular typy={typy} meraky={meraky} key={upravovane.id} r={upravovane} services={services} leases={leases} vyuctovani={vyuctovani}
             action={upravaAction} pending={upravuji} popisekTlacitka="Uložit změny" />
         </UpravaPanel>
       )}
 
       {canEdit && !upravovane && (
         <Rozbalovaci popisek="Přidat vyúčtování od dodavatele" zavritPo={addState.success}>
-          <Formular typy={typy} r={null} services={services} leases={leases} vyuctovani={vyuctovani}
+          <Formular typy={typy} meraky={meraky} r={null} services={services} leases={leases} vyuctovani={vyuctovani}
             action={addAction} pending={adding} popisekTlacitka="Uložit vyúčtování" />
         </Rozbalovaci>
       )}
@@ -568,8 +571,9 @@ function SkupinaFormular({ services, typy, action, pending }: {
   );
 }
 
-function Formular({ r, services, leases, vyuctovani, action, pending, popisekTlacitka, typy }: {
+function Formular({ r, services, leases, vyuctovani, action, pending, popisekTlacitka, typy, meraky }: {
   typy: TypySluzeb;
+  meraky: MerakSeStavy[];
   r: VyuctovaniRadek | null; services: SluzbaRadek[]; leases: NajemRadek[]; vyuctovani: VyuctovaniRadek[];
   action: (payload: FormData) => void; pending: boolean; popisekTlacitka: string;
 }) {
@@ -593,6 +597,42 @@ function Formular({ r, services, leases, vyuctovani, action, pending, popisekTla
 
   // Ptame se jen tehdy, kdyz v obdobi bydleli aspon dva najemci; jinak neni co delit
   const delit = dotcene.length >= 2;
+
+  // Spotreba najemcu ze zapsanych stavu meraku (i pres vymenu meraku), pro zvolenou sluzbu
+  const zMeraku = useMemo(() => {
+    const sluzba = services.find((x) => x.id === sluzbaId);
+    const druhy = druhyMerakuProSluzbu(sluzba ? typy[sluzba.type]?.icon : undefined);
+    const retezce = retezceMeraku(meraky.filter((m) => druhy.includes(m.druh)));
+    if (!retezce.length || !od || !doDne) return null;
+    const vysledek: Record<string, { spotreba: number; od: string; do: string } | null> = {};
+    for (const l of dotcene) {
+      const z = l.od > od ? l.od : od;
+      const k = l.do && l.do < doDne ? l.do : doDne;
+      let spotreba = 0, prvni = "", posledni = "", nalezeno = false;
+      for (const ret of retezce) {
+        for (const t of (ret[0].dvoutarif ? [1, 2] : [1]) as (1 | 2)[]) {
+          const x = spotrebaVObdobi(ret, z, k, t);
+          if (!x) continue;
+          nalezeno = true;
+          spotreba += x.spotreba;
+          if (!prvni || x.od < prvni) prvni = x.od;
+          if (!posledni || x.do > posledni) posledni = x.do;
+        }
+      }
+      vysledek[l.id] = nalezeno ? { spotreba: Math.round(spotreba * 1000) / 1000, od: prvni, do: posledni } : null;
+    }
+    return { vysledek, jednotka: DRUH_MERAKU_MAP.get(retezce[0][0].druh)?.jednotka ?? "" };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meraky, sluzbaId, od, doDne, dotcene.map((l) => l.id).join()]);
+  // Prazdna pole spotreby se doplni z meraku samy
+  useEffect(() => {
+    if (!zMeraku) return;
+    setOdecty((o) => {
+      const n = { ...o };
+      for (const [id, v] of Object.entries(zMeraku.vysledek)) if (v && (n[id] ?? "") === "") n[id] = String(v.spotreba);
+      return n;
+    });
+  }, [zMeraku]);
 
   const nahled = delit && od && doDne && od <= doDne && cislo(naklad) >= 0 && naklad !== ""
     ? rozuctuj({
@@ -645,16 +685,20 @@ function Formular({ r, services, leases, vyuctovani, action, pending, popisekTla
 
       {delit && rezim === "READINGS" && (
         <div className="space-y-3 rounded-xl bg-surface-sunken p-3 sm:col-span-2">
-          <Pole label="Jednotka spotřeby" name="readingUnit" placeholder="m³, kWh, GJ…" defaultValue={r?.jednotka ?? ""} />
+          <Pole label="Jednotka spotřeby" name="readingUnit" placeholder="m³, kWh, GJ…" defaultValue={r?.jednotka || zMeraku?.jednotka || ""} />
           {dotcene.length === 0 && (
             <p className="text-xs text-ink-muted">Zadej období — pak se ukážou nájemci, kterých se týká.</p>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
-            {dotcene.map((l) => (
-              <Pole key={l.id} label={`Spotřeba: ${l.nazev} (${dateCz(l.od)} – ${l.do ? dateCz(l.do) : "dosud"})`}
-                name={`odecet:${l.id}`} type="number" step="any"
-                value={odecty[l.id] ?? ""} onChange={(e) => setOdecty((o) => ({ ...o, [l.id]: e.target.value }))} />
-            ))}
+            {dotcene.map((l) => {
+              const m = zMeraku?.vysledek[l.id];
+              return (
+                <Pole key={l.id} label={`Spotřeba: ${l.nazev} (${dateCz(l.od)} – ${l.do ? dateCz(l.do) : "dosud"})`}
+                  name={`odecet:${l.id}`} type="number" step="any"
+                  value={odecty[l.id] ?? ""} onChange={(e) => setOdecty((o) => ({ ...o, [l.id]: e.target.value }))}
+                  hint={zMeraku ? (m ? `Z měřáků: ${m.spotreba} ${zMeraku.jednotka} (stavy ${dateCz(m.od)} – ${dateCz(m.do)})` : "V měřácích chybí stavy pro toto období") : undefined} />
+              );
+            })}
             <Pole label="Spotřeba mimo nájemce (prázdný byt, společné)" name="ownerConsumption" type="number" step="any"
               value={vlastnik} onChange={(e) => setVlastnik(e.target.value)} placeholder="nepovinné" />
           </div>
