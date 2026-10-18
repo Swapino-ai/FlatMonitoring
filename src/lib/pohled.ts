@@ -1,7 +1,7 @@
 /** Nacteni portfolia z pohledu prihlaseneho uzivatele. */
 
 import { analyzeProperty, loadProperties, type PropertyAnalysis, type PropertyWithRelations } from "./portfolio";
-import { nasobitel, type Pohled } from "./ownership";
+import { nasobitel, podilNaUveru, type Pohled } from "./ownership";
 import { aktualniPohled } from "./ownership.server";
 import type { SessionUser } from "./auth";
 
@@ -18,7 +18,7 @@ export async function nactiPortfolio(user: SessionUser, asOf = new Date()): Prom
   const properties = await loadProperties();
 
   const analyses = properties.map((p) =>
-    analyzeProperty(p, asOf, nasobitel(pohled, p.owners, user.id)),
+    analyzeProperty(p, asOf, nasobitel(pohled, p.owners, user.id), (l) => podilNaUveru(pohled, l, p.owners, user.id)),
   );
 
   // Prepinac ukazujeme jen tam, kde nekdo skutecne vlastni jen cast

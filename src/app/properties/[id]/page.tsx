@@ -15,8 +15,8 @@ import { Mapa, type BodOkoli } from "@/components/Mapa";
 import { Hero, Kondice, type Kontrola } from "@/components/Kondice";
 import { ServiceManager } from "@/components/ServiceManager";
 import { TransactionManager } from "@/components/TransactionManager";
-import { analyzeProperty, loadProperty } from "@/lib/portfolio";
-import { nasobitel, podilUzivatele } from "@/lib/ownership";
+import { analyzeProperty, loadProperty, mujMesicniTok } from "@/lib/portfolio";
+import { nasobitel, podilNaUveru, podilUzivatele } from "@/lib/ownership";
 import { aktualniPohled } from "@/lib/ownership.server";
 import { prisma } from "@/lib/db";
 import { odhadNemovitosti } from "@/lib/market/inzeraty";
@@ -117,7 +117,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     ] } }),
   ]);
   const ceka = { trh: navrhuTrhu + shodTrhu };
-  const a = analyzeProperty(property, new Date(), podil);
+  const a = analyzeProperty(property, new Date(), podil, (l) => podilNaUveru(pohled, l, property.owners, user.id));
   const year = new Date().getFullYear();
 
   const mujPodil = podilUzivatele(property.owners, user.id);
@@ -305,7 +305,10 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const toky = tokyNemovitosti(navrhPlateb, property.transactions);
   const prumer = prumernyMesicniTok(toky);
   // Stejny podil jako u ostatnich cisel nemovitosti (pohled spoluvlastnika)
-  const skutecnyCashflow = prumer ? { ...prumer, mesicne: prumer.mesicne * podil } : null;
+  // Splatky uveru ale nese ten, komu uver patri
+  const podilSplatek = a.podilSplatek;
+  const mujTok = (t: { mesicne: number; rozpad?: Record<string, number> }) => mujMesicniTok(a, t);
+  const skutecnyCashflow = prumer ? { ...prumer, mesicne: mujTok(prumer) } : null;
   const tentoMesic = tokAktualnihoMesice(toky);
 
   // Rady pro grafy vyvoje trhu: posledni zaznam dne, od nejstarsiho
@@ -529,10 +532,10 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                       ? "Zatím z pohybů za neúplný první měsíc."
                       : `Průměr za posledních ${skutecnyCashflow.mesicu} dokončených měsíců: nájem, zálohy, platby za služby a ostatní pohyby. U plateb se bere předpis, u zaplacených skutečná částka.`}
                 </p>
-                {skutecnyCashflow?.rozpad && <RozpadToku rozpad={skutecnyCashflow.rozpad} podil={podil} />}
+                {skutecnyCashflow?.rozpad && <RozpadToku rozpad={skutecnyCashflow.rozpad} podil={podil} podilSplatek={podilSplatek} />}
                 {/* Druhy radek: rozbehnuty mesic podle splatnosti, at je videt, jak si stoji ted */}
                 {!odhad && tentoMesic.pocet > 0 && (() => {
-                  const v = tentoMesic.mesicne * podil;
+                  const v = mujTok(tentoMesic);
                   return (
                     <div className="mt-4 border-t border-line/70 pt-3">
                       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -540,7 +543,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
                         <span className={`text-2xl font-semibold tabular-nums tracking-tight ${v >= 0 ? "text-good" : "text-bad"}`}>{czk(v)}</span>
                       </div>
                       <p className="mt-1 text-xs text-ink-secondary">Platby se splatností v tomto měsíci (zaplacené i zatím jen předepsané) a pohyby z tohoto měsíce.</p>
-                      <RozpadToku rozpad={tentoMesic.rozpad} podil={podil} />
+                      <RozpadToku rozpad={tentoMesic.rozpad} podil={podil} podilSplatek={podilSplatek} />
                     </div>
                   );
                 })()}
@@ -848,13 +851,13 @@ function Row({ label, value, strong, muted, note, term }: {
 }
 
 /** Stitky s rozpadem cash flow po zdrojich (najem, zalohy, sluzby, uver...). */
-function RozpadToku({ rozpad, podil }: { rozpad: Record<string, number>; podil: number }) {
+function RozpadToku({ rozpad, podil, podilSplatek }: { rozpad: Record<string, number>; podil: number; podilSplatek: number }) {
   return (
     <div className="mt-3 flex flex-wrap gap-2 text-xs">
       {([["NAJEM", "Nájem"], ["ZALOHA", "Zálohy od nájemce"], ["SLUZBA", "Služby dodavatelům"], ["UVER", "Splátky úvěru"], ["VYUCTOVANI", "Vyúčtování"], ["POHYB", "Ostatní pohyby"]] as const)
         .filter(([k]) => Math.abs(rozpad[k] ?? 0) >= 1)
         .map(([k, n]) => {
-          const v = rozpad[k] * podil;
+          const v = rozpad[k] * (k === "UVER" ? podilSplatek : podil);
           return (
             <span key={k} className="rounded-full bg-surface-card/70 px-2.5 py-1">
               {n}: <strong className={v >= 0 ? "text-good" : "text-bad"}>{v > 0 ? "+" : ""}{czk(v)}</strong>

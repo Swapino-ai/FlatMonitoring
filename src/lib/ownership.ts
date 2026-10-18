@@ -44,3 +44,20 @@ export function neprirazenyPodil(owners: PodilVlastnika[]): number {
 export function nasobitel(pohled: Pohled, owners: PodilVlastnika[], userId: string): number {
   return pohled === "moje" ? podilUzivatele(owners, userId) : 1;
 }
+
+/**
+ * Jakou cast uveru nese dany pohled (0-1). Uver s prirazenymi vlastniky patri jen jim
+ * (rovnym dilem) — nezavisle na podilu na nemovitosti. Uver bez vlastniku se deli
+ * jako nemovitost.
+ */
+export function podilNaUveru(
+  pohled: Pohled,
+  uver: { vlastnici?: { userId: string }[] },
+  owners: PodilVlastnika[],
+  userId: string,
+): number {
+  if (pohled !== "moje") return 1;
+  const vlastnici = uver.vlastnici ?? [];
+  if (vlastnici.length === 0) return podilUzivatele(owners, userId);
+  return vlastnici.some((v) => v.userId === userId) ? 1 / vlastnici.length : 0;
+}

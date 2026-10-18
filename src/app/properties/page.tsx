@@ -4,6 +4,7 @@ import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty } from "@/components/Stat";
 import { nactiPortfolio } from "@/lib/pohled";
+import { mujMesicniTok } from "@/lib/portfolio";
 import { nactiNavrhyPortfolia } from "@/lib/pravidelnePlatbyData";
 import { prumernyMesicniTok, tokyNemovitosti } from "@/lib/series";
 import { czk, czkCompact, dateCz, pct, STATUS_LABELS } from "@/lib/format";
@@ -17,7 +18,7 @@ export default async function PropertiesPage() {
   const navrhy = await nactiNavrhyPortfolia(analyses.map((a) => a.property));
   const skutecny = new Map(analyses.map((a) => {
     const t = prumernyMesicniTok(tokyNemovitosti(navrhy.get(a.property.id) ?? [], a.property.transactions));
-    return [a.property.id, t ? t.mesicne * a.podil : null] as const;
+    return [a.property.id, t ? mujMesicniTok(a, t) : null] as const;
   }));
 
   return (

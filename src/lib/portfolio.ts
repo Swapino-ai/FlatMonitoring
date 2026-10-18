@@ -41,6 +41,8 @@ export interface PropertyAnalysis {
   property: PropertyWithRelations;
   /** Jakou cast bytu zahrnuje tento vypocet (0-1). Pri celem portfoliu 1. */
   podil: number;
+  /** Jakou cast splatek uveru nese tento pohled (prumer pres uvery vazeny jistinou) */
+  podilSplatek: number;
   totalInvestment: number;
   equityInvested: number;
   currentValue: number;
@@ -83,26 +85,37 @@ export async function loadProperty(id: string): Promise<PropertyWithRelations | 
 }
 
 /**
- * Prepocet jedne nemovitosti. `podil` kráti vsechny castky na vlastnicky podil —
- * pomerove ukazatele (vynos, LTV, DSCR) se tim nemeni, protoze se krati citatel
- * i jmenovatel.
+ * Prepocet jedne nemovitosti. `podil` kráti castky nemovitosti (hodnota, najem, naklady)
+ * na vlastnicky podil, `podilUveru` kráti kazdy uver zvlast podle toho, komu patri.
+ * Kdyz uver nese jen cast vlastniku, ukazatele s dluhem (LTV, cash flow, vlastni
+ * kapital) se v pohledu "muj podil" proto lisi od celku.
  */
 export function analyzeProperty(
   p: PropertyWithRelations,
   asOf = new Date(),
   podil = 1,
+  /** Cast uveru v tomto pohledu; vychozi = podil na nemovitosti (viz podilNaUveru) */
+  podilUveru: (l: PropertyWithRelations["loans"][number]) => number = () => podil,
 ): PropertyAnalysis {
   const year = asOf.getFullYear();
 
   const totalInvestment = p.purchasePrice + p.acquisitionCosts + p.renovationCosts;
 
+  // Castky nemovitosti kratime podilem na ni, castky uveru podilem na uveru (dluh patri
+  // tomu, kdo ho ma, ne vsem spoluvlastnikum podle podilu na nemovitosti)
+  const k = (x: number) => x * podil;
   const activeLoans = p.loans.filter((l) => l.isActive);
+  const vahy = new Map(activeLoans.map((l) => [l.id, podilUveru(l)]));
+  const w = (l: { id: string }) => vahy.get(l.id) ?? podil;
   const currentDebt = sum(
-    activeLoans.map((l) => balanceAt({ ...l, startDate: new Date(l.startDate) }, asOf)),
+    activeLoans.map((l) => balanceAt({ ...l, startDate: new Date(l.startDate) }, asOf) * w(l)),
   );
   // Vlastni vlozeny kapital = celkova investice minus pujcena jistina
-  const borrowed = sum(activeLoans.map((l) => l.principal));
-  const equityInvested = Math.max(totalInvestment - borrowed, 0);
+  const borrowed = sum(activeLoans.map((l) => l.principal * w(l)));
+  const equityInvested = Math.max(k(totalInvestment) - borrowed, 0);
+  // Prumerna vaha uveru (pro splatky v transakcich, ktere se ke konkretnimu uveru nevazou)
+  const jistiny = sum(activeLoans.map((l) => l.principal));
+  const vahaSplatek = jistiny ? borrowed / jistiny : podil;
 
   const latestValuation = p.valuations[0];
   const currentValue = latestValuation?.value ?? totalInvestment;
@@ -129,22 +142,22 @@ export function analyzeProperty(
     ),
   );
 
-  const annualDebtService = sum(activeLoans.map((l) => l.monthlyPayment * 12));
+  const annualDebtService = sum(activeLoans.map((l) => l.monthlyPayment * 12 * w(l)));
   const annualInterest = sum(
-    activeLoans.map((l) => loanYearBreakdown({ ...l, startDate: new Date(l.startDate) }, year).interest),
+    activeLoans.map((l) => loanYearBreakdown({ ...l, startDate: new Date(l.startDate) }, year).interest * w(l)),
   );
 
   // Ukoncene sluzby uz nic nestoji
   const monthlyServiceCost = sum(p.services.filter((s) => !s.activeTo || new Date(s.activeTo) >= asOf).map((s) => s.monthlyCost + (s.annualCost ?? 0) / 12));
 
   const metrics = computeYields({
-    totalInvestment,
+    totalInvestment: k(totalInvestment),
     equityInvested,
-    annualGrossRent,
-    annualOperatingExpenses,
+    annualGrossRent: k(annualGrossRent),
+    annualOperatingExpenses: k(annualOperatingExpenses),
     annualDebtService,
     annualInterest,
-    currentValue,
+    currentValue: k(currentValue),
     currentDebt,
   });
 
@@ -167,7 +180,7 @@ export function analyzeProperty(
     const debtService = sum(
       yearLoans.map((l) => {
         const b = loanYearBreakdown({ ...l, startDate: new Date(l.startDate) }, y);
-        return b.interest + b.principal;
+        return (b.interest + b.principal) * w(l);
       }),
     );
 
@@ -176,20 +189,23 @@ export function analyzeProperty(
 
     if (inYear.length === 0) {
       estimatedYears.push(y);
-      annualCashFlows.push((modelledAnnualRent - modelledAnnualOpex - debtService) * share);
+      annualCashFlows.push((k(modelledAnnualRent - modelledAnnualOpex) - debtService) * share);
       continue;
     }
 
-    const cash = sum(inYear.filter((t) => t.taxTreatment !== "PASS_THROUGH").map((t) => t.amount));
+    const jeSplatka = (t: { category: string }) => t.category === "LOAN_INTEREST" || t.category === "LOAN_PRINCIPAL";
+    const bezPruchozich = inYear.filter((t) => t.taxTreatment !== "PASS_THROUGH");
+    const cash = k(sum(bezPruchozich.filter((t) => !jeSplatka(t)).map((t) => t.amount)))
+      + vahaSplatek * sum(bezPruchozich.filter(jeSplatka).map((t) => t.amount));
     // Uroky i jistina uz mohou byt mezi transakcemi — dluhovou sluzbu pricitame jen kdyz nejsou
-    const hasLoanTx = inYear.some((t) => t.category === "LOAN_INTEREST" || t.category === "LOAN_PRINCIPAL");
+    const hasLoanTx = inYear.some(jeSplatka);
     annualCashFlows.push(cash - (hasLoanTx ? 0 : debtService));
   }
 
   const irrValue = propertyIrr({
     equityInvested,
     annualCashFlows,
-    currentEquity: currentValue - currentDebt,
+    currentEquity: k(currentValue) - currentDebt,
   });
 
   const totalCashFlowToDate = sum(annualCashFlows);
@@ -219,32 +235,24 @@ export function analyzeProperty(
     }
   }
 
-  // Castky kratime podilem, pomery zustavaji — vynos i LTV jsou na podilu nezavisle
-  const k = (x: number) => x * podil;
-
   return {
     property: p,
     podil,
+    podilSplatek: vahaSplatek,
     totalInvestment: k(totalInvestment),
-    equityInvested: k(equityInvested),
+    equityInvested,
     currentValue: k(currentValue),
     valuationSource,
-    currentDebt: k(currentDebt),
+    currentDebt,
     annualGrossRent: k(annualGrossRent),
     annualOperatingExpenses: k(annualOperatingExpenses),
-    annualDebtService: k(annualDebtService),
-    annualInterest: k(annualInterest),
+    annualDebtService,
+    annualInterest,
     monthlyRent: k(monthlyRent),
     monthlyServiceCost: k(monthlyServiceCost),
-    metrics: {
-      ...metrics,
-      noi: k(metrics.noi),
-      cashFlowAnnual: k(metrics.cashFlowAnnual),
-      equity: k(metrics.equity),
-      breakevenRentMonthly: k(metrics.breakevenRentMonthly),
-    },
+    metrics,
     irr: irrValue,
-    totalCashFlowToDate: k(totalCashFlowToDate),
+    totalCashFlowToDate,
     valueGain: k(valueGain),
     valueGainPct: totalInvestment ? (valueGain / totalInvestment) * 100 : 0,
     yearsHeld,
@@ -253,6 +261,12 @@ export function analyzeProperty(
     activeLease,
     fixationAlert,
   };
+}
+
+/** Mesicni tok v danem pohledu: splatky uveru nese vlastnik uveru, zbytek podil na nemovitosti. */
+export function mujMesicniTok(a: Pick<PropertyAnalysis, "podil" | "podilSplatek">, t: { mesicne: number; rozpad?: Record<string, number> }): number {
+  const uver = t.rozpad?.UVER ?? 0;
+  return (t.mesicne - uver) * a.podil + uver * a.podilSplatek;
 }
 
 export interface PortfolioSummary {
