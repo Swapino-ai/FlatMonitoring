@@ -22,9 +22,11 @@ export async function pridejMerak(propertyId: string, druh: string): Promise<{ e
   if (chyba) return { error: chyba };
   if (!DRUH_MERAKU_MAP.has(druh)) return { error: "Neznámý druh měřáku." };
   const stejne = await prisma.merak.count({ where: { propertyId, druh, aktivni: true } });
+  // Radiatory se nuluji vsechny stejne: novy prevezme den od ostatnich
+  const vzor = druh === "RADIATOR" ? await prisma.merak.findFirst({ where: { propertyId, druh, nulovani: { not: null } }, select: { nulovani: true } }) : null;
   const posledni = await prisma.merak.findFirst({ where: { propertyId }, orderBy: { poradi: "desc" }, select: { poradi: true } });
   const m = await prisma.merak.create({
-    data: { propertyId, druh, nazev: stejne > 0 ? String(stejne + 1) : null, poradi: (posledni?.poradi ?? 0) + 1 },
+    data: { propertyId, druh, nazev: stejne > 0 ? String(stejne + 1) : null, poradi: (posledni?.poradi ?? 0) + 1, nulovani: vzor?.nulovani ?? null },
   });
   obnov(propertyId);
   return { id: m.id };
@@ -180,4 +182,14 @@ export async function synchronizujSvjTed(propertyId: string): Promise<{ error?: 
   revalidatePath(`/properties/${propertyId}`);
   const stavy = Object.values(v);
   return { prevzato: stavy.reduce((a, x) => a + x.prevzato, 0), chyb: stavy.filter((x) => x.chyba).length };
+}
+
+/** Den rocniho vynulovani pro vsechny radiatory nemovitosti ("MM-DD", null = nenuluji se). */
+export async function nastavNulovaniRadiatoru(propertyId: string, nulovani: string | null): Promise<{ error?: string }> {
+  const chyba = await smiMenit();
+  if (chyba) return { error: chyba };
+  if (nulovani && !/^\d{2}-\d{2}$/.test(nulovani)) return { error: "Neplatný den vynulování." };
+  await prisma.merak.updateMany({ where: { propertyId, druh: "RADIATOR" }, data: { nulovani } });
+  obnov(propertyId);
+  return {};
 }

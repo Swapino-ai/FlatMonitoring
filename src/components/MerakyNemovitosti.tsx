@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { DRUHY_MERAKU, DRUH_MERAKU_MAP, nulovaniMezi, nulovaniText, nulovaniZTextu, retezceMeraku, spotrebaVObdobi, type MerakSeStavy, type UdalostNajmu } from "@/lib/meraky";
-import { nastavSvjByt, synchronizujSvjTed, pridejMerak, smazMerak, ulozStav, upravMerak, vymenMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
+import { nastavNulovaniRadiatoru, nastavSvjByt, synchronizujSvjTed, pridejMerak, smazMerak, ulozStav, upravMerak, vymenMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
 import { denISO } from "@/lib/format";
 import { DatumPole } from "./DatumPole";
 import { Ikona, type NazevIkony } from "./Ikony";
@@ -268,17 +268,6 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                                 <option value="2">dvoutarif T1 + T2 · kWh</option>
                               </select>
                             ) : <div className="text-xs text-ink-muted">{d?.jednotka}</div>}
-                            {(m.druh === "RADIATOR" || m.nulovani) && (
-                              <label className="mt-1 flex items-center gap-1.5 text-xs text-ink-muted" title="Den, od kterého měřák každý rok počítá znovu od nuly">
-                                od nuly každý rok od
-                                <input className="input w-16 px-1.5 py-0.5 text-xs" placeholder="dd/mm" defaultValue={nulovaniText(m.nulovani)} disabled={!canEdit}
-                                  onBlur={(e) => {
-                                    const n = nulovaniZTextu(e.target.value);
-                                    if (n === undefined) { setChyba("Den vynulování zadej jako den/měsíc, např. 01/01."); return; }
-                                    if (n !== (m.nulovani ?? null)) spust(async () => { const v = await upravMerak(m.id, { nulovani: n }); setChyba(v.error ?? null); });
-                                  }} />
-                              </label>
-                            )}
                           </div>
                         </div>
                       </td>
@@ -384,6 +373,22 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
             </div>
           </div>
         )}
+        {aktivni.some((m) => m.druh === "RADIATOR") && (() => {
+          const radiatory = aktivni.filter((m) => m.druh === "RADIATOR");
+          const nulovani = radiatory.find((m) => m.nulovani)?.nulovani ?? null;
+          return (
+            <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4 text-sm">
+              <label htmlFor="nulovani-radiatoru" className="label">Radiátory se nulují každý rok od</label>
+              <input id="nulovani-radiatoru" className="input w-24 py-1.5" placeholder="dd/mm" defaultValue={nulovaniText(nulovani)} disabled={!canEdit}
+                onBlur={(e) => {
+                  const n = nulovaniZTextu(e.target.value);
+                  if (n === undefined) { setChyba("Den vynulování zadej jako den/měsíc, např. 01/01."); return; }
+                  if (n !== nulovani || radiatory.some((m) => (m.nulovani ?? null) !== n)) spust(async () => { const v = await nastavNulovaniRadiatoru(propertyId, n); setChyba(v.error ?? null); });
+                }} />
+              <span className="text-xs text-ink-muted">Platí pro všechny radiátory v bytě — od tohoto dne počítají znovu od nuly.</span>
+            </div>
+          );
+        })()}
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4 text-sm">
           <label htmlFor="svj-byt" className="label">Evidence SVJ — číslo bytu</label>
           <input id="svj-byt" className="input w-28 py-1.5" placeholder="např. 5" defaultValue={svjByt ?? ""} disabled={!canEdit}
