@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { DRUHY_MERAKU, DRUH_MERAKU_MAP, type UdalostNajmu } from "@/lib/meraky";
 import { pridejMerak, smazMerak, ulozStav, upravMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
 import { denISO } from "@/lib/format";
+import { DatumPole } from "./DatumPole";
 
 export interface MerakRadek { id: string; druh: string; nazev: string | null; cislo: string | null; aktivni: boolean }
 export interface StavRadek { id: string; merakId: string; leaseId: string | null; udalost: string; datum: string; hodnota: number }
@@ -198,8 +199,10 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                       <tr key={r.klic} className={`border-b border-line/60 align-top ${r.budouci ? "opacity-60" : ""} ${chybi ? "bg-warn/5" : ""}`}>
                         <td className="py-2 pr-3">
                           <div className={`font-medium ${r.udalost === "ZACATEK" ? "text-good" : r.udalost === "KONEC" ? "text-bad" : ""}`}>{r.popis}</div>
-                          <input type="date" className="input mt-1 w-36 py-0.5 text-xs" value={datumRadku(r)} disabled={!canEdit}
-                            onChange={(e) => zmenDatum(r, e.target.value)} />
+                          <div className="mt-1 w-36">
+                            <DatumPole label="Datum" skrytLabel name={`datum-${r.klic}`} defaultValue={datumRadku(r)}
+                              onChange={(iso) => { if (iso && canEdit) zmenDatum(r, iso); }} />
+                          </div>
                           {r.budouci && <div className="text-xs text-ink-muted">plánováno</div>}
                           {chybi && <div className="text-xs text-warn">chybí stavy</div>}
                         </td>

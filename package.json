@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "setup": "tsx scripts/setup.ts",
-    "build": "prisma generate && next build",
+    "build": "node scripts/kontrola-datumu.mjs && prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "db:push": "prisma db push",
@@ -14,7 +14,7 @@
     "backup": "tsx scripts/backup.ts",
     "restore": "tsx scripts/restore.ts",
     "postinstall": "prisma generate",
-    "vercel-build": "prisma generate && prisma db push --skip-generate && next build",
+    "vercel-build": "node scripts/kontrola-datumu.mjs && prisma generate && prisma db push --skip-generate && next build",
     "probe": "tsx scripts/probe-market.ts",
     "test:scrapers": "tsx scripts/test-scrapers.ts",
     "sken": "tsx scripts/nocni-sken.ts"
