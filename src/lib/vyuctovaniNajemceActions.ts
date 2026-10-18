@@ -58,6 +58,9 @@ export async function vydejVyuctovani(_prev: VydaniState, formData: FormData): P
   if (v.chyba) return { error: v.chyba };
   if (!v.sluzby.some((r) => r.stav === "VYUCTOVANO")) return { error: "Za toto období není co vyúčtovat (služby nejsou vybrané, už jsou vyúčtované, nebo k nim chybí vyúčtování dodavatele)." };
 
+  if (v.priblizne && formData.get("potvrditPriblizne") !== "on") {
+    return { error: "U některé služby se použije nejbližší odečet místo přesného. Zadej přesnější odečet na záložce Měřáky, nebo to potvrď zaškrtnutím." };
+  }
   if (v.chybiOdecet && formData.get("potvrditNeuplne") !== "on") {
     return { error: "U některé služby chybí odečet nájemce. Doplň ho, nebo potvrď vydání i tak." };
   }

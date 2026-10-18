@@ -58,8 +58,11 @@ const el = (stavy: [string, number][]) => [sluzba("el", { vyuctovani: [v("f", "2
 const rm = vyuctujNajemci(najem, [najem], el([["2025-01-01", 0], ["2025-07-01", 400], ["2025-12-31", 1000]]), "2025-07-01", "2025-12-31", null);
 const m1 = rm.sluzby[0];
 over("měřáky: 600 z 1 000 kWh → 3 600 Kč", m1.zdroje[0]?.metoda === "meraky" && Math.round(m1.castka) === 3600, `${m1.zdroje[0]?.metoda} ${Math.round(m1.castka)}`);
-const rm2 = vyuctujNajemci(najem, [najem], el([["2025-01-01", 0], ["2025-12-31", 1000]]), "2025-07-01", "2025-12-31", null);
-over("chybí stav k předání → nevyúčtuje se, napíše k jakému dni", rm2.sluzby[0].stav === "BEZ_VYUCTOVANI" && /1\. 7\. 2025/.test(rm2.sluzby[0].duvodPrenosu ?? ""), rm2.sluzby[0].duvodPrenosu ?? "");
+const rm2 = vyuctujNajemci(najem, [najem], el([["2025-01-01", 0], ["2025-07-15", 450], ["2025-12-31", 1000]]), "2025-07-01", "2025-12-31", null);
+const z2 = rm2.sluzby[0].zdroje[0];
+over("chybí stav k předání → nejbližší odečet (15. 7.) a upozornění", rm2.priblizne && z2?.priblizne?.[0]?.pouzite === "2025-07-15" && Math.round(rm2.sluzby[0].castka) === 3300, `${Math.round(rm2.sluzby[0].castka)} Kč, ${z2?.priblizne?.map((o) => o.pouzite).join(",")}`);
+const rm4 = vyuctujNajemci(najem, [najem], el([]), "2025-07-01", "2025-12-31", null);
+over("bez stavů na měřáku → nevyúčtuje se s důvodem", rm4.sluzby[0].stav === "BEZ_VYUCTOVANI" && /stavy/.test(rm4.sluzby[0].duvodPrenosu ?? ""), rm4.sluzby[0].duvodPrenosu ?? "");
 const celyRok = { ...najem, od: "2025-01-01" };
 const rm3 = vyuctujNajemci(celyRok, [celyRok], el([]), "2025-01-01", "2025-12-31", null);
 over("nájemce celou dobu sám → celá faktura bez měřáků", rm3.sluzby[0].zdroje[0]?.metoda === "cele" && Math.round(rm3.sluzby[0].castka) === 6000);

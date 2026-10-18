@@ -67,6 +67,18 @@ export interface ZdrojRadku {
   jednotka?: string | null;
   dnu?: number;
   chybiOdecet?: boolean;
+  /** Stav meraku nebyl presne k danemu dni — pouzit nejblizsi (chce potvrzeni) */
+  priblizne?: Odchylka[];
+}
+
+/** Pouzity odecet misto chybejiciho: chtene datum a datum skutecneho odectu. */
+export interface Odchylka { chtene: string; pouzite: string }
+
+/** "stav k 1. 3. 2024 vzat z odečtu 15. 3. 2024 (o 14 dní později)" */
+export function popisOdchylky(o: Odchylka): string {
+  const dni = Math.round((Date.parse(`${o.pouzite}T00:00:00Z`) - Date.parse(`${o.chtene}T00:00:00Z`)) / 86400000);
+  const f = (iso: string) => { const [r, m, d] = iso.split("-"); return `${Number(d)}. ${Number(m)}. ${r}`; };
+  return `stav k ${f(o.chtene)} vzat z odečtu ${f(o.pouzite)} (o ${Math.abs(dni)} dní ${dni > 0 ? "později" : "dříve"})`;
 }
 
 export interface RadekSluzby {
@@ -111,6 +123,8 @@ export interface VysledekNajemce {
   /** Do kdy je ktera sluzba po tomto vyuctovani vyuctovana */
   sluzbyDo: Record<string, string>;
   chybiOdecet: boolean;
+  /** Nekde se pouzil nejblizsi odecet misto presneho — pred vydanim potvrdit */
+  priblizne: boolean;
   chyba?: string;
 }
 
@@ -140,7 +154,7 @@ export function vyuctujNajemci(
   drivejsi: DrivejsiVyuctovani[] = [],
 ): VysledekNajemce {
   const prazdne = (chyba: string): VysledekNajemce => ({
-    od, do: doDne, sluzby: [], skupiny: [], naklady: 0, zalohy: 0, rozdil: 0, zalohyNeprirazene: 0, sluzbyDo: {}, chybiOdecet: false, chyba,
+    od, do: doDne, sluzby: [], skupiny: [], naklady: 0, zalohy: 0, rozdil: 0, zalohyNeprirazene: 0, sluzbyDo: {}, chybiOdecet: false, priblizne: false, chyba,
   });
   const P = prunik(od, doDne, najem.od, najem.do ?? doDne);
   if (!P) return prazdne("Zvolené období nezasahuje do doby nájmu.");
@@ -202,16 +216,27 @@ export function vyuctujNajemci(
 
     // Podil najemce z jednotlivych vyuctovani dodavatele (po poradi)
     const retezce = retezceMeraku(s.meraky);
-    // Spotreba ze stavu meraku presne k hranicim (tolerance 3 dny), jinak null
-    const spotrebaMeraku = (z: string, k: string) => {
+    // Spotreba ze stavu meraku k hranicim. Kdyz stav presne k danemu dni (±3 dny) chybi,
+    // vezme se nejblizsi zapsany a vrati se, o kolik se lisi — uzivatel ho musi potvrdit
+    const spotrebaMeraku = (z: string, k: string): { celkem: number; priblizne: Odchylka[] } | null => {
       let celkem = 0, nalezeno = false;
+      const priblizne: Odchylka[] = [];
       for (const r of retezce) for (const t of (r[0].dvoutarif ? [1, 2] : [1]) as (1 | 2)[]) {
-        const x = spotrebaVObdobi(r, pridejDny(z, -3), pridejDny(k, 3), t);
+        const dny = [...new Set(r.flatMap((m) => m.stavy.filter((x) => (t === 2 ? x.hodnota2 : x.hodnota) != null).map((x) => x.datum)))].sort();
+        if (dny.length < 2) continue;
+        const nejblizsi = (cil: string, pred?: string) => dny.filter((d) => !pred || d > pred)
+          .reduce<string | null>((a, d) => (!a || Math.abs(cas(d) - cas(cil)) < Math.abs(cas(a) - cas(cil)) ? d : a), null);
+        const a = nejblizsi(z);
+        const b = a ? nejblizsi(k, a) : null;
+        if (!a || !b) continue;
+        const x = spotrebaVObdobi(r, a, b, t);
         if (!x) continue;
-        if (Math.abs(cas(x.od) - cas(z)) > 3 * DEN || Math.abs(cas(x.do) - cas(k)) > 3 * DEN) return null;
+        for (const [chtene, pouzite] of [[z, a], [k, b]] as const) {
+          if (Math.abs(cas(pouzite) - cas(chtene)) > 3 * DEN && !priblizne.some((p) => p.chtene === chtene && p.pouzite === pouzite)) priblizne.push({ chtene, pouzite });
+        }
         celkem += x.spotreba; nalezeno = true;
       }
-      return nalezeno ? celkem : null;
+      return nalezeno ? { celkem, priblizne } : null;
     };
     const zdroje: ZdrojRadku[] = [];
     for (const v of cela) {
@@ -229,16 +254,20 @@ export function vyuctujNajemci(
       if (retezce.length) {
         const moje = spotrebaMeraku(Inajem[0], Inajem[1]);
         const odectyCelkem = v.rezim === "READINGS" ? Object.values(v.odecty).reduce((a, x) => a + x, 0) + (v.spotrebaVlastnik ?? 0) : 0;
-        const celk = spotrebaMeraku(v.od, v.do) ?? (odectyCelkem > 0 ? odectyCelkem : null);
+        const celkMeraky = spotrebaMeraku(v.od, v.do);
+        const celk = celkMeraky?.celkem ?? (odectyCelkem > 0 ? odectyCelkem : null);
         if (moje == null || !celk) {
-          // Bez stavu meraku k hranicim se spotreba neda urcit: vyuctuje se, az budou
-          const chybi = moje == null ? [Inajem[0], Inajem[1]] : [v.od, v.do];
-          duvod = `chybí stav měřáku k ${cz(chybi[0])} nebo ${cz(chybi[1])} — doplň ho na záložce Měřáky, pak půjde vyúčtovat`;
+          // Na merici vubec nejsou aspon dva stavy: spotreba se neda urcit
+          duvod = "na měřáku nejsou zapsané stavy — doplň je na záložce Měřáky, pak půjde vyúčtovat";
           vyDo = pridejDny(v.od, -1);
           prenesOd = v.od;
           break;
         }
-        zdroje.push({ id: v.id, od: Inajem[0], do: Inajem[1], podil: v.naklad * (moje / celk), metoda: "meraky", spotreba: Math.round(moje * 1000) / 1000, jednotka: s.jednotka });
+        const priblizne = [...moje.priblizne, ...(celkMeraky?.priblizne ?? [])];
+        zdroje.push({
+          id: v.id, od: Inajem[0], do: Inajem[1], podil: v.naklad * Math.min(1, moje.celkem / celk), metoda: "meraky",
+          spotreba: Math.round(moje.celkem * 1000) / 1000, jednotka: s.jednotka, ...(priblizne.length ? { priblizne } : {}),
+        });
         continue;
       }
       // 3) Odecty zadane u vyuctovani dodavatele, 4) pevne poplatky podle dnu
@@ -299,6 +328,7 @@ export function vyuctujNajemci(
   return {
     od: P[0], do: P[1], sluzby: radky, skupiny, naklady, zalohy, rozdil: zalohy - naklady, zalohyNeprirazene: neprirazene,
     sluzbyDo, chybiOdecet: vyuctovane.some((r) => r.zdroje.some((z) => z.chybiOdecet)),
+    priblizne: vyuctovane.some((r) => r.zdroje.some((z) => z.priblizne?.length)),
   };
 }
 

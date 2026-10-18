@@ -107,6 +107,7 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
                   <div key={z.id} className={`text-xs tabular-nums text-ink-secondary ${vnoreny ? "pl-0" : ""}`}>
                     {obdobi(z.od, z.do)}
                     {z.metoda === "dny" ? ` · ${z.dnu ?? ""} dní` : z.metoda === "cele" ? "" : z.spotreba != null ? ` · ${z.spotreba} ${z.jednotka ?? ""}` : ""} · {czk(z.podil)}
+                    {z.priblizne?.length ? <span className="block text-ink-muted">{z.priblizne.map((o) => `odečet ${dateCz(o.pouzite)} místo ${dateCz(o.chtene)}`).join(", ")}</span> : null}
                   </div>
                 ))}
               </div>
