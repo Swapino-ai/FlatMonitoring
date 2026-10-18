@@ -71,7 +71,7 @@ export async function ulozStav(propertyId: string, v: {
     : await prisma.stavMeraku.findFirst({
       where: v.leaseId
         ? { merakId: v.merakId, leaseId: v.leaseId, udalost: v.udalost }
-        // Jiny odecet: radek je dany dnem
+        // Prubezny odecet: radek je dany dnem
         : { merakId: v.merakId, leaseId: null, udalost: v.udalost, datum },
     });
 

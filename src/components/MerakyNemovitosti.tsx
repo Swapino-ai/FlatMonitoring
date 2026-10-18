@@ -20,7 +20,7 @@ export interface StavRadek { id: string; merakId: string; leaseId: string | null
 /** Ctene hodnoty meraku: dvoutarif T1 a T2, jinak jedna. */
 const tarify = (m: MerakRadek): (1 | 2)[] => (m.dvoutarif ? [1, 2] : [1]);
 
-/** Radek protokolu: udalost najmu, nebo jiny odecet (dany dnem). */
+/** Radek protokolu: udalost najmu, nebo prubezny odecet (dany dnem). */
 interface Radek {
   klic: string;
   leaseId: string | null;
@@ -68,17 +68,17 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
   const odecty = [...new Set(stavy.filter((s) => s.udalost === "ODECET").map((s) => s.datum))];
   const vymeny = [...new Set(stavy.filter((s) => s.udalost === "VYMENA").map((s) => s.datum))];
   const radky: Radek[] = [
-    ...noveOdecty.map((d) => ({ klic: `ODECET|${d}`, leaseId: null, udalost: "ODECET" as const, datum: d, popis: "Jiný odečet", budouci: false })),
+    ...noveOdecty.map((d) => ({ klic: `ODECET|${d}`, leaseId: null, udalost: "ODECET" as const, datum: d, popis: "Průběžný odečet", budouci: false })),
     ...udalosti.map((u) => ({
       klic: `${u.udalost}|${u.leaseId}`, leaseId: u.leaseId, udalost: u.udalost,
       // Datum z ulozenych stavu (kdyz se predavalo jindy nez v den smlouvy), jinak ze smlouvy
       datum: stavy.find((s) => s.leaseId === u.leaseId && s.udalost === u.udalost)?.datum ?? u.datum,
       popis: `${u.udalost === "ZACATEK" ? "Předání" : "Vrácení"} · ${u.najemce}`, budouci: u.budouci,
     })),
-    ...odecty.filter((d) => !noveOdecty.includes(d)).map((d) => ({ klic: `ODECET|${d}`, leaseId: null, udalost: "ODECET" as const, datum: d, popis: "Jiný odečet", budouci: false })),
+    ...odecty.filter((d) => !noveOdecty.includes(d)).map((d) => ({ klic: `ODECET|${d}`, leaseId: null, udalost: "ODECET" as const, datum: d, popis: "Průběžný odečet", budouci: false })),
     ...vymeny.map((d) => ({ klic: `VYMENA|${d}`, leaseId: null, udalost: "VYMENA" as const, datum: d, popis: "Výměna měřáku", budouci: false })),
   ].sort((a, b) => (b.datum ?? "9999").localeCompare(a.datum ?? "9999"));
-  const nazevRadku = (r: Radek) => ({ ZACATEK: "Předání", KONEC: "Vrácení", ODECET: "Jiný odečet", VYMENA: "Výměna měřáku" })[r.udalost];
+  const nazevRadku = (r: Radek) => ({ ZACATEK: "Předání", KONEC: "Vrácení", ODECET: "Průběžný odečet", VYMENA: "Výměna měřáku" })[r.udalost];
   // Sloupce historie: misto = aktualni merak + meraky, ktere nahradil
   const retezce = retezceMeraku(zobrazene);
   const sMerakem = (m: MerakRadek): MerakSeStavy => ({
@@ -146,7 +146,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
     return spotrebaVObdobi(ret.map(sMerakem), od, doDne, tarif)?.spotreba ?? null;
   };
 
-  // Predani a vraceni potrebuji stav vsech meraku; jiny odecet muze byt jen nektery
+  // Predani a vraceni potrebuji stav vsech meraku; prubezny odecet muze byt jen nektery
   const maHodnotu = (r: Radek, m: MerakRadek) => tarify(m).some((t) => hodnota(r, m.id, t) != null);
   /**
    * Meraky mista platne v danem radku: ty, ktere v nem maji stav, jinak ten, ktery tehdy
@@ -159,7 +159,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
     const tehdy = [...ret].reverse().find((m) => !m.vymenenAt || !datum || m.vymenenAt > datum);
     return tehdy && (tehdy.aktivni || tehdy.vymenenAt) ? [tehdy] : [];
   };
-  // Predani a vraceni potrebuji stav kazdeho mista; jiny odecet a vymena jen nektere
+  // Predani a vraceni potrebuji stav kazdeho mista; prubezny odecet a vymena jen nektere
   const jeNeuplny = (r: Radek) => (r.udalost === "ZACATEK" || r.udalost === "KONEC") && !r.budouci
     && retezce.some((ret) => merakyRadku(ret, r).some((m) => chybiHodnota(r, m)));
   const otevreny = radky.find((r) => r.klic === vybrany) ?? radky.find(jeNeuplny) ?? radky.find((r) => !r.budouci) ?? radky[0];
@@ -172,7 +172,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
     }
     return null;
   };
-  const jinyOdecet = () => {
+  const prubeznyOdecet = () => {
     const dnes = denISO(new Date());
     setNoveOdecty((o) => [dnes, ...o.filter((d) => d !== dnes)]);
     setVybrany(`ODECET|${dnes}`);
@@ -304,12 +304,12 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
 
       {zobrazene.length > 0 && radky.length === 0 && (
         <Card title="Stavy měřáků">
-          <p className="py-3 text-center text-sm text-ink-muted">Nemovitost zatím nemá nájemní smlouvu. Můžeš zapsat <button type="button" className="text-accent hover:underline" onClick={jinyOdecet}>jiný odečet</button>.</p>
+          <p className="py-3 text-center text-sm text-ink-muted">Nemovitost zatím nemá nájemní smlouvu. Můžeš zapsat <button type="button" className="text-accent hover:underline" onClick={prubeznyOdecet}>průběžný odečet</button>.</p>
         </Card>
       )}
 
       {zobrazene.length > 0 && otevreny && (
-        <Card title="Zapsat stavy" action={canEdit ? <button type="button" className="btn" onClick={jinyOdecet}>Jiný odečet</button> : undefined}>
+        <Card title="Zapsat stavy" action={canEdit ? <button type="button" className="btn" onClick={prubeznyOdecet}>Průběžný odečet</button> : undefined}>
           {/* Ktera udalost a kdy */}
           <div className="flex flex-wrap items-end gap-3 border-b border-line pb-4">
             <div className="min-w-[16rem] flex-1">
