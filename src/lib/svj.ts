@@ -111,13 +111,24 @@ function nedostupne(cislo: string, detail: string): SvjVysledek {
   return { ok: false, chyba: "nedostupne", detail };
 }
 
-/** Vyber spravneho meraku, kdyz ma stejne cislo vic mericich mist (jiny byt, kategorie). */
+/** Oznaceni bytu pro porovnani: "Byt č. 1", "byt 1" i "1" je totez. */
+function normalizujByt(b: string | null | undefined): string {
+  const t = (b ?? "").toLowerCase().replace(/\s+/g, "");
+  const cislo = t.replace(/^(byt|b\.?|č\.?|c\.?|jednotka|j\.?)+/g, "").replace(/^(č\.?|c\.?)/, "");
+  return cislo || t;
+}
+
+/**
+ * Vyber spravneho meraku, kdyz ma stejne cislo vic mericich mist (jiny byt, kategorie).
+ * Vyrobni cislo je obvykle jedinecne: jediny nalezeny merak se vezme bez ohledu na byt.
+ */
 export function vyberMerak(meraky: SvjMerak[], byt: string | null | undefined): SvjMerak | null {
   const bezNadrzi = meraky.filter((m) => !m.nadrz);
   const kandidati = bezNadrzi.length ? bezNadrzi : meraky;
+  if (kandidati.length === 1) return kandidati[0];
   if (byt) {
-    const b = byt.trim().toLowerCase();
-    return kandidati.find((m) => (m.byt ?? "").trim().toLowerCase() === b) ?? null;
+    const b = normalizujByt(byt);
+    return kandidati.find((m) => normalizujByt(m.byt) === b) ?? null;
   }
   return kandidati[0] ?? null;
 }
@@ -171,7 +182,7 @@ export async function synchronizujSvj(propertyId: string): Promise<Record<string
       if (!odp.ok) { vysledek[m.id] = { posledni: null, chyba: POPIS_CHYBY_SVJ[odp.chyba] + (odp.detail ? ` (${odp.detail})` : ""), prevzato: 0 }; continue; }
       const svj = vyberMerak(odp.meraky, byt);
       if (!svj) {
-        vysledek[m.id] = { posledni: null, chyba: `stav nedostupný — v SVJ není měřák č. ${m.cislo} u bytu ${byt}`, prevzato: 0 };
+        vysledek[m.id] = { posledni: null, chyba: `stav nedostupný — měřák č. ${m.cislo} je v SVJ u bytů ${odp.meraky.map((x) => x.byt ?? "bez bytu").join(", ")}, ne u bytu ${byt}`, prevzato: 0 };
         continue;
       }
       const k = prevodJednotky(svj.jednotka, DRUH_MERAKU_MAP.get(m.druh)?.jednotka ?? "");
