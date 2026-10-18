@@ -35,7 +35,7 @@ export type SvjVysledek = { ok: true; meraky: SvjMerak[] } | { ok: false; chyba:
 export const POPIS_CHYBY_SVJ: Record<SvjChyba, string> = {
   nenastaveno: "napojení na SVJ není nastavené (SVJ_API_URL, SVJ_API_KLIC)",
   klic: "stav nedostupný — chybný klíč k Evidenci SVJ",
-  cloudflare: "stav nedostupný — Cloudflare nepustil dotaz (zkontroluj service token SVJ_CF_CLIENT_ID / SVJ_CF_CLIENT_SECRET)",
+  cloudflare: "stav nedostupný — Cloudflare nepustil dotaz",
   nenalezen: "stav nedostupný — měřák s tímto číslem v SVJ není",
   vypnuto: "stav nedostupný — rozhraní SVJ je vypnuté",
   nedostupne: "stav nedostupný",
@@ -55,20 +55,35 @@ export async function nactiMerakSvj(cislo: string, limit = 1): Promise<SvjVysled
     .filter((x): x is string => !!x && x.length >= 4)
     .reduce((acc, x) => acc.split(x).join("•••"), t);
   try {
-    const r = await fetch(`${url}/api/ext/meraky/${encodeURIComponent(cislo)}?limit=${Math.min(500, Math.max(1, limit))}`, {
-      headers: {
-        "X-API-Key": klic,
-        // Cloudflare Access (service token) — bez nej domena dotaz nepusti
-        ...(cfId && cfSecret ? { "CF-Access-Client-Id": cfId, "CF-Access-Client-Secret": cfSecret } : {}),
-        Accept: "application/json",
-      },
-      // Cloudflare pri odmitnuti presmeruje na prihlaseni — to neni odpoved rozhrani
-      redirect: "manual",
-      next: { revalidate: 300 },
-      signal: AbortSignal.timeout(8000),
-    });
+    const hlavicky: Record<string, string> = {
+      "X-API-Key": klic,
+      // Cloudflare Access (service token) — bez nej domena dotaz nepusti
+      ...(cfId && cfSecret ? { "CF-Access-Client-Id": cfId, "CF-Access-Client-Secret": cfSecret } : {}),
+      Accept: "application/json",
+    };
+    // Presmerovani (napr. www → bez www) se nasleduje rucne, at hlavicky zustanou;
+    // presmerovani na prihlaseni Cloudflare Access znamena odmitnuti
+    let adresa = `${url}/api/ext/meraky/${encodeURIComponent(cislo)}?limit=${Math.min(500, Math.max(1, limit))}`;
+    let r: Response | null = null;
+    for (let krok = 0; krok < 4; krok++) {
+      r = await fetch(adresa, { headers: hlavicky, redirect: "manual", next: { revalidate: 300 }, signal: AbortSignal.timeout(8000) });
+      if (r.status < 300 || r.status >= 400) break;
+      const kam = r.headers.get("location");
+      if (!kam) break;
+      const cil = new URL(kam, adresa);
+      if (/cloudflareaccess\.com$/i.test(cil.hostname) || cil.pathname.startsWith("/cdn-cgi/access")) {
+        return { ok: false, chyba: "cloudflare", detail: `přesměrování na přihlášení Cloudflare Access (${cil.hostname}) — token nebyl přijat; v Cloudflare Access musí mít aplikace pravidlo s akcí „Service Auth“ pro tento token` };
+      }
+      adresa = cil.toString();
+    }
+    if (!r) return nedostupne(cislo, "bez odpovědi");
     const typ = r.headers.get("content-type") ?? "";
-    if ((r.status >= 300 && r.status < 400) || r.status === 403 || (r.ok && !typ.includes("json"))) return { ok: false, chyba: "cloudflare" };
+    if (r.status >= 300 && r.status < 400) return { ok: false, chyba: "cloudflare", detail: `HTTP ${r.status} → ${r.headers.get("location") ?? "?"}` };
+    if (r.status === 403) {
+      const cf = r.headers.get("cf-ray") ? "Cloudflare" : "server";
+      return { ok: false, chyba: "cloudflare", detail: `${cf} odpověděl HTTP 403 — token nemá přístup (pravidlo „Service Auth“ v Cloudflare Access)` };
+    }
+    if (r.ok && !typ.includes("json")) return { ok: false, chyba: "cloudflare", detail: `odpověď není JSON (${typ || "bez typu"}) z ${new URL(adresa).hostname} — nejspíš přihlašovací stránka` };
     if (r.status === 401) return { ok: false, chyba: "klic" };
     if (r.status === 404) return { ok: false, chyba: "nenalezen" };
     if (r.status === 503) return { ok: false, chyba: "vypnuto" };
