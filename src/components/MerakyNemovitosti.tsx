@@ -7,6 +7,7 @@ import { denISO } from "@/lib/format";
 import { DatumPole } from "./DatumPole";
 import { Ikona, type NazevIkony } from "./Ikony";
 import { Badge, Card } from "./Stat";
+import { SbalitelnaKarta } from "./SbalitelnaKarta";
 
 export interface MerakRadek {
   id: string; druh: string; nazev: string | null; cislo: string | null; aktivni: boolean; dvoutarif: boolean;
@@ -195,7 +196,8 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
     <div className="space-y-5">
       {chyba && <div className="rounded-lg border border-bad/40 bg-bad/5 px-3 py-2 text-sm text-bad">{chyba}</div>}
 
-      <Card title="Měřáky">
+      <SbalitelnaKarta klic={`meraky-seznam:${propertyId}`} title="Měřáky" vychoziSbalena={aktivni.length > 0}
+        shrnuti={aktivni.length ? `${aktivni.length} ${aktivni.length === 1 ? "měřák" : aktivni.length < 5 ? "měřáky" : "měřáků"}${archiv.length ? ` · ${archiv.length} v archivu` : ""}` : undefined}>
         {aktivni.length === 0 ? (
           <p className="py-3 text-center text-sm text-ink-muted">Žádné evidované měřáky.</p>
         ) : (
@@ -300,7 +302,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
             ))}
           </div>
         )}
-      </Card>
+      </SbalitelnaKarta>
 
       {zobrazene.length > 0 && radky.length === 0 && (
         <Card title="Stavy měřáků">
@@ -309,7 +311,9 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
       )}
 
       {zobrazene.length > 0 && otevreny && (
-        <Card title="Zapsat stavy" action={canEdit ? <button type="button" className="btn" onClick={prubeznyOdecet}>Průběžný odečet</button> : undefined}>
+        <SbalitelnaKarta klic={`meraky-zapis:${propertyId}`} title="Zapsat stavy"
+          shrnuti={radky.filter(jeNeuplny).length ? `chybí stavy u ${radky.filter(jeNeuplny).length}` : undefined}
+          action={canEdit ? <button type="button" className="btn" onClick={prubeznyOdecet}>Průběžný odečet</button> : undefined}>
           {/* Ktera udalost a kdy */}
           <div className="flex flex-wrap items-end gap-3 border-b border-line pb-4">
             <div className="min-w-[16rem] flex-1">
@@ -375,11 +379,11 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
             })}
           </div>
           <p className="mt-2 text-xs text-ink-muted">Hodnota se uloží sama po opuštění políčka (nebo Enter). Stav při vrácení se ve stejný den doplní i k předání dalšímu nájemci.</p>
-        </Card>
+        </SbalitelnaKarta>
       )}
 
       {zobrazene.length > 0 && radky.length > 0 && (
-        <Card title="Historie stavů">
+        <SbalitelnaKarta klic={`meraky-historie:${propertyId}`} title="Historie stavů" shrnuti={`${radky.length} ${radky.length === 1 ? "záznam" : radky.length < 5 ? "záznamy" : "záznamů"}`}>
           <div className="table-scroll">
             <table className="table-base">
               <thead>
@@ -433,7 +437,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
             </table>
           </div>
           <p className="mt-2 text-xs text-ink-muted">Kliknutím na řádek ho otevřeš k zápisu. Prodloužení smlouvy téhož nájemníka se nepředává, takže řádek nemá.</p>
-        </Card>
+        </SbalitelnaKarta>
       )}
     </div>
   );
