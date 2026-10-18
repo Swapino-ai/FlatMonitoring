@@ -191,7 +191,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
 
     const meraky = (t.merak as any[] ?? []).map((x) => ({
       id: String(x.id), propertyId: String(x.propertyId), druh: String(x.druh), nazev: s(x.nazev), cislo: s(x.cislo),
-      poradi: Math.round(c(x.poradi)), aktivni: x.aktivni !== false, dvoutarif: x.dvoutarif === true, nulovani: s(x.nulovani), nahrazujeId: s(x.nahrazujeId), vymenenAt: d(x.vymenenAt), createdAt: dPovinne(x.createdAt ?? new Date()),
+      poradi: Math.round(c(x.poradi)), aktivni: x.aktivni !== false, dvoutarif: x.dvoutarif === true, nulovani: s(x.nulovani), svjVynechane: Array.isArray(x.svjVynechane) ? x.svjVynechane.map(String) : [], nahrazujeId: s(x.nahrazujeId), vymenenAt: d(x.vymenenAt), createdAt: dPovinne(x.createdAt ?? new Date()),
     }));
     if (meraky.length) obnoveno.merak = (await tx.merak.createMany({ data: meraky })).count;
     const stavyMeraku = (t.stavMeraku as any[] ?? []).map((x) => ({

@@ -207,7 +207,8 @@ export async function synchronizujSvj(propertyId: string, cerstve = false): Prom
       // Viceterifovy merak v SVJ: v aplikaci taky dvoutarif
       if (!m.dvoutarif && svj.odecty.some((o) => (o.hodnoty?.length ?? 0) > 1)) dvoutarifni.push(m.id);
 
-      const dnyMeraku = new Set(m.stavy.map((x) => denISO(x.datum)));
+      // Uz zapsane dny a dny, ktere uzivatel smazal, se nepreberou
+      const dnyMeraku = new Set([...m.stavy.map((x) => denISO(x.datum)), ...m.svjVynechane]);
       for (const o of svj.odecty) {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(o.datum) || dnyMeraku.has(o.datum)) continue;
         const t = tarifyOdectu(o);

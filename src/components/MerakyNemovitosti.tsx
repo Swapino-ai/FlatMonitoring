@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { DRUHY_MERAKU, DRUH_MERAKU_MAP, nulovaniMezi, nulovaniText, nulovaniZTextu, retezceMeraku, spotrebaVObdobi, type MerakSeStavy, type UdalostNajmu } from "@/lib/meraky";
-import { nastavNulovaniRadiatoru, nastavSvjByt, synchronizujSvjTed, pridejMerak, smazMerak, ulozStav, upravMerak, vymenMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
+import { nastavNulovaniRadiatoru, nastavSvjByt, smazOdecet, synchronizujSvjTed, pridejMerak, smazMerak, ulozStav, upravMerak, vymenMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
 import { denISO } from "@/lib/format";
 import { DatumPole } from "./DatumPole";
 import { Ikona, type NazevIkony } from "./Ikony";
@@ -441,6 +441,18 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                       <DatumPole key={otevreny.klic} label="Datum odečtu" name="datum-odectu" defaultValue={datumRadku(otevreny)}
                         onChange={(iso) => { if (iso) zmenDatum(otevreny, iso); }} />
                     </div>
+                  )}
+                  {zobrazene.some((m) => maHodnotu(otevreny, m)) && (
+                    <button type="button" className="btn text-bad hover:border-bad/50"
+                      onClick={() => {
+                        const r = otevreny;
+                        const lease = r.udalost === "ZACATEK" || r.udalost === "KONEC";
+                        if (!confirm(`${lease ? "Smazat zapsané stavy u události" : "Smazat"} ${nazevRadku(r).toLowerCase()} ${datumRadku(r).split("-").reverse().join("/")}?${lease ? " Řádek zůstane prázdný, protože vzniká z nájemní smlouvy." : ""}`)) return;
+                        setHodnoty((h) => Object.fromEntries(Object.entries(h).filter(([k]) => !k.startsWith(`${r.klic}|`))));
+                        setNoveOdecty((o) => o.filter((d) => d !== r.datum));
+                        setVybrany(null);
+                        spust(async () => { const v = await smazOdecet(propertyId, { leaseId: r.leaseId, udalost: r.udalost, datum: datumRadku(r) }); setChyba(v.error ?? null); });
+                      }}>Smazat odečet</button>
                   )}
                   <button type="button" className="btn" onClick={zavri}>Hotovo</button>
                 </div>

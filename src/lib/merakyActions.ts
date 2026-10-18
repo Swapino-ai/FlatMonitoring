@@ -193,3 +193,25 @@ export async function nastavNulovaniRadiatoru(propertyId: string, nulovani: stri
   obnov(propertyId);
   return {};
 }
+
+/**
+ * Smaze cely odecet (radek historie): vsechny stavy meraku nemovitosti k teto udalosti.
+ * Predani a vraceni zustanou jako prazdny radek (vznikaji ze smluv). Smazane odecty
+ * ze SVJ se zapamatuji, aby je dalsi synchronizace znovu neprevzala.
+ */
+export async function smazOdecet(propertyId: string, v: { leaseId: string | null; udalost: string; datum: string }): Promise<{ error?: string; smazano?: number }> {
+  const chyba = await smiMenit();
+  if (chyba) return { error: chyba };
+  const where = {
+    merak: { propertyId }, udalost: v.udalost,
+    ...(v.leaseId ? { leaseId: v.leaseId } : { leaseId: null, datum: new Date(`${v.datum}T00:00:00Z`) }),
+  };
+  const stavy = await prisma.stavMeraku.findMany({ where, select: { id: true, merakId: true, datum: true, zdroj: true } });
+  for (const s of stavy.filter((x) => x.zdroj === "SVJ")) {
+    await prisma.merak.update({ where: { id: s.merakId }, data: { svjVynechane: { push: s.datum.toISOString().slice(0, 10) } } });
+  }
+  const r = await prisma.stavMeraku.deleteMany({ where: { id: { in: stavy.map((x) => x.id) } } });
+  obnov(propertyId);
+  revalidatePath(`/properties/${propertyId}`);
+  return { smazano: r.count };
+}
