@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { DRUHY_MERAKU, DRUH_MERAKU_MAP, retezceMeraku, spotrebaVObdobi, type MerakSeStavy, type UdalostNajmu } from "@/lib/meraky";
 import { pridejMerak, smazMerak, ulozStav, upravMerak, vymenMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
 import { denISO } from "@/lib/format";
@@ -60,8 +60,18 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
   const [datumy, setDatumy] = useState<Record<string, string>>({});
   const [noveOdecty, setNoveOdecty] = useState<string[]>([]);
   // Radky otevrene k uprave tuzkou (radky s chybejicimi stavy jsou otevrene samy)
-  const [upravovane, setUpravovane] = useState<Set<string>>(new Set());
-  const otevri = (klic: string, ano = true) => setUpravovane((u) => { const n = new Set(u); if (ano) n.add(klic); else n.delete(klic); return n; });
+  // Radek otevreny k zapisu (formular nad historii); po otevreni na nej stranka sjede
+  const [vybrany, setVybrany] = useState<string | null>(null);
+  const [posun, setPosun] = useState(0);
+  const formular = useRef<HTMLDivElement>(null);
+  const otevri = (klic: string) => { setVybrany(klic); setPosun((n) => n + 1); };
+  useEffect(() => {
+    if (!posun || !formular.current) return;
+    formular.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Kurzor do prvniho prazdneho policka (jinak do prvniho)
+    const pole = Array.from(formular.current.querySelectorAll<HTMLInputElement>("input[inputmode=decimal]"));
+    (pole.find((x) => !x.value) ?? pole[0])?.focus({ preventScroll: true });
+  }, [posun]);
 
   const zobrazene = meraky.filter((m) => m.aktivni || stavy.some((s) => s.merakId === m.id));
   const aktivni = meraky.filter((m) => m.aktivni);
@@ -164,9 +174,13 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
   // Predani a vraceni potrebuji stav kazdeho mista; prubezny odecet a vymena jen nektere
   const jeNeuplny = (r: Radek) => (r.udalost === "ZACATEK" || r.udalost === "KONEC") && !r.budouci
     && retezce.some((ret) => merakyRadku(ret, r).some((m) => chybiHodnota(r, m)));
-  // Policka k zapisu: rucne otevreny radek, nove pridany prubezny odecet, nebo kde chybi stavy
-  const jeOtevreny = (r: Radek) => upravovane.has(r.klic) || jeNeuplny(r)
-    || (r.udalost === "ODECET" && noveOdecty.includes(r.datum ?? "") && !zobrazene.some((m) => maHodnotu(r, m)));
+  const otevreny = vybrany ? radky.find((r) => r.klic === vybrany) ?? null : null;
+  // Zavreni formulare: novy prubezny odecet, do ktereho se nic nezapsalo, zmizi
+  const zavri = () => {
+    setVybrany(null);
+    setNoveOdecty((o) => o.filter((d) => stavy.some((x) => x.udalost === "ODECET" && x.datum === d)
+      || Object.entries(hodnoty).some(([k, v]) => k.startsWith(`ODECET|${d}|`) && v != null)));
+  };
   /** Posledni starsi zapsany stav meraku (pro kontrolu a spotrebu od minule). */
   const predchozi = (r: Radek, merakId: string, tarif: 1 | 2) => {
     const i = radky.indexOf(r);
@@ -311,6 +325,70 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
         <SbalitelnaKarta klic={`meraky-historie:${propertyId}`} title="Stavy měřáků"
           shrnuti={radky.filter(jeNeuplny).length ? `chybí stavy u ${radky.filter(jeNeuplny).length}` : `${radky.length} ${radky.length === 1 ? "záznam" : radky.length < 5 ? "záznamy" : "záznamů"}`}
           action={canEdit ? <button type="button" className="btn" onClick={prubeznyOdecet}>Průběžný odečet</button> : undefined}>
+          {otevreny && canEdit && (
+            <div ref={formular} className="mb-5 scroll-mt-24 rounded-xl border border-accent/40 bg-accent-soft/30 p-4">
+              <div className="flex flex-wrap items-end justify-between gap-3 border-b border-line pb-3">
+                <div>
+                  <div className="font-semibold">{nazevRadku(otevreny)}</div>
+                  {(otevreny.udalost === "ZACATEK" || otevreny.udalost === "KONEC") && <div className="text-xs text-ink-muted">{otevreny.popis.split(" · ").slice(1).join(" · ")}</div>}
+                </div>
+                <div className="flex items-end gap-3">
+                  {otevreny.udalost !== "VYMENA" && (
+                    <div className="w-44">
+                      <DatumPole key={otevreny.klic} label="Datum odečtu" name="datum-odectu" defaultValue={datumRadku(otevreny)}
+                        onChange={(iso) => { if (iso) zmenDatum(otevreny, iso); }} />
+                    </div>
+                  )}
+                  <button type="button" className="btn" onClick={zavri}>Hotovo</button>
+                </div>
+              </div>
+              <div className="divide-y divide-line/70">
+                {retezce.flatMap((ret) => merakyRadku(ret, otevreny)).map((m) => {
+                  const d = DRUH_MERAKU_MAP.get(m.druh);
+                  return (
+                    <div key={m.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
+                      <div className="flex min-w-[13rem] flex-1 items-center gap-3">
+                        {ikona(m.druh)}
+                        <div>
+                          <div className="font-medium leading-tight">{d?.nazev ?? m.druh}{m.nazev ? ` · ${m.nazev}` : ""}{!m.aktivni && <span className="ml-1.5 align-middle"><Badge>{m.vymenenAt ? "starý, vyměněný" : "vyřazený"}</Badge></span>}</div>
+                          <div className="text-xs text-ink-muted">{d?.jednotka}{m.cislo ? ` · č. ${m.cislo}` : ""}{otevreny.udalost === "VYMENA" ? (m.vymenenAt === datumRadku(otevreny) ? " · konečný stav" : " · počáteční stav nového") : ""}</div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-4">
+                        {tarify(m).map((t) => {
+                          const k = `${otevreny.klic}|${m.id}|${t}`;
+                          const h = hodnota(otevreny, m.id, t);
+                          const b = bunky[k];
+                          const pred = predchozi(otevreny, m.id, t);
+                          return (
+                            <div key={t} className="flex items-center gap-3">
+                              {m.dvoutarif && <span className="w-5 text-xs font-medium text-ink-muted">T{t}</span>}
+                              <input key={`${k}|${h ?? ""}`} inputMode="decimal" defaultValue={h != null ? fmt(h) : ""}
+                                aria-label={`${d?.nazev ?? ""}${m.dvoutarif ? ` T${t}` : ""}`} placeholder="stav"
+                                className={`input w-36 text-right tabular-nums ${b === "chyba" ? "!border-bad" : b === "ok" ? "!border-good" : ""}`}
+                                onBlur={(e) => uloz(otevreny, m.id, t, e.target.value)}
+                                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+                              <div className="w-44 text-xs leading-snug">
+                                {b === "uklada" ? <span className="text-ink-muted">ukládám…</span>
+                                  : b === "chyba" ? <span className="text-bad">neuloženo — zkontroluj číslo</span>
+                                  : b === "ok" ? <span className="flex items-center gap-1 font-medium text-good"><Ikona nazev="ok" trida="h-3.5 w-3.5" />uloženo</span> : null}
+                                {pred && (
+                                  <div className="text-ink-muted">
+                                    minule {fmt(pred.hodnota)} ({pred.datum.split("-").reverse().join("/")})
+                                    {h != null && <> · <span className={h < pred.hodnota ? "text-bad" : ""}>{h < pred.hodnota ? "menší než minule!" : `+${fmt(h - pred.hodnota)} ${d?.jednotka ?? ""}`}</span></>}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {radky.length === 0 ? (
             <p className="py-3 text-center text-sm text-ink-muted">Nemovitost zatím nemá nájemní smlouvu. Stavy můžeš zapsat jako průběžný odečet.</p>
           ) : (
@@ -330,102 +408,51 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                         </th>
                       );
                     })}
-                    {canEdit && <th className="w-24"><span className="sr-only">Akce</span></th>}
+                    {canEdit && <th className="w-10"><span className="sr-only">Upravit</span></th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {radky.map((r) => {
-                    const upravit = canEdit && jeOtevreny(r);
-                    return (
-                      <tr key={r.klic} className={`${upravit ? "!bg-accent-soft/40" : ""} ${r.budouci && !upravit ? "opacity-60" : ""}`}>
-                        <td className="align-top">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium">{nazevRadku(r)}</span>
-                            {r.budouci && <Badge>plánováno</Badge>}
-                            {jeNeuplny(r) && <Badge tone="warn">chybí stavy</Badge>}
-                          </div>
-                          {(r.udalost === "ZACATEK" || r.udalost === "KONEC") && <div className="text-xs text-ink-muted">{r.popis.split(" · ").slice(1).join(" · ")}</div>}
+                  {radky.map((r) => (
+                    <tr key={r.klic} onClick={() => canEdit && otevri(r.klic)}
+                      className={`${canEdit ? "cursor-pointer" : ""} ${r.klic === otevreny?.klic ? "!bg-accent-soft/60" : ""} ${r.budouci ? "opacity-60" : ""}`}>
+                      <td>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{nazevRadku(r)}</span>
+                          {r.budouci && <Badge>plánováno</Badge>}
+                          {jeNeuplny(r) && <Badge tone="warn">chybí stavy</Badge>}
+                        </div>
+                        {(r.udalost === "ZACATEK" || r.udalost === "KONEC") && <div className="text-xs text-ink-muted">{r.popis.split(" · ").slice(1).join(" · ")}</div>}
+                      </td>
+                      <td className="whitespace-nowrap tabular-nums">{datumRadku(r) ? datumRadku(r).split("-").reverse().join("/") : "—"}</td>
+                      {retezce.map((ret) => (
+                        <td key={ret[0].id} className="num whitespace-nowrap tabular-nums">
+                          {tarify(ret[0]).map((t) => {
+                            // Pri vymene ma stav stary i novy merak: "konecny → pocatecni"
+                            const hodnotyRetezce = [...ret].reverse().map((m) => hodnota(r, m.id, t)).filter((h): h is number => h != null);
+                            const sp = spotreba(r, ret, t);
+                            return (
+                              <div key={t}>
+                                {ret[0].dvoutarif && <span className="mr-1 text-xs text-ink-muted">T{t}</span>}
+                                {hodnotyRetezce.length ? hodnotyRetezce.map(fmt).join(" → ") : <span className="text-ink-muted">—</span>}
+                                {sp != null && <div className="text-xs text-ink-muted">spotřeba {fmt(sp)}</div>}
+                              </div>
+                            );
+                          })}
                         </td>
-                        <td className="align-top whitespace-nowrap tabular-nums">
-                          {upravit && r.udalost !== "VYMENA" ? (
-                            <div className="w-36">
-                              <DatumPole key={r.klic} label="Datum odečtu" skrytLabel name={`datum-${r.klic}`} defaultValue={datumRadku(r)}
-                                onChange={(iso) => { if (iso) zmenDatum(r, iso); }} />
-                            </div>
-                          ) : datumRadku(r) ? datumRadku(r).split("-").reverse().join("/") : "—"}
+                      ))}
+                      {canEdit && (
+                        <td className="text-right">
+                          <span className="text-ink-muted" title="Upravit stavy"><Ikona nazev="pero" trida="h-4 w-4" /></span>
                         </td>
-                        {retezce.map((ret) => {
-                          const vRadku = merakyRadku(ret, r);
-                          return (
-                            <td key={ret[0].id} className="num align-top whitespace-nowrap tabular-nums">
-                              {upravit ? (
-                                <div className="space-y-1.5">
-                                  {vRadku.map((m) => tarify(m).map((t) => {
-                                    const k = `${r.klic}|${m.id}|${t}`;
-                                    const h = hodnota(r, m.id, t);
-                                    const b = bunky[k];
-                                    const pred = predchozi(r, m.id, t);
-                                    const jednotka = DRUH_MERAKU_MAP.get(m.druh)?.jednotka ?? "";
-                                    const popisek = [m.dvoutarif ? `T${t}` : "", r.udalost === "VYMENA" ? (m.vymenenAt === datumRadku(r) ? "starý" : "nový") : ""].filter(Boolean).join(" ");
-                                    return (
-                                      <div key={k}>
-                                        <div className="flex items-center justify-end gap-2">
-                                          {popisek && <span className="text-xs font-medium text-ink-muted">{popisek}</span>}
-                                          <input key={`${k}|${h ?? ""}`} inputMode="decimal" defaultValue={h != null ? fmt(h) : ""} placeholder="stav"
-                                            aria-label={`${DRUH_MERAKU_MAP.get(m.druh)?.nazev ?? ""} ${popisek} — ${r.popis}`}
-                                            className={`input w-28 py-1.5 text-right tabular-nums ${b === "chyba" ? "!border-bad" : b === "ok" ? "!border-good" : ""}`}
-                                            onBlur={(e) => uloz(r, m.id, t, e.target.value)}
-                                            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
-                                        </div>
-                                        <div className="mt-0.5 text-xs">
-                                          {b === "uklada" ? <span className="text-ink-muted">ukládám…</span>
-                                            : b === "chyba" ? <span className="text-bad">neuloženo</span>
-                                            : h != null && pred ? <span className={h < pred.hodnota ? "text-bad" : "text-ink-muted"}>{h < pred.hodnota ? "menší než minule!" : `+${fmt(h - pred.hodnota)} ${jednotka}`}</span>
-                                            : pred ? <span className="text-ink-muted">minule {fmt(pred.hodnota)}</span> : null}
-                                        </div>
-                                      </div>
-                                    );
-                                  }))}
-                                  {vRadku.length === 0 && <span className="text-ink-muted">—</span>}
-                                </div>
-                              ) : (
-                                tarify(ret[0]).map((t) => {
-                                  // Pri vymene ma stav stary i novy merak: "konecny → pocatecni"
-                                  const hodnotyRetezce = [...ret].reverse().map((m) => hodnota(r, m.id, t)).filter((h): h is number => h != null);
-                                  const sp = spotreba(r, ret, t);
-                                  return (
-                                    <div key={t}>
-                                      {ret[0].dvoutarif && <span className="mr-1 text-xs text-ink-muted">T{t}</span>}
-                                      {hodnotyRetezce.length ? hodnotyRetezce.map(fmt).join(" → ") : <span className="text-ink-muted">—</span>}
-                                      {sp != null && <div className="text-xs text-ink-muted">spotřeba {fmt(sp)}</div>}
-                                    </div>
-                                  );
-                                })
-                              )}
-                            </td>
-                          );
-                        })}
-                        {canEdit && (
-                          <td className="align-top text-right">
-                            {upravit ? (
-                              !jeNeuplny(r) && <button type="button" className="btn py-1 text-sm" onClick={() => otevri(r.klic, false)}>Hotovo</button>
-                            ) : (
-                              <button type="button" className="text-ink-muted hover:text-accent" aria-label="Upravit stavy" title="Upravit stavy"
-                                onClick={() => otevri(r.klic)}>
-                                <Ikona nazev="pero" trida="h-4 w-4" />
-                              </button>
-                            )}
-                          </td>
-                        )}
-                      </tr>
-                    );
-                  })}
+                      )}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
           <p className="mt-2 text-xs text-ink-muted">
-            Řádky s chybějícími stavy mají políčka rovnou; ostatní upravíš tužkou. Hodnota se uloží sama po opuštění políčka (nebo Enter)
+            Kliknutím na řádek ho otevřeš k zápisu nebo úpravě. Hodnota se uloží sama po opuštění políčka (nebo Enter)
             a stav při vrácení se ve stejný den doplní i k předání dalšímu nájemci. Prodloužení smlouvy téhož nájemníka se nepředává.
           </p>
         </SbalitelnaKarta>
