@@ -8,8 +8,11 @@ import { DatumPole } from "./DatumPole";
 import { Ikona, type NazevIkony } from "./Ikony";
 import { Badge, Card } from "./Stat";
 
-export interface MerakRadek { id: string; druh: string; nazev: string | null; cislo: string | null; aktivni: boolean }
-export interface StavRadek { id: string; merakId: string; leaseId: string | null; udalost: string; datum: string; hodnota: number }
+export interface MerakRadek { id: string; druh: string; nazev: string | null; cislo: string | null; aktivni: boolean; dvoutarif: boolean }
+export interface StavRadek { id: string; merakId: string; leaseId: string | null; udalost: string; datum: string; hodnota: number | null; hodnota2: number | null }
+
+/** Ctene hodnoty meraku: dvoutarif T1 a T2, jinak jedna. */
+const tarify = (m: MerakRadek): (1 | 2)[] => (m.dvoutarif ? [1, 2] : [1]);
 
 /** Radek protokolu: udalost najmu, nebo jiny odecet (dany dnem). */
 interface Radek {
@@ -68,23 +71,25 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
 
   const stav = (r: Radek, merakId: string) => stavy.find((s) => s.merakId === merakId && s.udalost === r.udalost
     && (r.leaseId ? s.leaseId === r.leaseId : s.leaseId == null && s.datum === r.datum));
-  const hodnota = (r: Radek, merakId: string): number | null => {
-    const k = `${r.klic}|${merakId}`;
-    return k in hodnoty ? hodnoty[k] : stav(r, merakId)?.hodnota ?? null;
+  const hodnota = (r: Radek, merakId: string, tarif: 1 | 2 = 1): number | null => {
+    const k = `${r.klic}|${merakId}|${tarif}`;
+    const s = stav(r, merakId);
+    return k in hodnoty ? hodnoty[k] : (tarif === 2 ? s?.hodnota2 : s?.hodnota) ?? null;
   };
+  const chybiHodnota = (r: Radek, m: MerakRadek) => tarify(m).some((t) => hodnota(r, m.id, t) == null);
   const datumRadku = (r: Radek) => datumy[r.klic] ?? r.datum ?? "";
 
-  const uloz = (r: Radek, merakId: string, text: string) => {
-    const k = `${r.klic}|${merakId}`;
+  const uloz = (r: Radek, merakId: string, tarif: 1 | 2, text: string) => {
+    const k = `${r.klic}|${merakId}|${tarif}`;
     const n = cislo(text);
     if (Number.isNaN(n)) { setBunky((b) => ({ ...b, [k]: "chyba" })); return; }
-    if (n === hodnota(r, merakId)) return;
+    if (n === hodnota(r, merakId, tarif)) return;
     const datum = datumRadku(r);
     if (!datum) { setChyba("Nejdřív vyplň datum v řádku."); return; }
     setHodnoty((h) => ({ ...h, [k]: n }));
     setBunky((b) => ({ ...b, [k]: "uklada" }));
     spust(async () => {
-      const v = await ulozStav(propertyId, { merakId, leaseId: r.leaseId, udalost: r.udalost, datum, hodnota: n });
+      const v = await ulozStav(propertyId, { merakId, leaseId: r.leaseId, udalost: r.udalost, datum, hodnota: n, tarif });
       setBunky((b) => ({ ...b, [k]: v.error ? "chyba" : "ok" }));
       setChyba(v.error ?? null);
     });
@@ -94,7 +99,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
     const puvodni = datumRadku(r);
     setDatumy((d) => ({ ...d, [r.klic]: datum }));
     if (!datum || datum === puvodni) return;
-    const maStavy = zobrazene.some((m) => hodnota(r, m.id) != null);
+    const maStavy = zobrazene.some((m) => tarify(m).some((t) => hodnota(r, m.id, t) != null));
     if (!maStavy) return;
     spust(async () => {
       const v = await zmenDatumUdalosti(propertyId, { leaseId: r.leaseId, udalost: r.udalost, puvodni, datum });
@@ -103,11 +108,11 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
   };
 
   // Spotreba za najem: vraceni minus predani teze smlouvy
-  const spotreba = (r: Radek, merakId: string) => {
+  const spotreba = (r: Radek, merakId: string, tarif: 1 | 2) => {
     if (r.udalost !== "KONEC" || !r.leaseId) return null;
-    const konec = hodnota(r, merakId);
+    const konec = hodnota(r, merakId, tarif);
     const zacatek = radky.find((x) => x.udalost === "ZACATEK" && x.leaseId === r.leaseId);
-    const z = zacatek ? hodnota(zacatek, merakId) : null;
+    const z = zacatek ? hodnota(zacatek, merakId, tarif) : null;
     return konec != null && z != null ? konec - z : null;
   };
 
@@ -152,7 +157,14 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                           {ikona(m.druh)}
                           <div>
                             <div className="font-medium leading-tight">{d?.nazev ?? m.druh}</div>
-                            <div className="text-xs text-ink-muted">{d?.jednotka}</div>
+                            {m.druh === "ELEKTRINA" ? (
+                              <select className="mt-0.5 bg-transparent text-xs text-ink-muted hover:text-ink-primary" value={m.dvoutarif ? "2" : "1"} disabled={!canEdit}
+                                aria-label="Tarif elektroměru"
+                                onChange={(e) => spust(async () => { await upravMerak(m.id, { dvoutarif: e.target.value === "2" }); })}>
+                                <option value="1">jednotarif · kWh</option>
+                                <option value="2">dvoutarif T1 + T2 · kWh</option>
+                              </select>
+                            ) : <div className="text-xs text-ink-muted">{d?.jednotka}</div>}
                           </div>
                         </div>
                       </td>
@@ -216,7 +228,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                       return (
                         <th key={m.id} className={`num ${m.aktivni ? "" : "opacity-60"}`}>
                           <span className="inline-flex items-center gap-1.5"><Ikona nazev={(d?.ikona ?? "tri") as NazevIkony} trida="h-3.5 w-3.5" />{d?.nazev}{m.nazev ? ` · ${m.nazev}` : ""}</span>
-                          <div className="font-normal normal-case tracking-normal">{d?.jednotka}{m.cislo ? ` · č. ${m.cislo}` : ""}{m.aktivni ? "" : " · vyřazený"}</div>
+                          <div className="font-normal normal-case tracking-normal">{m.dvoutarif ? "T1 / T2 · " : ""}{d?.jednotka}{m.cislo ? ` · č. ${m.cislo}` : ""}{m.aktivni ? "" : " · vyřazený"}</div>
                         </th>
                       );
                     })}
@@ -224,7 +236,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                 </thead>
                 <tbody>
                   {radky.map((r) => {
-                    const chybi = !r.budouci && zobrazene.some((m) => m.aktivni && hodnota(r, m.id) == null);
+                    const chybi = !r.budouci && zobrazene.some((m) => m.aktivni && chybiHodnota(r, m));
                     return (
                       <tr key={r.klic} className={r.budouci ? "opacity-60" : ""}>
                         <td className="align-top">
@@ -239,24 +251,34 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                               onChange={(iso) => { if (iso && canEdit) zmenDatum(r, iso); }} />
                           </div>
                         </td>
-                        {zobrazene.map((m) => {
-                          const k = `${r.klic}|${m.id}`;
-                          const h = hodnota(r, m.id);
-                          const sp = spotreba(r, m.id);
-                          const b = bunky[k];
-                          return (
-                            <td key={m.id} className="num align-top">
-                              <input key={`${k}|${h ?? ""}`} inputMode="decimal" defaultValue={h != null ? fmt(h) : ""} disabled={!canEdit || (!m.aktivni && h == null)}
-                                aria-label={`${DRUH_MERAKU_MAP.get(m.druh)?.nazev ?? ""} — ${r.popis}`}
-                                className={`input ml-auto w-32 py-1.5 text-right tabular-nums ${b === "chyba" ? "!border-bad" : ""}`}
-                                onBlur={(e) => uloz(r, m.id, e.target.value)}
-                                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
-                              <div className="mt-1 h-4 text-xs text-ink-muted">
-                                {b === "uklada" ? "ukládám…" : b === "chyba" ? <span className="text-bad">neuloženo</span> : sp != null ? `spotřeba ${fmt(sp)} ${DRUH_MERAKU_MAP.get(m.druh)?.jednotka ?? ""}` : b === "ok" ? <span className="text-good">uloženo</span> : ""}
-                              </div>
-                            </td>
-                          );
-                        })}
+                        {zobrazene.map((m) => (
+                          <td key={m.id} className="num align-top">
+                            <div className="space-y-1.5">
+                              {tarify(m).map((t) => {
+                                const k = `${r.klic}|${m.id}|${t}`;
+                                const h = hodnota(r, m.id, t);
+                                const sp = spotreba(r, m.id, t);
+                                const b = bunky[k];
+                                const jednotka = DRUH_MERAKU_MAP.get(m.druh)?.jednotka ?? "";
+                                return (
+                                  <div key={t}>
+                                    <div className="flex items-center justify-end gap-2">
+                                      {m.dvoutarif && <span className="w-5 text-xs font-medium text-ink-muted">T{t}</span>}
+                                      <input key={`${k}|${h ?? ""}`} inputMode="decimal" defaultValue={h != null ? fmt(h) : ""} disabled={!canEdit || (!m.aktivni && h == null)}
+                                        aria-label={`${DRUH_MERAKU_MAP.get(m.druh)?.nazev ?? ""}${m.dvoutarif ? ` T${t}` : ""} — ${r.popis}`}
+                                        className={`input w-32 py-1.5 text-right tabular-nums ${b === "chyba" ? "!border-bad" : ""}`}
+                                        onBlur={(e) => uloz(r, m.id, t, e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+                                    </div>
+                                    <div className="mt-0.5 h-4 text-xs text-ink-muted">
+                                      {b === "uklada" ? "ukládám…" : b === "chyba" ? <span className="text-bad">neuloženo</span> : sp != null ? `spotřeba ${fmt(sp)} ${jednotka}` : b === "ok" ? <span className="text-good">uloženo</span> : ""}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        ))}
                       </tr>
                     );
                   })}

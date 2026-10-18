@@ -858,6 +858,8 @@ model Merak {
   /// Vyrobni cislo meridla
   cislo      String?
   poradi     Int          @default(0)
+  /// Elektromer s dvoutarifem: stav ma T1 (vysoky tarif) a T2 (nizky tarif)
+  dvoutarif  Boolean  @default(false)
   /// Vymeneny nebo zruseny merak: zustava kvuli historii, nove stavy se k nemu nezapisuji
   aktivni    Boolean      @default(true)
   createdAt  DateTime     @default(now())
@@ -876,7 +878,10 @@ model StavMeraku {
   /// ZACATEK | KONEC | ODECET
   udalost   String
   datum     DateTime
-  hodnota   Float
+  /// Stav (u dvoutarifu T1 — vysoky tarif)
+  hodnota   Float?
+  /// U dvoutarifu T2 — nizky tarif
+  hodnota2  Float?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

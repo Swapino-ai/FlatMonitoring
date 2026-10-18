@@ -28,11 +28,11 @@ export async function pridejMerak(propertyId: string, druh: string): Promise<{ e
   return { id: m.id };
 }
 
-export async function upravMerak(id: string, data: { nazev?: string | null; cislo?: string | null; aktivni?: boolean }): Promise<{ error?: string }> {
+export async function upravMerak(id: string, data: { nazev?: string | null; cislo?: string | null; aktivni?: boolean; dvoutarif?: boolean }): Promise<{ error?: string }> {
   const chyba = await smiMenit();
   if (chyba) return { error: chyba };
   const cist = (v: string | null | undefined) => (v === undefined ? undefined : v?.trim() || null);
-  const m = await prisma.merak.update({ where: { id }, data: { nazev: cist(data.nazev), cislo: cist(data.cislo), aktivni: data.aktivni } });
+  const m = await prisma.merak.update({ where: { id }, data: { nazev: cist(data.nazev), cislo: cist(data.cislo), aktivni: data.aktivni, dvoutarif: data.dvoutarif } });
   obnov(m.propertyId);
   return {};
 }
@@ -50,13 +50,14 @@ export async function smazMerak(id: string): Promise<{ error?: string }> {
 }
 
 /**
- * Zapise stav meraku k udalosti najmu (predani / vraceni). Prazdna hodnota stav smaze.
+ * Zapise stav meraku k udalosti najmu (predani / vraceni). U dvoutarifu se T1 a T2 pisou
+ * zvlast (tarif 1 / 2). Kdyz zmizi obe hodnoty, stav se smaze.
  * Predani dalsimu najemci ve stejny den ma stejne stavy — kdyz tam jeste nic neni,
  * doplni se tam taky, at se nemusi psat dvakrat.
  */
 export async function ulozStav(propertyId: string, v: {
   merakId: string; leaseId: string | null; udalost: "ZACATEK" | "KONEC" | "ODECET";
-  datum: string; hodnota: number | null; stavId?: string;
+  datum: string; hodnota: number | null; stavId?: string; tarif?: 1 | 2;
 }): Promise<{ error?: string; id?: string }> {
   const chyba = await smiMenit();
   if (chyba) return { error: chyba };
@@ -74,14 +75,20 @@ export async function ulozStav(propertyId: string, v: {
         : { merakId: v.merakId, leaseId: null, udalost: v.udalost, datum },
     });
 
-  if (v.hodnota == null || !Number.isFinite(v.hodnota)) {
-    if (existujici) await prisma.stavMeraku.delete({ where: { id: existujici.id } });
+  const pole = v.tarif === 2 ? "hodnota2" : "hodnota";
+  const hodnota = v.hodnota != null && Number.isFinite(v.hodnota) ? v.hodnota : null;
+  if (hodnota == null) {
+    if (existujici) {
+      const druhe = pole === "hodnota" ? existujici.hodnota2 : existujici.hodnota;
+      if (druhe == null) await prisma.stavMeraku.delete({ where: { id: existujici.id } });
+      else await prisma.stavMeraku.update({ where: { id: existujici.id }, data: { [pole]: null } });
+    }
     obnov(propertyId);
     return {};
   }
   const ulozeny = existujici
-    ? await prisma.stavMeraku.update({ where: { id: existujici.id }, data: { hodnota: v.hodnota, datum } })
-    : await prisma.stavMeraku.create({ data: { merakId: v.merakId, leaseId: v.leaseId, udalost: v.udalost, datum, hodnota: v.hodnota } });
+    ? await prisma.stavMeraku.update({ where: { id: existujici.id }, data: { [pole]: hodnota, datum } })
+    : await prisma.stavMeraku.create({ data: { merakId: v.merakId, leaseId: v.leaseId, udalost: v.udalost, datum, [pole]: hodnota } });
 
   // Vraceni a predani dalsimu najemci tyz den: stejny stav
   if (v.udalost !== "ODECET") {
@@ -92,7 +99,8 @@ export async function ulozStav(propertyId: string, v: {
     });
     for (const s of smlouvy) {
       const ma = await prisma.stavMeraku.findFirst({ where: { merakId: v.merakId, leaseId: s.id, udalost: druha } });
-      if (!ma) await prisma.stavMeraku.create({ data: { merakId: v.merakId, leaseId: s.id, udalost: druha, datum, hodnota: v.hodnota } });
+      if (!ma) await prisma.stavMeraku.create({ data: { merakId: v.merakId, leaseId: s.id, udalost: druha, datum, [pole]: hodnota } });
+      else if (ma[pole] == null) await prisma.stavMeraku.update({ where: { id: ma.id }, data: { [pole]: hodnota } });
     }
   }
   obnov(propertyId);
