@@ -28,11 +28,11 @@ export async function pridejMerak(propertyId: string, druh: string): Promise<{ e
   return { id: m.id };
 }
 
-export async function upravMerak(id: string, data: { nazev?: string | null; cislo?: string | null; aktivni?: boolean; dvoutarif?: boolean; svjCislo?: string | null; svjByt?: string | null }): Promise<{ error?: string }> {
+export async function upravMerak(id: string, data: { nazev?: string | null; cislo?: string | null; aktivni?: boolean; dvoutarif?: boolean }): Promise<{ error?: string }> {
   const chyba = await smiMenit();
   if (chyba) return { error: chyba };
   const cist = (v: string | null | undefined) => (v === undefined ? undefined : v?.trim() || null);
-  const m = await prisma.merak.update({ where: { id }, data: { nazev: cist(data.nazev), cislo: cist(data.cislo), aktivni: data.aktivni, dvoutarif: data.dvoutarif, svjCislo: cist(data.svjCislo), svjByt: cist(data.svjByt) } });
+  const m = await prisma.merak.update({ where: { id }, data: { nazev: cist(data.nazev), cislo: cist(data.cislo), aktivni: data.aktivni, dvoutarif: data.dvoutarif } });
   obnov(m.propertyId);
   return {};
 }
@@ -156,5 +156,14 @@ export async function vymenMerak(propertyId: string, v: {
   });
   obnov(propertyId);
   revalidatePath(`/properties/${propertyId}`);
+  return {};
+}
+
+/** Cislo bytu nemovitosti v Evidenci SVJ — meraky se tam dohledaji podle svych vyrobnich cisel. */
+export async function nastavSvjByt(propertyId: string, byt: string): Promise<{ error?: string }> {
+  const chyba = await smiMenit();
+  if (chyba) return { error: chyba };
+  await prisma.property.update({ where: { id: propertyId }, data: { svjByt: byt.trim() || null } });
+  obnov(propertyId);
   return {};
 }

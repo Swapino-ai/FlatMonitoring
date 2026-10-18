@@ -36,8 +36,8 @@ export default async function MerakyPage({ params }: { params: Promise<{ id: str
           propertyId={id}
           canEdit={canEdit}
           meraky={property.meraky.map((m) => ({ id: m.id, druh: m.druh, nazev: m.nazev, cislo: m.cislo, aktivni: m.aktivni, dvoutarif: m.dvoutarif,
-            nahrazujeId: m.nahrazujeId, vymenenAt: m.vymenenAt ? denISO(m.vymenenAt) : null,
-            svjCislo: m.svjCislo, svjByt: m.svjByt }))}
+            nahrazujeId: m.nahrazujeId, vymenenAt: m.vymenenAt ? denISO(m.vymenenAt) : null }))}
+          svjByt={property.svjByt}
           svj={svj}
           svjNastaveno={svjNastaveno()}
           udalosti={udalostiNajmu(property.leases)}

@@ -131,7 +131,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       scanRadiusKm: x.scanRadiusKm == null ? null : c(x.scanRadiusKm),
       excludedCities: s(x.excludedCities),
       sledovatTrh: x.sledovatTrh === true,
-      oceneniPodle: s(x.oceneniPodle), typDomu: s(x.typDomu), stavBytu: s(x.stavBytu), ...(x.vlastnosti != null ? { vlastnosti: x.vlastnosti } : {}),
+      oceneniPodle: s(x.oceneniPodle), svjByt: s(x.svjByt), typDomu: s(x.typDomu), stavBytu: s(x.stavBytu), ...(x.vlastnosti != null ? { vlastnosti: x.vlastnosti } : {}),
       disposition: s(x.disposition), areaM2: c(x.areaM2),
       floor: x.floor == null ? null : Math.round(c(x.floor)),
       hasBalcony: !!x.hasBalcony, hasCellar: !!x.hasCellar, hasParking: !!x.hasParking,

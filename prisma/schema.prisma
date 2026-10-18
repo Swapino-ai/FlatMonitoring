@@ -146,6 +146,8 @@ model Property {
   cadastre         CadastreRecord?
   zarazeniInzeratu ZarazeniInzeratu[]
   meraky           Merak[]
+  /// Cislo bytu v Evidenci SVJ: meraky se tam dohledaji podle vyrobniho cisla
+  svjByt           String?
 }
 
 /// Hypoteka / uver — "zda vazne dluh na nich"
@@ -858,10 +860,6 @@ model Merak {
   /// Vyrobni cislo meridla
   cislo       String?
   poradi      Int          @default(0)
-  /// Cislo meraku v Evidenci SVJ (externi rozhrani); stavy se odtud prebiraji samy
-  svjCislo    String?
-  /// Byt v Evidenci SVJ — kdyz je stejne cislo meraku u vic bytu
-  svjByt      String?
   /// Elektromer s dvoutarifem: stav ma T1 (vysoky tarif) a T2 (nizky tarif)
   dvoutarif   Boolean      @default(false)
   /// Vymena: novy merak odkazuje na ten, ktery nahradil (spotreba se pocita pres oba)

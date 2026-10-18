@@ -113,25 +113,30 @@ export interface SvjStavMeraku {
 }
 
 /**
- * Prevezme odecty ze SVJ k merakum nemovitosti, ktere maji cislo v SVJ. Bezi pri
+ * Prevezme odecty ze SVJ k merakum nemovitosti: kdyz ma nemovitost cislo bytu v SVJ,
+ * kazdy aktivni merak s vyrobnim cislem se tam dohleda podle nej. Bezi pri
  * otevreni stranky (diky cache nejvys jednou za 5 minut na merak). Nikdy nevyhodi chybu.
  */
 export async function synchronizujSvj(propertyId: string): Promise<Record<string, SvjStavMeraku>> {
   const vysledek: Record<string, SvjStavMeraku> = {};
   try {
+    // Byt v SVJ je nastaveny u nemovitosti; meraky se hledaji podle vyrobniho cisla
+    const nemovitost = await prisma.property.findUnique({ where: { id: propertyId }, select: { svjByt: true } });
+    if (!nemovitost?.svjByt) return vysledek;
+    const byt = nemovitost.svjByt;
     const meraky = await prisma.merak.findMany({
-      where: { propertyId, aktivni: true, svjCislo: { not: null } },
+      where: { propertyId, aktivni: true, cislo: { not: null } },
       include: { stavy: { select: { datum: true, udalost: true, leaseId: true } } },
     });
     if (!meraky.length) return vysledek;
     const smlouvy = await prisma.lease.findMany({ where: { propertyId }, select: { id: true, startDate: true, endDate: true } });
 
     for (const m of meraky) {
-      const odp = await nactiMerakSvj(m.svjCislo!, 500);
+      const odp = await nactiMerakSvj(m.cislo!.trim(), 500);
       if (!odp.ok) { vysledek[m.id] = { posledni: null, chyba: POPIS_CHYBY_SVJ[odp.chyba], prevzato: 0 }; continue; }
-      const svj = vyberMerak(odp.meraky, m.svjByt);
+      const svj = vyberMerak(odp.meraky, byt);
       if (!svj) {
-        vysledek[m.id] = { posledni: null, chyba: m.svjByt ? `stav nedostupný — v SVJ není měřák ${m.svjCislo} u bytu ${m.svjByt}` : POPIS_CHYBY_SVJ.nenalezen, prevzato: 0 };
+        vysledek[m.id] = { posledni: null, chyba: `stav nedostupný — v SVJ není měřák č. ${m.cislo} u bytu ${byt}`, prevzato: 0 };
         continue;
       }
       const k = prevodJednotky(svj.jednotka, DRUH_MERAKU_MAP.get(m.druh)?.jednotka ?? "");
