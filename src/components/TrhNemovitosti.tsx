@@ -13,6 +13,7 @@ import { SwipeNavrhy } from "./SwipeNavrhy";
 import { AiInfo } from "./AiInfo";
 import { CenyAShody, type ShodaRadku } from "./CenyAShody";
 import { Galerie, type PolozkaGalerie } from "./Galerie";
+import { DatumSkenu } from "./DatumSkenu";
 import type { AiNahled } from "@/lib/market/aiNahled";
 import { profilTypu } from "@/lib/market/profily";
 
@@ -116,9 +117,10 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
   const [polohaPro, setPolohaPro] = useState<RadekTrhu | null>(null);
   const [sken, setSken] = useState("");
   const [swipe, setSwipe] = useState(false);
-  const [galerie, setGalerie] = useState<PolozkaGalerie[] | null>(null);
+  const [galerie, setGalerieStav] = useState<{ polozky: PolozkaGalerie[]; naskenovano: string } | null>(null);
   // Galerie inzeratu: nejnovejsi screenshot stranky jako prvni, pak fotky
   const fotkyRadku = (r: RadekTrhu) => ((r.fotky?.length ?? 0) > 0 ? r.fotky!.map((id) => `/api/snimek/${id}`) : r.fotkyUrl ?? []);
+  const otevriGalerii = (r: RadekTrhu) => setGalerieStav({ polozky: polozkyGalerie(r), naskenovano: r.firstSeen });
   const polozkyGalerie = (r: RadekTrhu): PolozkaGalerie[] => [
     ...(r.snimky[0] ? [{ src: `/api/snimek/${r.snimky[0].id}`, popis: `Screenshot stránky ${dateCz(r.snimky[0].createdAt)}`, posouvat: true }] : []),
     ...fotkyRadku(r).map((src) => ({ src })),
@@ -228,7 +230,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
     <span className="flex shrink-0 items-center gap-2 text-xs">
       {r.url && !r.url.includes("/x/x/") && <a href={r.url} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">Inzerát ↗</a>}
       {fotkyRadku(r).length > 0 && (
-        <button type="button" onClick={() => setGalerie(polozkyGalerie(r))} className="text-accent hover:underline">Fotky ({fotkyRadku(r).length})</button>
+        <button type="button" onClick={() => otevriGalerii(r)} className="text-accent hover:underline">Fotky ({fotkyRadku(r).length})</button>
       )}
       {r.snimky.map((s, k) => (
         <a key={s.id} href={`/api/snimek/${s.id}`} target="_blank" rel="noreferrer" className="text-accent hover:underline" title={`Screenshot z ${dateCz(s.createdAt)}`}>
@@ -472,9 +474,10 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
                 {(() => {
                   const fotky = fotkyRadku(r);
                   return fotky.length > 0 || r.snimky[0] ? (
-                    <button type="button" onClick={() => setGalerie(polozkyGalerie(r))} className="relative hidden h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:block" title="Fotky inzerátu">
+                    <button type="button" onClick={() => otevriGalerii(r)} className="relative hidden h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:block" title="Fotky inzerátu">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={fotky[0] ?? `/api/snimek/${r.snimky[0]!.id}`} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover object-top" />
+                      <DatumSkenu datum={r.firstSeen} />
                       <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[10px] text-white">{polozkyGalerie(r).length}</span>
                     </button>
                   ) : <div className="hidden h-20 w-28 shrink-0 rounded-lg bg-surface-sunken sm:block" />;
@@ -592,7 +595,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
           onKonec={(zmeneno) => { setSwipe(false); if (zmeneno) router.refresh(); }} />
       )}
 
-      {galerie && <Galerie polozky={galerie} onZavrit={() => setGalerie(null)} />}
+      {galerie && <Galerie polozky={galerie.polozky} naskenovano={galerie.naskenovano} onZavrit={() => setGalerieStav(null)} />}
 
       {/* Historie podle prepinace: prodej = oceneni hodnoty, najem = odhady najmu */}
       {najem ? historieNajem : historieProdej}

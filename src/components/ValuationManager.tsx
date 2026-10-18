@@ -4,7 +4,7 @@ import { Fragment, useActionState, useState } from "react";
 import { addValuation, deleteValuation, type ValuationFormState } from "@/lib/valuationActions";
 import { czk, dateCz } from "@/lib/format";
 import { DatumPole } from "./DatumPole";
-import { Comparables, type Nabidka } from "./Comparables";
+import { Comparables, type InfoNabidky, type Nabidka } from "./Comparables";
 
 interface Row {
   id: string; date: Date; value: number; pricePerM2: number | null;
@@ -20,16 +20,15 @@ const SOURCE_LABELS: Record<string, string> = {
   INDEX: "index",
 };
 
-export function ValuationManager({ propertyId, valuations, areaM2, canEdit, vyrazene = [], fotky, snimky }: {
+export function ValuationManager({ propertyId, valuations, areaM2, canEdit, vyrazene = [], inzeraty }: {
   propertyId: string;
   valuations: Row[];
   areaM2: number;
   canEdit: boolean;
   /** Klíče nabídek, které uživatel z odhadu vyřadil. */
   vyrazene?: string[];
-  /** Fotky nabidek ke starsim snimkum (klic nabidky -> adresa) */
-  fotky?: Record<string, string>;
-  snimky?: Record<string, string>;
+  /** Fotky, screenshot a datum naskenovani nabidek (klic nabidky -> udaje) */
+  inzeraty?: Record<string, InfoNabidky>;
 }) {
   // Ktere oceneni si uzivatel rozkliknul pro zobrazeni srovnatelnych nabidek
   const [otevrene, setOtevrene] = useState<string | null>(null);
@@ -114,8 +113,7 @@ export function ValuationManager({ propertyId, valuations, areaM2, canEdit, vyra
                           propertyId={propertyId}
                           vyrazene={vyrazene}
                           canEdit={canEdit}
-                          fotky={fotky}
-                          snimky={snimky}
+                          inzeraty={inzeraty}
                         />
                       </td>
                     </tr>

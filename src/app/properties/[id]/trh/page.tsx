@@ -5,6 +5,7 @@ import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Card } from "@/components/Stat";
 import { ValuationManager } from "@/components/ValuationManager";
+import type { InfoNabidky } from "@/components/Comparables";
 import { RentHistory } from "@/components/RentHistory";
 import { HlavickaNemovitosti } from "@/components/HlavickaNemovitosti";
 import { TrhNemovitosti, type OdhadPanel, type RadekTrhu } from "@/components/TrhNemovitosti";
@@ -140,16 +141,22 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
   // Starsi snimky ocenění v sobe fotky nemaji: doplni se z databaze trhu podle id inzeratu
   const idNabidek = [...new Set(property.valuations.flatMap((v) => (Array.isArray(v.comparables) ? v.comparables : [])
     .map((n) => String((n as { url?: string }).url ?? "").match(/\/(\d+)\/?$/)?.[1]).filter((x): x is string => !!x)))];
-  const fotkyNabidek: Record<string, string> = {};
-  const snimkyNabidek: Record<string, string> = {};
+  const inzeratyNabidek: Record<string, InfoNabidky> = {};
   if (idNabidek.length) {
     for (const i of await prisma.inzerat.findMany({
       where: { externalId: { in: idNabidek } },
-      select: { source: true, externalId: true, fotkyUrl: true, snimky: { where: { druh: "SNIMEK" }, orderBy: { createdAt: "desc" }, take: 1, select: { id: true } } },
+      select: {
+        source: true, externalId: true, fotkyUrl: true, firstSeenAt: true,
+        snimky: { where: { druh: { in: ["SNIMEK", "FOTO"] } }, orderBy: [{ poradi: "asc" }, { createdAt: "desc" }], select: { id: true, druh: true, createdAt: true } },
+      },
     })) {
-      const k = `${i.source}|${i.externalId}`;
-      if (i.fotkyUrl[0]) fotkyNabidek[k] = i.fotkyUrl[0];
-      if (i.snimky[0]) snimkyNabidek[k] = i.snimky[0].id;
+      const ulozene = i.snimky.filter((s) => s.druh === "FOTO").map((s) => `/api/snimek/${s.id}`);
+      const snimek = i.snimky.filter((s) => s.druh === "SNIMEK").sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+      inzeratyNabidek[`${i.source}|${i.externalId}`] = {
+        fotky: ulozene.length ? ulozene : i.fotkyUrl,
+        snimek: snimek ? { id: snimek.id, datum: snimek.createdAt.toISOString() } : null,
+        naskenovano: i.firstSeenAt.toISOString(),
+      };
     }
   }
   const skenovatelne = !!NEMOVITOST_MAP.get(property.type)?.srealityCesta;
@@ -169,7 +176,7 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
           radky={radky} diag={diag} odhady={{ SALE: odhad("SALE"), RENT: odhad("RENT") }}
           historieProdej={
             <Card title="Historie ocenění">
-              <ValuationManager propertyId={id} valuations={property.valuations} areaM2={property.areaM2} canEdit={canEdit} vyrazene={[]} fotky={fotkyNabidek} snimky={snimkyNabidek} />
+              <ValuationManager propertyId={id} valuations={property.valuations} areaM2={property.areaM2} canEdit={canEdit} vyrazene={[]} inzeraty={inzeratyNabidek} />
             </Card>
           }
           historieNajem={

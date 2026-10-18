@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { czk, dateCz } from "@/lib/format";
 import { vazenyMedian } from "@/lib/market/zarazeni";
-import { Galerie } from "./Galerie";
+import { Galerie, type PolozkaGalerie } from "./Galerie";
+import { DatumSkenu } from "./DatumSkenu";
 
 export interface Nabidka {
   disposition: string | null;
@@ -44,7 +45,17 @@ function klicNabidky(n: Nabidka): string | null {
  * Nabidky, ze kterych medián vznikl. Bez nich je ocenění černá skříňka —
  * tohle ukáže, s čím přesně se byt porovnával.
  */
-export function Comparables({ nabidky, tvojeKcM2, datumOceneni, poznamka, fotky = {}, snimky = {} }: {
+/** Udaje inzeratu z databaze trhu k nabidce v ocenění. */
+export interface InfoNabidky {
+  /** Fotky galerie (ulozene nebo odkazy na portal) */
+  fotky: string[];
+  /** Nejnovejsi screenshot stranky */
+  snimek: { id: string; datum: string } | null;
+  /** Kdy sken inzerat poprve nasel */
+  naskenovano: string;
+}
+
+export function Comparables({ nabidky, tvojeKcM2, datumOceneni, poznamka, inzeraty = {} }: {
   nabidky: Nabidka[];
   /** Odhad za m² (vážený průměr) */
   tvojeKcM2: number;
@@ -52,16 +63,15 @@ export function Comparables({ nabidky, tvojeKcM2, datumOceneni, poznamka, fotky 
   datumOceneni: Date | string;
   /** Poznámka od ocenění — nese i to, v jakém okruhu se hledalo. */
   poznamka?: string | null;
-  /** Fotky ke starším snímkům, které je v sobě nemají (klíč nabídky → adresa). */
-  fotky?: Record<string, string>;
-  /** Nejnovější screenshot stránky nabídky (klíč nabídky → id snímku). */
-  snimky?: Record<string, string>;
+  /** Fotky, screenshot a datum naskenování nabídek (klíč nabídky → údaje). */
+  inzeraty?: Record<string, InfoNabidky>;
   propertyId?: string;
   vyrazene?: string[];
   canEdit?: boolean;
 }) {
   const [vse, setVse] = useState(false);
-  const [otevreny, setOtevreny] = useState<string | null>(null);
+  // Otevrena galerie nabidky: screenshot stranky jako prvni, pak fotky
+  const [otevreny, setOtevreny] = useState<{ polozky: PolozkaGalerie[]; naskenovano: string } | null>(null);
 
   if (nabidky.length === 0) {
     return (
@@ -127,17 +137,25 @@ export function Comparables({ nabidky, tvojeKcM2, datumOceneni, poznamka, fotky 
         {zobrazene.map((n, i) => {
           const rozdil = tvojeKcM2 ? ((n.pricePerM2 - tvojeKcM2) / tvojeKcM2) * 100 : 0;
           const klic = klicNabidky(n);
-          const fotka = n.fotka ?? (klic ? fotky[klic] : undefined);
-          const snimek = klic ? snimky[klic] : undefined;
+          const info = klic ? inzeraty[klic] : undefined;
+          const fotka = n.fotka ?? info?.fotky[0];
+          const naskenovano = info?.naskenovano ?? n.scrapedAt;
+          const polozky: PolozkaGalerie[] = [
+            ...(info?.snimek ? [{ src: `/api/snimek/${info.snimek.id}`, popis: `Screenshot stránky ${dateCz(info.snimek.datum)}`, posouvat: true }] : []),
+            ...(info?.fotky ?? (fotka ? [fotka] : [])).map((src) => ({ src })),
+          ];
+          const otevri = () => polozky.length && setOtevreny({ polozky, naskenovano });
+          const snimek = info?.snimek;
           return (
             <div key={i} className={`overflow-hidden rounded-card border bg-surface-card ${Math.abs(rozdil) < 2 ? "border-accent/60" : "border-line"}`}>
-              <button type="button" disabled={!snimek} onClick={() => snimek && setOtevreny(snimek)}
-                className="relative block aspect-[4/3] w-full bg-surface-sunken disabled:cursor-default" title={snimek ? "Zobrazit screenshot stránky" : undefined}>
+              <button type="button" disabled={!polozky.length} onClick={otevri}
+                className="relative block aspect-[4/3] w-full bg-surface-sunken disabled:cursor-default" title={polozky.length ? "Zobrazit screenshot a fotky" : undefined}>
                 {fotka && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={fotka} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
                 )}
-                {Math.abs(rozdil) < 2 && <span className="absolute left-2 top-2 rounded bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-white">≈ odhad</span>}
+                <DatumSkenu datum={naskenovano} />
+                {Math.abs(rozdil) < 2 && <span className="absolute right-2 top-2 rounded bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-white">≈ odhad</span>}
               </button>
               <div className="p-3">
                 <div className="flex items-baseline justify-between gap-2">
@@ -153,7 +171,7 @@ export function Comparables({ nabidky, tvojeKcM2, datumOceneni, poznamka, fotky 
                 <div className="flex items-center justify-between gap-2 text-xs">
                   <span className="tabular-nums text-ink-secondary">{czk(n.price)} celkem</span>
                   {snimek
-                    ? <button type="button" onClick={() => setOtevreny(snimek)} className="text-accent hover:underline">screenshot →</button>
+                    ? <button type="button" onClick={otevri} className="text-accent hover:underline">screenshot →</button>
                     : <span className="text-ink-muted">bez screenshotu</span>}
                 </div>
               </div>
@@ -161,7 +179,7 @@ export function Comparables({ nabidky, tvojeKcM2, datumOceneni, poznamka, fotky 
           );
         })}
       </div>
-      {otevreny && <Galerie polozky={[{ src: `/api/snimek/${otevreny}`, popis: "Screenshot stránky inzerátu", posouvat: true }]} rovnou={0} onZavrit={() => setOtevreny(null)} />}
+      {otevreny && <Galerie polozky={otevreny.polozky} naskenovano={otevreny.naskenovano} onZavrit={() => setOtevreny(null)} />}
 
       {serazene.length > 8 && (
         <button onClick={() => setVse(!vse)} className="btn w-full border-dashed text-ink-secondary">

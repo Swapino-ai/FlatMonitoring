@@ -45,3 +45,17 @@ export const STATUS_LABELS: Record<string, string> = {
   FOR_SALE: "Na prodej",
   SOLD: "Prodáno",
 };
+
+/** Jak dávno: "dnes", "včera", "před 5 dny", "před 3 týdny", "před 2 měsíci", "před 1 rokem". */
+export function stariCz(d: Date | string | null | undefined): string {
+  const iso = denISO(d);
+  if (!iso) return "";
+  const dny = Math.round((Date.parse(`${denISO(new Date())}T00:00:00Z`) - Date.parse(`${iso}T00:00:00Z`)) / 86400000);
+  if (dny <= 0) return "dnes";
+  if (dny === 1) return "včera";
+  if (dny < 14) return `před ${dny} dny`;
+  if (dny < 61) return `před ${Math.round(dny / 7)} týdny`;
+  if (dny < 365) return `před ${Math.round(dny / 30.4)} měsíci`;
+  const roky = Math.floor(dny / 365);
+  return roky === 1 ? "před rokem" : `před ${roky} lety`;
+}

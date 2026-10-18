@@ -6,6 +6,8 @@ import { CenyAShody } from "./CenyAShody";
 import { czk, dateCz } from "@/lib/format";
 import type { RadekTrhu } from "./TrhNemovitosti";
 import { AiInfo } from "./AiInfo";
+import { DatumSkenu } from "./DatumSkenu";
+import { Galerie } from "./Galerie";
 import type { Profil } from "@/lib/market/profily";
 
 /**
@@ -30,6 +32,8 @@ export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec, pr
   // ktere se pri dalsi karte samo prepne na dalsi inzerat
   const okno = useRef<Window | null>(null);
   const [nahled, setNahled] = useState(false);
+  // Otevrena galerie (index fotky); klavesy pak patri galerii, ne rozhodovani
+  const [galerie, setGalerie] = useState<number | null>(null);
   const platnyOdkaz = (u: string | null | undefined) => !!u && !u.includes("/x/x/");
   const otevriNahled = () => {
     if (!r || !platnyOdkaz(r.url)) return;
@@ -59,6 +63,7 @@ export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec, pr
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
+      if (galerie != null) return;
       if (e.key === "ArrowRight") rozhodni("ZARAZENO");
       else if (e.key === "ArrowLeft") rozhodni("VYRAZENO");
       else if (e.key === "ArrowDown") rozhodni("POZDEJI");
@@ -66,7 +71,7 @@ export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec, pr
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [rozhodni, onKonec, pocty]);
+  }, [rozhodni, onKonec, pocty, galerie]);
 
   const hotovo = !r;
   const d = r ? vzdalenost(r) : null;
@@ -132,10 +137,11 @@ export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec, pr
             {(r.fotkyUrl?.length ?? 0) > 0 && (
               <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1" onPointerDown={(e) => e.stopPropagation()}>
                 {r.fotkyUrl!.map((src, k) => (
-                  <a key={src} href={src} target="_blank" rel="noreferrer" className="shrink-0">
+                  <button key={src} type="button" onClick={() => setGalerie(k)} className="relative shrink-0">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={src} alt={`Fotka ${k + 1}`} loading="lazy" referrerPolicy="no-referrer" className="h-28 w-40 rounded-lg object-cover" />
-                  </a>
+                    {k === 0 && <DatumSkenu datum={r.firstSeen} />}
+                  </button>
                 ))}
               </div>
             )}
@@ -163,6 +169,9 @@ export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec, pr
               {nahled ? "Náhled je otevřený vedle a přepíná se s kartou" : "Otevřít náhled inzerátu vedle"}
             </button>
           </div>
+        )}
+        {galerie != null && r && (
+          <Galerie polozky={(r.fotkyUrl ?? []).map((src) => ({ src }))} rovnou={galerie} naskenovano={r.firstSeen} onZavrit={() => setGalerie(null)} />
         )}
         <p className="mt-3 text-center text-xs text-white/70">Táhni doprava = zařadit, doleva = vyřadit · klávesy ← → ↓</p>
       </div>
