@@ -408,7 +408,6 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                         </th>
                       );
                     })}
-                    {canEdit && <th className="w-10"><span className="sr-only">Upravit</span></th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -440,11 +439,6 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                           })}
                         </td>
                       ))}
-                      {canEdit && (
-                        <td className="text-right">
-                          <span className="text-ink-muted" title="Upravit stavy"><Ikona nazev="pero" trida="h-4 w-4" /></span>
-                        </td>
-                      )}
                     </tr>
                   ))}
                 </tbody>
