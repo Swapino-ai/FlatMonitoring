@@ -14,7 +14,7 @@ import type { Profil } from "@/lib/market/profily";
  * Prochazeni navrhu jeden po druhem: tahnout doprava = zaradit, doleva = vyradit,
  * dolu / "Pozdeji" = nechat na pak. Funguje mysi, prstem i sipkami.
  */
-export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec, profil }: {
+export function SwipeNavrhy({ propertyId, navrhy: navrhyNaZacatku, najem, vzdalenost, onKonec, profil }: {
   propertyId: string;
   navrhy: RadekTrhu[];
   najem: boolean;
@@ -22,6 +22,9 @@ export function SwipeNavrhy({ propertyId, navrhy, najem, vzdalenost, onKonec, pr
   onKonec: (zmeneno: boolean) => void;
   profil: Profil;
 }) {
+  // Seznam z okamziku otevreni: kazde rozhodnuti obnovi stranku a rozhodnute navrhy
+  // z ni zmizi — kdyby se bral zivy seznam, index by preskakoval a skoncilo by se v pulce
+  const [navrhy] = useState(navrhyNaZacatku);
   const [index, setIndex] = useState(0);
   const [posun, setPosun] = useState(0);
   const [odlet, setOdlet] = useState<"vlevo" | "vpravo" | null>(null);
