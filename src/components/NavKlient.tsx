@@ -17,6 +17,7 @@ const IKONY: Record<string, string> = {
   reporty: "M4 4h16v16H4zM8 16v-4M12 16V8M16 16v-6",
   sprava: "M4 6h9M19 6h1M4 12h3M13 12h7M4 18h11M21 18h-1M16 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M10 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M18 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
   vice: "M5 12h.01M12 12h.01M19 12h.01",
+  banka: "M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 21h18",
 };
 
 function Ikona({ nazev, trida = "h-[18px] w-[18px]" }: { nazev: string; trida?: string }) {
@@ -40,7 +41,7 @@ const LINKS = [
 
 // Uzivatele i provoz jsou schovane pod Spravou — v hlavnim menu by stinily
 // tomu, kvuli cemu se do aplikace chodi
-const OWNER_LINKS = [{ href: "/sprava", label: "Správa", ikona: "sprava" }];
+const OWNER_LINKS = [{ href: "/banka", label: "Banka", ikona: "banka" }, { href: "/sprava", label: "Správa", ikona: "sprava" }];
 
 /** Ve spodni liste na telefonu jsou jen ctyri nejdulezitejsi, zbytek pod "Vice". */
 const SPODNI = ["/", "/properties", "/cashflow", "/market"];

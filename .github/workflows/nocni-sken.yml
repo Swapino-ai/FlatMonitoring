@@ -57,6 +57,15 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: npm run sken
 
+      - name: Platby z banky (Fio) — stažení a spárování
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          # Token Fio jen pro cteni; bez nej se krok preskoci
+          FIO_TOKEN: ${{ secrets.FIO_TOKEN }}
+        run: npx tsx scripts/fio-sync.ts
+
       - name: Záloha dat
         if: always()
         env:

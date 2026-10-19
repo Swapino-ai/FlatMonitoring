@@ -245,6 +245,8 @@ model Lease {
   readings       SettlementReading[]
   statements     TenantStatement[]
   stavyMeraku    StavMeraku[]
+  /// Ucty, ze kterych najemce plati — aplikace se je nauci pri parovani bankovnich pohybu
+  uctyPlatce     String[]             @default([])
 }
 
 /// Penezni tok — prijmy i vydaje
@@ -730,6 +732,8 @@ model PravidelnaPlatba {
   paidAt     DateTime
   /// Skutecne zaplacena castka (kladna); rozdil proti predpisu je nedoplatek ci preplatek
   amount     Float
+  /// Bankovni pohyb, ktery platbu uhradil (automaticke parovani); null = zapsano rucne
+  pohybId    String?
   createdAt  DateTime @default(now())
 
   @@index([propertyId])
@@ -907,4 +911,36 @@ model StavMeraku {
 
   @@index([merakId, datum])
   @@index([leaseId])
+}
+
+/// Pohyb na bankovnim uctu (Fio). Prichozi platby se paruji na predpisy najmu, zaloh a vyuctovani.
+model BankovniPohyb {
+  id             String   @id @default(cuid())
+  /// "FIO:<id pohybu>" — kazdy pohyb jen jednou
+  bankaId        String   @unique
+  datum          DateTime
+  /// Kladne = prichozi, zaporne = odchozi
+  castka         Float
+  mena           String   @default("CZK")
+  /// "cislo/kod banky"
+  protiucet      String?
+  nazevProtiuctu String?
+  vs             String?
+  ks             String?
+  ss             String?
+  zprava         String?
+  typ            String?
+  /// NOVY | SPAROVANO | KE_KONTROLE | IGNOROVANO | VYDAJ
+  stav           String   @default("NOVY")
+  propertyId     String?
+  leaseId        String?
+  /// Navrh parovani ke kontrole (smlouva podle castky)
+  navrhLeaseId   String?
+  /// Co pohyb uhradil: [{klic, castka}] pravidelnych plateb, nebo {vyuctovani: id}
+  parovani       Json?
+  poznamka       String?
+  createdAt      DateTime @default(now())
+
+  @@index([stav])
+  @@index([datum])
 }

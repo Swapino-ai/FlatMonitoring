@@ -28,6 +28,7 @@ export async function exportujVse(): Promise<Zaloha> {
       serviceCostChange: await prisma.serviceCostChange.findMany(),
       tenant: await prisma.tenant.findMany(),
       pravidelnaPlatba: await prisma.pravidelnaPlatba.findMany(),
+      bankovniPohyb: await prisma.bankovniPohyb.findMany(),
       operator: await prisma.operator.findMany(),
       dokument: await prisma.dokument.findMany(),
       tenantStatement: await prisma.tenantStatement.findMany(),
@@ -86,6 +87,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.propertyOwner.deleteMany();
     await tx.dokument.deleteMany();
     await tx.pravidelnaPlatba.deleteMany();
+    await tx.bankovniPohyb.deleteMany();
     await tx.tenantStatement.deleteMany();
     await tx.settlementReading.deleteMany();
     await tx.serviceSettlement.deleteMany();
@@ -182,6 +184,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       landlordRef: s(x.landlordRef),
       advanceIntentional: x.advanceIntentional === true, advanceNote: s(x.advanceNote),
       advanceItems: x.advanceItems ?? undefined,
+      uctyPlatce: Array.isArray(x.uctyPlatce) ? x.uctyPlatce.map(String) : [],
       startDate: dPovinne(x.startDate), endDate: d(x.endDate),
       rentMonthly: c(x.rentMonthly), utilitiesMonthly: c(x.utilitiesMonthly), deposit: c(x.deposit),
       indexationClause: !!x.indexationClause, paymentDay: Math.round(c(x.paymentDay, 15)),
@@ -245,9 +248,16 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
 
     const platby = (t.pravidelnaPlatba as any[] ?? []).map((x) => ({
       id: String(x.id), propertyId: String(x.propertyId), klic: String(x.klic),
-      paidAt: dPovinne(x.paidAt), amount: c(x.amount), createdAt: dPovinne(x.createdAt ?? new Date()),
+      paidAt: dPovinne(x.paidAt), amount: c(x.amount), pohybId: s(x.pohybId), createdAt: dPovinne(x.createdAt ?? new Date()),
     }));
     if (platby.length) obnoveno.pravidelnaPlatba = (await tx.pravidelnaPlatba.createMany({ data: platby })).count;
+    const pohyby = (t.bankovniPohyb as any[] ?? []).map((x) => ({
+      id: String(x.id), bankaId: String(x.bankaId), datum: dPovinne(x.datum), castka: c(x.castka), mena: String(x.mena ?? "CZK"),
+      protiucet: s(x.protiucet), nazevProtiuctu: s(x.nazevProtiuctu), vs: s(x.vs), ks: s(x.ks), ss: s(x.ss), zprava: s(x.zprava), typ: s(x.typ),
+      stav: String(x.stav ?? "NOVY"), propertyId: s(x.propertyId), leaseId: s(x.leaseId), navrhLeaseId: s(x.navrhLeaseId),
+      parovani: x.parovani ?? undefined, poznamka: s(x.poznamka), createdAt: dPovinne(x.createdAt ?? new Date()),
+    }));
+    if (pohyby.length) obnoveno.bankovniPohyb = (await tx.bankovniPohyb.createMany({ data: pohyby })).count;
 
     const dokumenty = (t.dokument as any[] ?? []).map((x) => ({
       id: String(x.id), driveId: String(x.driveId), name: String(x.name), mime: String(x.mime), size: c(x.size),
