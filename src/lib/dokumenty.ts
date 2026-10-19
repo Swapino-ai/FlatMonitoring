@@ -136,6 +136,67 @@ export function cestaSlozek(k: KontextPopisky): SegmentSlozky[] {
 /** Plny klic segmentu na indexu i (spojeni klicu od korene). */
 export const plnyKlic = (cesta: SegmentSlozky[], i: number) => cesta.slice(0, i + 1).map((s) => s.klic).join("/");
 
+// --- Nazvy souboru ---
+
+/** Co je o souboru znamo — z toho se sklada citelny nazev. */
+export interface PodkladNazvu {
+  kategorie: KategorieKlic;
+  nemovitost?: string | null;
+  najemce?: string | null;
+  /** "Elektřina (ČEZ prodej)" nebo u spolecneho dokladu nazev skupiny */
+  sluzba?: string | null;
+  /** Obdobi vyuctovani (ISO) */
+  obdobi?: [string, string] | null;
+  rok?: number | null;
+  /** Cislo dokladu (VN-2026-0001) */
+  cislo?: string | null;
+  /** Zacatek smlouvy (ISO) */
+  od?: string | null;
+}
+
+const dny = (iso: string) => { const [r, m, d] = iso.slice(0, 10).split("-"); return `${Number(d)}.${Number(m)}.${r}`; };
+/** Obdobi pro nazev: cely kalendarni rok jako "2025", jinak "1.3.2025–28.2.2026" */
+const obdobiNazvu = ([od, doDne]: [string, string]) =>
+  od.slice(5, 10) === "01-01" && doDne.slice(5, 10) === "12-31" && od.slice(0, 4) === doDne.slice(0, 4) ? od.slice(0, 4) : `${dny(od)}–${dny(doDne)}`;
+
+/**
+ * Citelny nazev souboru podle toho, k cemu patri, napr.
+ * "Vyúčtování Elektřina (ČEZ prodej) – Nový Bor – 1.3.2024–12.11.2024.pdf".
+ * Fotky a ostatni si nechavaji puvodni nazev (vypovida vic nez kategorie).
+ */
+export function navrhNazvu(p: PodkladNazvu, puvodni: string): string {
+  const ext = pripona(puvodni);
+  const casti: (string | null | undefined)[] = (() => {
+    const kde = p.nemovitost;
+    switch (p.kategorie) {
+      case "SLUZBA_VYUCTOVANI": return [`Vyúčtování ${p.sluzba ?? "služby"}`, kde, p.obdobi ? obdobiNazvu(p.obdobi) : p.rok ? String(p.rok) : null];
+      case "VYUCTOVANI_NAJEMCE": return [`Vyúčtování nájemci${p.cislo ? ` ${p.cislo}` : ""}`, kde, p.najemce, p.obdobi ? obdobiNazvu(p.obdobi) : null];
+      case "NAJEMNI_SMLOUVA":
+      case "PREDAVACI_PROTOKOL": return [KATEGORIE[p.kategorie].nazev, kde, p.najemce, p.od ? `od ${dny(p.od)}` : null];
+      case "SLUZBA_SMLOUVA": return [`Smlouva ${p.sluzba ?? "o službě"}`, kde];
+      case "DANE": return [`Daně${p.rok ? ` ${p.rok}` : ""}`, kde];
+      case "NAJEMCE_DOKLAD": return ["Doklad nájemce", p.najemce];
+      case "KUPNI_SMLOUVA": case "KATASTR": case "UVER": return [KATEGORIE[p.kategorie].nazev, kde];
+      default: return [];
+    }
+  })();
+  const zaklad = casti.filter(Boolean).join(" – ");
+  if (!zaklad) return bezpecneJmeno(puvodni, "soubor");
+  return `${bezpecneJmeno(zaklad).slice(0, 150)}${ext ? `.${ext}` : ""}`;
+}
+
+/** Dalsi soubor se stejnym nazvem dostane poradove cislo: "… (2).pdf" */
+export function bezKolize(nazev: string, obsazene: Iterable<string>): string {
+  const vsechny = new Set(obsazene);
+  if (!vsechny.has(nazev)) return nazev;
+  const ext = pripona(nazev);
+  const zaklad = ext ? nazev.slice(0, -(ext.length + 1)) : nazev;
+  for (let i = 2; ; i++) {
+    const n = `${zaklad} (${i})${ext ? `.${ext}` : ""}`;
+    if (!vsechny.has(n)) return n;
+  }
+}
+
 // --- Kontrola souboru ---
 
 export const MAX_VELIKOST = 100 * 1024 * 1024;

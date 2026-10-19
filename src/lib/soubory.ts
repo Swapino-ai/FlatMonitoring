@@ -3,7 +3,7 @@ import { prisma } from "./db";
 import { nazevDruhu } from "./categories";
 import { nactiTypySluzeb } from "./typySluzeb";
 import { cisloNajemce } from "./najemci";
-import { jeKategorie, type KategorieKlic, type KontextPopisky } from "./dokumenty";
+import { jeKategorie, type KategorieKlic, type KontextPopisky, type PodkladNazvu } from "./dokumenty";
 
 /** Co klient rekne o tom, kam soubor patri — jen identifikatory, popisky se nacitaji z databaze. */
 export interface KontextVstup {
@@ -68,6 +68,44 @@ export async function rozresKontext(v: KontextVstup): Promise<KontextRozresen> {
   };
 }
 
+const isoDen = (d: Date) => d.toISOString().slice(0, 10);
+
+/** Udaje pro citelny nazev souboru: nemovitost, najemce, sluzba, obdobi vyuctovani … */
+export async function podkladNazvu(kategorie: KategorieKlic, v: KontextRozresen["vazby"]): Promise<PodkladNazvu> {
+  const [nem, najemce, lease, sluzba, vyuct, vydane] = await Promise.all([
+    v.propertyId ? prisma.property.findUnique({ where: { id: v.propertyId }, select: { name: true } }) : null,
+    v.tenantId ? prisma.tenant.findUnique({ where: { id: v.tenantId }, select: { name: true } }) : null,
+    v.leaseId ? prisma.lease.findUnique({ where: { id: v.leaseId }, select: { startDate: true } }) : null,
+    v.serviceId ? prisma.service.findUnique({ where: { id: v.serviceId }, select: { type: true, provider: true } }) : null,
+    v.settlementId ? prisma.serviceSettlement.findUnique({ where: { id: v.settlementId }, select: { periodFrom: true, periodTo: true, batchId: true } }) : null,
+    v.statementId ? prisma.tenantStatement.findUnique({ where: { id: v.statementId }, select: { cislo: true, periodFrom: true, periodTo: true, snapshot: true } }) : null,
+  ]);
+  const typy = sluzba || vyuct?.batchId ? await nactiTypySluzeb() : null;
+  let nazevSluzby = sluzba && typy ? `${nazevDruhu(typy, sluzba.type)} (${sluzba.provider})` : null;
+  // Spolecny doklad vice sluzeb: nazev skupiny, jinak vycet druhu
+  if (vyuct?.batchId && typy) {
+    const casti = await prisma.serviceSettlement.findMany({ where: { batchId: vyuct.batchId }, select: { service: { select: { type: true, provider: true, groupName: true } } } });
+    if (casti.length > 1) {
+      const skupiny = [...new Set(casti.map((c) => c.service.groupName).filter(Boolean))];
+      const dodavatele = [...new Set(casti.map((c) => c.service.provider))];
+      nazevSluzby = skupiny.length === 1 && casti.every((c) => c.service.groupName)
+        ? skupiny[0]!
+        : `${[...new Set(casti.map((c) => nazevDruhu(typy, c.service.type)))].join(", ")}${dodavatele.length === 1 ? ` (${dodavatele[0]})` : ""}`;
+    }
+  }
+  const najemceVydani = (vydane?.snapshot as { najemce?: { name?: string } } | null)?.najemce?.name;
+  return {
+    kategorie,
+    nemovitost: nem?.name ?? null,
+    najemce: najemce?.name ?? najemceVydani ?? null,
+    sluzba: nazevSluzby,
+    obdobi: vyuct ? [isoDen(vyuct.periodFrom), isoDen(vyuct.periodTo)] : vydane ? [isoDen(vydane.periodFrom), isoDen(vydane.periodTo)] : null,
+    rok: v.rok,
+    cislo: vydane?.cislo ?? null,
+    od: lease ? isoDen(lease.startDate) : null,
+  };
+}
+
 // --- Podepsany listek: zahajeni nahravani -> dokonceni ---
 
 function tajemstvi(): Uint8Array {
@@ -79,6 +117,8 @@ function tajemstvi(): Uint8Array {
 export interface Listek {
   kontext: KontextVstup;
   name: string; mime: string; size: number; uid: string; slozka: string;
+  /** Nazev, pod kterym soubor nahral uzivatel (kdyz ho aplikace prejmenovala) */
+  puvodni?: string;
 }
 
 /** Klient s listkem nemuze dokoncit nic jineho, nez k cemu mu server dovolil nahravani. */

@@ -32,6 +32,7 @@ export async function POST(req: Request) {
       create: {
         driveId, name: listek.name, mime: listek.mime, size: Math.round(Number(soubor.size ?? listek.size)),
         kategorie: listek.kontext.kategorie, ...vazby, uploadedById: user.id,
+        note: listek.puvodni ? `Původně: ${listek.puvodni}` : null,
       },
     });
     if (vazby.propertyId) revalidatePath(`/properties/${vazby.propertyId}`);

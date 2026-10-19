@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { getSession } from "./auth";
 import { prisma } from "./db";
-import { ChybaDisku, doKose, odvolej, otestuj } from "./googleDrive";
+import { ChybaDisku, doKose, odvolej, otestuj, prejmenuj } from "./googleDrive";
+import { bezKolize, jeKategorie, navrhNazvu } from "./dokumenty";
+import { podkladNazvu } from "./soubory";
 
 export interface DokumentyFormState {
   error?: string;
@@ -71,4 +73,48 @@ export async function odpojDisk(): Promise<DokumentyFormState> {
   ]);
   revalidatePath("/sprava");
   return { success: "Disk odpojen. Nahrané soubory na něm zůstaly, evidence v aplikaci také." };
+}
+
+/**
+ * Prejmenuje vsechny nahrane soubory na citelne nazvy podle toho, k cemu patri
+ * ("Vyúčtování Elektřina (ČEZ prodej) – Nový Bor – 2025.pdf"). Puvodni nazev se zapise
+ * do poznamky, kdyz je prazdna. Fotky a Ostatni zustanou, jak jsou.
+ */
+export async function prejmenujDokumenty(): Promise<DokumentyFormState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+  const vse = await prisma.dokument.findMany({ orderBy: { createdAt: "asc" } });
+  // Nejdriv nazvy pro vsechny, aby se stejne pojmenovane ocislovaly v poradi nahrani
+  const cil = new Map<string, string>();
+  const obsazene = new Set<string>();
+  for (const d of vse) {
+    if (!jeKategorie(d.kategorie)) { obsazene.add(d.name); continue; }
+    const navrh = navrhNazvu(await podkladNazvu(d.kategorie, {
+      propertyId: d.propertyId, tenantId: d.tenantId, leaseId: d.leaseId, serviceId: d.serviceId,
+      settlementId: d.settlementId, statementId: d.statementId, rok: d.rok,
+    }), d.name);
+    const nazev = bezKolize(navrh, obsazene);
+    obsazene.add(nazev);
+    cil.set(d.id, nazev);
+  }
+  let hotovo = 0, chyb = 0;
+  const zmeny = vse.filter((d) => cil.get(d.id) && cil.get(d.id) !== d.name);
+  for (let i = 0; i < zmeny.length; i += 5) {
+    await Promise.all(zmeny.slice(i, i + 5).map(async (d) => {
+      const nazev = cil.get(d.id)!;
+      try {
+        await prejmenuj(d.driveId, nazev);
+        await prisma.dokument.update({ where: { id: d.id }, data: { name: nazev, ...(d.note ? {} : { note: `Původně: ${d.name}` }) } });
+        hotovo++;
+      } catch {
+        chyb++;
+      }
+    }));
+  }
+  revalidatePath("/properties", "layout");
+  revalidatePath("/sprava");
+  if (!zmeny.length) return { success: "Všechny soubory už mají správné názvy." };
+  return chyb
+    ? { error: `Přejmenováno ${hotovo} souborů, ${chyb} se nepodařilo (smazané na Disku nebo bez přístupu).` }
+    : { success: `Přejmenováno ${hotovo} souborů. Původní název je v poznámce u souboru.` };
 }

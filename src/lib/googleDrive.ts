@@ -228,6 +228,16 @@ export async function doKose(id: string): Promise<void> {
   await json(r, "Smazání souboru");
 }
 
+/** Prejmenuje soubor na Disku (jen soubory, ktere nahrala aplikace). */
+export async function prejmenuj(id: string, nazev: string): Promise<void> {
+  const r = await drive(`/files/${encodeURIComponent(id)}?fields=id`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json; charset=UTF-8" },
+    body: JSON.stringify({ name: nazev }),
+  });
+  await json(r, "Přejmenování souboru");
+}
+
 /** Obsah souboru jako proud; prohlizec ho dostane pres nas, takze nemusi mit ucet Google. */
 export async function stahni(id: string, rozsah?: string | null): Promise<Response> {
   return drive(`/files/${encodeURIComponent(id)}?alt=media`, rozsah ? { headers: { Range: rozsah } } : {});

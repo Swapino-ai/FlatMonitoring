@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { cestaSlozek, chybaKontextu, chybaSouboru, plnyKlic, bezpecneJmeno } from "@/lib/dokumenty";
+import { bezKolize, cestaSlozek, chybaKontextu, chybaSouboru, navrhNazvu, plnyKlic } from "@/lib/dokumenty";
+import { prisma } from "@/lib/db";
 import { ChybaDisku, zahajNahrani, zajistiCestu, zapomenSlozky } from "@/lib/googleDrive";
-import { podepisListek, puvod, rozresKontext, zVstupu } from "@/lib/soubory";
+import { podepisListek, podkladNazvu, puvod, rozresKontext, zVstupu } from "@/lib/soubory";
 
 export const dynamic = "force-dynamic";
 
@@ -27,12 +28,15 @@ export async function POST(req: Request) {
   const problemSouboru = chybaSouboru(name, size);
   if (problemSouboru) return chyba(problemSouboru, 400);
 
-  const { popisky } = await rozresKontext(kontext);
+  const { popisky, vazby } = await rozresKontext(kontext);
   const problem = chybaKontextu(popisky);
   if (problem) return chyba(problem, 400);
 
   const cesta = cestaSlozek(popisky);
-  const nazev = bezpecneJmeno(name, "soubor");
+  // Citelny nazev podle obsahu ("Vyúčtování Elektřina (ČEZ) – Nový Bor – 2025.pdf"), bez kolize se stejnym
+  const navrh = navrhNazvu(await podkladNazvu(kontext.kategorie, vazby), name);
+  const stejne = await prisma.dokument.findMany({ where: { name: { startsWith: navrh.replace(/\.[^.]*$/, "") } }, select: { name: true } });
+  const nazev = bezKolize(navrh, stejne.map((d) => d.name));
   const origin = puvod(req);
 
   try {
@@ -41,7 +45,7 @@ export async function POST(req: Request) {
       try {
         const slozka = await zajistiCestu(cesta);
         const uploadUrl = await zahajNahrani({ rodicId: slozka, nazev, mime, velikost: size, origin });
-        const listek = await podepisListek({ kontext, name: nazev, mime, size, uid: user.id, slozka });
+        const listek = await podepisListek({ kontext, name: nazev, mime, size, uid: user.id, slozka, ...(nazev !== name ? { puvodni: name } : {}) });
         return NextResponse.json({ uploadUrl, listek, cesta: cesta.map((s) => s.nazev).join(" / ") });
       } catch (e) {
         if (e instanceof ChybaDisku && e.stav === 404 && pokus === 0) {

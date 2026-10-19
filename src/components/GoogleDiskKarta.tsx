@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { odpojDisk, otestujDisk, type DokumentyFormState } from "@/lib/dokumentyActions";
+import { odpojDisk, otestujDisk, prejmenujDokumenty, type DokumentyFormState } from "@/lib/dokumentyActions";
 import { dateCz } from "@/lib/format";
 import { Hlaska } from "./form";
 
@@ -47,6 +47,10 @@ export function GoogleDiskKarta({ nastaveno, pripojeno, redirectUri, vysledek }:
             <button type="button" className="btn text-xs" disabled={bezi}
               onClick={() => spust(async () => setStav(await otestujDisk()))}>
               {bezi ? "Zkouším…" : "Vyzkoušet připojení"}
+            </button>
+            <button type="button" className="btn text-xs" disabled={bezi} title="Názvy podle obsahu: druh, služba, nemovitost, nájemce, období"
+              onClick={() => spust(async () => setStav(await prejmenujDokumenty()))}>
+              {bezi ? "Pracuji…" : "Přejmenovat soubory podle obsahu"}
             </button>
             <a href="/api/google/pripojit" className="btn text-xs">Připojit znovu</a>
             {!potvrdit ? (
