@@ -77,8 +77,7 @@ export async function odpojDisk(): Promise<DokumentyFormState> {
 
 /**
  * Prejmenuje vsechny nahrane soubory na citelne nazvy podle toho, k cemu patri
- * ("Vyúčtování Elektřina (ČEZ prodej) – Nový Bor – 2025.pdf"). Puvodni nazev se zapise
- * do poznamky, kdyz je prazdna. Fotky a Ostatni zustanou, jak jsou.
+ * ("Vyúčtování Elektřina (ČEZ prodej) – Nový Bor – 2025.pdf"). Fotky a Ostatni zustanou, jak jsou.
  */
 export async function prejmenujDokumenty(): Promise<DokumentyFormState> {
   const auth = await majitel();
@@ -104,17 +103,19 @@ export async function prejmenujDokumenty(): Promise<DokumentyFormState> {
       const nazev = cil.get(d.id)!;
       try {
         await prejmenuj(d.driveId, nazev);
-        await prisma.dokument.update({ where: { id: d.id }, data: { name: nazev, ...(d.note ? {} : { note: `Původně: ${d.name}` }) } });
+        await prisma.dokument.update({ where: { id: d.id }, data: { name: nazev } });
         hotovo++;
       } catch {
         chyb++;
       }
     }));
   }
+  // Puvodni nazvy se nedrzi: uklid poznamek z prvni verze prejmenovani
+  await prisma.dokument.updateMany({ where: { note: { startsWith: "Původně: " } }, data: { note: null } });
   revalidatePath("/properties", "layout");
   revalidatePath("/sprava");
   if (!zmeny.length) return { success: "Všechny soubory už mají správné názvy." };
   return chyb
     ? { error: `Přejmenováno ${hotovo} souborů, ${chyb} se nepodařilo (smazané na Disku nebo bez přístupu).` }
-    : { success: `Přejmenováno ${hotovo} souborů. Původní název je v poznámce u souboru.` };
+    : { success: `Přejmenováno ${hotovo} souborů.` };
 }

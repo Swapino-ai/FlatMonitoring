@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       try {
         const slozka = await zajistiCestu(cesta);
         const uploadUrl = await zahajNahrani({ rodicId: slozka, nazev, mime, velikost: size, origin });
-        const listek = await podepisListek({ kontext, name: nazev, mime, size, uid: user.id, slozka, ...(nazev !== name ? { puvodni: name } : {}) });
+        const listek = await podepisListek({ kontext, name: nazev, mime, size, uid: user.id, slozka });
         return NextResponse.json({ uploadUrl, listek, cesta: cesta.map((s) => s.nazev).join(" / ") });
       } catch (e) {
         if (e instanceof ChybaDisku && e.stav === 404 && pokus === 0) {

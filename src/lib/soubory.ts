@@ -117,8 +117,6 @@ function tajemstvi(): Uint8Array {
 export interface Listek {
   kontext: KontextVstup;
   name: string; mime: string; size: number; uid: string; slozka: string;
-  /** Nazev, pod kterym soubor nahral uzivatel (kdyz ho aplikace prejmenovala) */
-  puvodni?: string;
 }
 
 /** Klient s listkem nemuze dokoncit nic jineho, nez k cemu mu server dovolil nahravani. */
