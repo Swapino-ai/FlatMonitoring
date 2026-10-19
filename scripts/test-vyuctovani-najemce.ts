@@ -67,5 +67,22 @@ const celyRok = { ...najem, od: "2025-01-01" };
 const rm3 = vyuctujNajemci(celyRok, [celyRok], el([]), "2025-01-01", "2025-12-31", null);
 over("nájemce celou dobu sám → celá faktura bez měřáků", rm3.sluzby[0].zdroje[0]?.metoda === "cele" && Math.round(rm3.sluzby[0].castka) === 6000);
 
+// Zalohy na sluzby bez vyuctovani dodavatele (Teplo, Vodne v rozpisu; SVJ uctuje teplou vodu a vytah)
+{
+  const n = { id: "K", nazev: "K", od: "2025-03-01", do: null, utilitiesMonthly: 4500,
+    advanceItems: [{ serviceId: "plyn", amount: 300 }, { serviceId: "net", amount: 300 }, { serviceId: "el", amount: 1200 }, { serviceId: "vodne", amount: 1700 }, { serviceId: "teplo", amount: 1000 }] };
+  const sl = [
+    sluzba("plyn", { vyuctovani: [v("p", "2025-03-01", "2026-02-28", 3000)] }),
+    sluzba("el", { vyuctovani: [v("e", "2025-03-01", "2026-02-28", 12000)] }),
+    sluzba("net", {}), sluzba("vodne", {}), sluzba("teplo", {}),
+    sluzba("tepla", { skupina: "SVJ", vaha: 2000, vyuctovani: [v("t", "2025-03-01", "2026-02-28", 20000)] }),
+    sluzba("vytah", { skupina: "SVJ", vaha: 100, vyuctovani: [v("y", "2025-03-01", "2026-02-28", 1000)] }),
+  ];
+  const r = vyuctujNajemci(n, [n], sl, "2025-03-01", "2026-02-28", null);
+  over("zálohy bez vyúčtování dodavatele se započítají službám bez vlastní zálohy", Math.abs(r.zalohy - 12 * 4500) < 2, String(kc(r.zalohy)));
+  const t = r.sluzby.find((x) => x.sluzbaId === "tepla")!;
+  over("teplá voda dostane podíl podle nákladů (2000/2100 z 3 000 Kč/měs.)", Math.abs(t.zalohy - 12 * 3000 * 2000 / 2100) < 2, String(kc(t.zalohy)));
+}
+
 console.log(chyby ? `${chyby} chyb` : "vše v pořádku");
 process.exit(chyby ? 1 : 0);

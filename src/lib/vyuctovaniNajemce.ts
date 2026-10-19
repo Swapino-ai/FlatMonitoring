@@ -306,7 +306,22 @@ export function vyuctujNajemci(
       if (r && r[0] <= d && d <= r[1]) zalohySluzby.set(id, (zalohySluzby.get(id) ?? 0) + castka);
     };
     if (z.polozky?.length) {
-      for (const p of z.polozky) if (aktivni.some((s) => s.id === p.serviceId)) pridej(p.serviceId, Math.min(p.amount / z.dnuVMesici, z.celkem - rozdeleno));
+      // Zaloha na sluzbu, ktera nema zadne vyuctovani od dodavatele (napr. "Teplo" v rozpisu,
+      // ale SVJ uctuje teplou vodu, uklid, vytah), by se nikdy nezapocitala. Takove zalohy jdou
+      // do spolecneho baliku pro sluzby bez vlastni zalohy — podle jejich mesicnich nakladu.
+      let balik = 0;
+      for (const p of z.polozky) {
+        const s = aktivni.find((x) => x.id === p.serviceId);
+        if (!s) continue;
+        const castka = Math.max(0, Math.min(p.amount / z.dnuVMesici, z.celkem - rozdeleno - balik));
+        if (s.vyuctovani.length) pridej(p.serviceId, castka); else balik += castka;
+      }
+      const vlastni = new Set(z.polozky.map((p) => p.serviceId));
+      const prijemci = aktivni.filter((s) => !vlastni.has(s.id) && s.vyuctovani.length > 0);
+      if (balik > 0 && prijemci.length) {
+        const vahy = prijemci.reduce((a, s) => a + Math.max(0, s.vaha), 0);
+        for (const s of prijemci) pridej(s.id, balik * (vahy > 0 ? Math.max(0, s.vaha) / vahy : 1 / prijemci.length));
+      }
     } else {
       const vahy = aktivni.reduce((a, s) => a + Math.max(0, s.vaha), 0);
       if (vahy > 0) for (const s of aktivni) pridej(s.id, (z.celkem * Math.max(0, s.vaha)) / vahy);
