@@ -5,7 +5,7 @@ import {
   deleteSettlement, saveSettlement, saveSettlementSkupina, zaplacenoDodavateli, type VyuctovaniFormState, type ZaplacenoSluzbe,
 } from "@/lib/vyuctovaniActions";
 import {
-  pridejDny, prunik, rozuctuj, vyuctovaniNajemce,
+  dnuVObdobi, pridejDny, prunik, rozuctuj, vyuctovaniNajemce,
   type NajemVstup, type SluzbaVyuctovani, type VyuctovaniVstup,
 } from "@/lib/vyuctovani";
 import { nazevDruhu, type TypySluzeb } from "@/lib/categories";
@@ -47,6 +47,25 @@ const dnesISO = () => new Date().toISOString().slice(0, 10);
 const cislo = (t: string) => Number(t.replace(/\s/g, "").replace(",", "."));
 const obdobi = (od: string, doDne: string) => `${dateCz(od)} – ${dateCz(doDne)}`;
 
+/**
+ * Navazujici obdobi: zacina den po konci predchoziho a ma stejnou delku. Kdyz predchozi
+ * pokryvalo cele mesice (napr. rok), nove taky — jinak stejny pocet dni.
+ */
+export function navazneObdobi(od: string, doDne: string): { od: string; do: string } {
+  const noveOd = pridejDny(doDne, 1);
+  const [r1, m1, d1] = od.split("-").map(Number);
+  const [r2, m2, d2] = noveOd.split("-").map(Number);
+  if (d1 === d2) {
+    const mesicu = (r2 - r1) * 12 + (m2 - m1);
+    const konec = new Date(Date.UTC(r2, m2 - 1 + mesicu, d2));
+    return { od: noveOd, do: pridejDny(konec.toISOString().slice(0, 10), -1) };
+  }
+  return { od: noveOd, do: pridejDny(noveOd, dnuVObdobi(od, doDne) - 1) };
+}
+
+/** Predvyplneni noveho vyuctovani podle predchoziho */
+interface Predloha { serviceIds: string[]; od: string; do: string; rezim?: string; jednotka?: string | null }
+
 // --- Vyuctovani sluzeb od dodavatelu ---
 
 export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, dokumenty, diskPripojen, meraky = [] }: {
@@ -66,6 +85,23 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
     saveSettlement.bind(null, upravaId), {});
   useEffect(() => { if (upravaState.success) setUpravaId(null); }, [upravaState.success]);
   const [rozbaleno, setRozbaleno] = useState<Set<string>>(new Set());
+  // Nove vyuctovani navazujici na predchozi (tlacitko u posledniho vyuctovani)
+  const [navazujici, setNavazujici] = useState<{ predloha: Predloha; spolecne: boolean; klic: number } | null>(null);
+  useEffect(() => { if (addState.success || skupinaState.success) setNavazujici(null); }, [addState.success, skupinaState.success]);
+  const navaz = (casti: VyuctovaniRadek[]) => {
+    const prvni = casti[0];
+    setUpravaId(null);
+    setNavazujici({
+      predloha: { serviceIds: casti.map((v) => v.serviceId), ...navazneObdobi(prvni.od, prvni.do), rezim: prvni.rezim, jednotka: prvni.jednotka },
+      spolecne: casti.length > 1, klic: Date.now(),
+    });
+  };
+  // Formular se po otevreni ukaze (je pod seznamem)
+  useEffect(() => {
+    if (navazujici) document.getElementById("nove-vyuctovani")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [navazujici?.klic]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Na vyuctovani uz nekdo navazal? (dalsi vyuctovani teze sluzby zacina den po jeho konci nebo pozdeji)
+  const navazano = (v: VyuctovaniRadek) => vyuctovani.some((x) => x.serviceId === v.serviceId && x.od > v.do);
   const [prilohy, setPrilohy] = useState<Set<string>>(new Set());
   const prepniPrilohy = (id: string) => setPrilohy((r) => { const n = new Set(r); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
@@ -129,6 +165,7 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
                             </button>
                           );
                         })()}
+                        {canEdit && !casti.some(navazano) && <NoveTlacitko onClick={() => navaz(casti)} />}
                         {canEdit && (
                           <SmazatTlacitko action={delAction} id={prvni.id}
                             potvrzeni={`Smazat společné vyúčtování ${obdobi(prvni.od, prvni.do)} u všech ${casti.length} služeb?`} />
@@ -250,6 +287,9 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
                                 otevrene ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-accent-soft hover:text-accent"}`}>
                               <Ikona nazev="najemce" />
                             </button>}
+                            {canEdit && !navazano(v) && (
+                              <NoveTlacitko onClick={() => navaz([v])} />
+                            )}
                             {canEdit && (
                               <>
                                 <span className="mx-1.5 h-5 w-px bg-line" aria-hidden />
@@ -336,13 +376,27 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
         </UpravaPanel>
       )}
 
-      {canEdit && !upravovane && (
+      {canEdit && !upravovane && navazujici && (
+        <div id="nove-vyuctovani" className="scroll-mt-4">
+          <UpravaPanel nadpis={`Nové vyúčtování od ${dateCz(navazujici.predloha.od)}${navazujici.spolecne ? ` · ${navazujici.predloha.serviceIds.length} služeb` : ""}`}
+            onZavrit={() => setNavazujici(null)}>
+            {navazujici.spolecne ? (
+              <SkupinaFormular key={navazujici.klic} services={services} typy={typy} action={skupinaAction} pending={skupinaBezi} predloha={navazujici.predloha} />
+            ) : (
+              <Formular key={navazujici.klic} typy={typy} meraky={meraky} r={null} predloha={navazujici.predloha} services={services} leases={leases} vyuctovani={vyuctovani}
+                action={addAction} pending={adding} popisekTlacitka="Uložit vyúčtování" />
+            )}
+          </UpravaPanel>
+        </div>
+      )}
+
+      {canEdit && !upravovane && !navazujici && (
         <Rozbalovaci popisek="Přidat vyúčtování od dodavatele" zavritPo={addState.success}>
           <Formular typy={typy} meraky={meraky} r={null} services={services} leases={leases} vyuctovani={vyuctovani}
             action={addAction} pending={adding} popisekTlacitka="Uložit vyúčtování" />
         </Rozbalovaci>
       )}
-      {canEdit && !upravovane && services.length >= 2 && (
+      {canEdit && !upravovane && !navazujici && services.length >= 2 && (
         <Rozbalovaci popisek="Společné vyúčtování více služeb" zavritPo={skupinaState.success}>
           <SkupinaFormular services={services} typy={typy} action={skupinaAction} pending={skupinaBezi} />
         </Rozbalovaci>
@@ -351,18 +405,30 @@ export function VyuctovaniSluzeb({ services, leases, vyuctovani, canEdit, typy, 
   );
 }
 
+/** Nove vyuctovani navazujici na toto: stejne sluzby, od nasledujiciho dne. */
+function NoveTlacitko({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} title="Nové vyúčtování za další období se stejnými službami"
+      className="inline-flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-medium text-accent transition-colors hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+      <span aria-hidden className="text-sm leading-none">+</span> Nové vyúčtování
+    </button>
+  );
+}
+
 /**
  * Pruvodce spolecnym vyuctovanim: 1) sluzby, 2) obdobi, 3) castky. Zalohy, ktere se
  * dodavateli za obdobi zaplatily, dopocita sam z mesicnich plateb sluzeb.
  */
-function SkupinaFormular({ services, typy, action, pending }: {
+function SkupinaFormular({ services, typy, action, pending, predloha }: {
   services: SluzbaRadek[]; typy: TypySluzeb;
   action: (payload: FormData) => void; pending: boolean;
+  /** Navazujici vyuctovani: sluzby a obdobi predvyplnene, zacina se obdobim */
+  predloha?: Predloha;
 }) {
-  const [krok, setKrok] = useState<1 | 2 | 3>(1);
-  const [vybrane, setVybrane] = useState<Set<string>>(new Set());
-  const [od, setOd] = useState<string | null>(null);
-  const [doDne, setDoDne] = useState<string | null>(null);
+  const [krok, setKrok] = useState<1 | 2 | 3>(predloha ? 2 : 1);
+  const [vybrane, setVybrane] = useState<Set<string>>(new Set(predloha?.serviceIds ?? []));
+  const [od, setOd] = useState<string | null>(predloha?.od ?? null);
+  const [doDne, setDoDne] = useState<string | null>(predloha?.do ?? null);
   const [zaplaceno, setZaplaceno] = useState<ZaplacenoSluzbe[] | null>(null);
   const [zalohy, setZalohy] = useState<Record<string, string>>({});
   const [naklad, setNaklad] = useState("");
@@ -587,17 +653,19 @@ function SkupinaFormular({ services, typy, action, pending }: {
   );
 }
 
-function Formular({ r, services, leases, vyuctovani, action, pending, popisekTlacitka, typy, meraky }: {
+function Formular({ r, services, leases, vyuctovani, action, pending, popisekTlacitka, typy, meraky, predloha }: {
   typy: TypySluzeb;
+  /** Navazujici vyuctovani: sluzba, obdobi a zpusob rozdeleni podle predchoziho */
+  predloha?: Predloha;
   meraky: MerakSeStavy[];
   r: VyuctovaniRadek | null; services: SluzbaRadek[]; leases: NajemRadek[]; vyuctovani: VyuctovaniRadek[];
   action: (payload: FormData) => void; pending: boolean; popisekTlacitka: string;
 }) {
-  const [sluzbaId, setSluzbaId] = useState(r?.serviceId ?? services[0]?.id ?? "");
-  const [od, setOd] = useState<string | null>(r?.od ?? null);
-  const [doDne, setDoDne] = useState<string | null>(r?.do ?? null);
+  const [sluzbaId, setSluzbaId] = useState(r?.serviceId ?? predloha?.serviceIds[0] ?? services[0]?.id ?? "");
+  const [od, setOd] = useState<string | null>(r?.od ?? predloha?.od ?? null);
+  const [doDne, setDoDne] = useState<string | null>(r?.do ?? predloha?.do ?? null);
   const [naklad, setNaklad] = useState(r ? String(r.naklad) : "");
-  const [rezim, setRezim] = useState<string>(r?.rezim ?? "DAYS");
+  const [rezim, setRezim] = useState<string>(r?.rezim ?? predloha?.rezim ?? "DAYS");
   const [odecty, setOdecty] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(r?.odecty ?? {}).map(([k, v]) => [k, String(v)])));
   const [vlastnik, setVlastnik] = useState(r?.spotrebaVlastnik != null ? String(r.spotrebaVlastnik) : "");
@@ -673,10 +741,10 @@ function Formular({ r, services, leases, vyuctovani, action, pending, popisekTla
         </select>
       </div>
       <DatumPole key={`od-${r?.id ?? sluzbaId}`} label="Období od" name="periodFrom" required
-        defaultValue={r?.od ?? navrhOd} onChange={setOd}
+        defaultValue={r?.od ?? predloha?.od ?? navrhOd} onChange={setOd}
         hint={!r && navrhOd ? "Navazuje na předchozí vyúčtování této služby." : undefined} />
-      <DatumPole label="Období do (včetně)" name="periodTo" required defaultValue={r?.do ?? ""} onChange={setDoDne}
-        hint="Nemusí to být celý měsíc ani rok — zadej přesně, co vyúčtování pokrývá." />
+      <DatumPole label="Období do (včetně)" name="periodTo" required defaultValue={r?.do ?? predloha?.do ?? ""} onChange={setDoDne}
+        hint={predloha ? "Navrženo se stejnou délkou jako předchozí — uprav podle dokladu." : "Nemusí to být celý měsíc ani rok — zadej přesně, co vyúčtování pokrývá."} />
       {(() => {
         const s = services.find((x) => x.id === sluzbaId);
         return s && od && doDne && od <= doDne && !platiVObdobi(s, od, doDne) ? (
@@ -713,7 +781,7 @@ function Formular({ r, services, leases, vyuctovani, action, pending, popisekTla
 
       {delit && rezim === "READINGS" && (
         <div className="space-y-3 rounded-xl bg-surface-sunken p-3 sm:col-span-2">
-          <Pole label="Jednotka spotřeby" name="readingUnit" placeholder="m³, kWh, GJ…" defaultValue={r?.jednotka || zMeraku?.jednotka || ""} />
+          <Pole label="Jednotka spotřeby" name="readingUnit" placeholder="m³, kWh, GJ…" defaultValue={r?.jednotka || predloha?.jednotka || zMeraku?.jednotka || ""} />
           {dotcene.length === 0 && (
             <p className="text-xs text-ink-muted">Zadej období — pak se ukážou nájemci, kterých se týká.</p>
           )}
