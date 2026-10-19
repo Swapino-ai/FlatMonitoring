@@ -8,7 +8,7 @@ import {
 import { pridejDny, type NajemVstup } from "@/lib/vyuctovani";
 import { popisOdchylky, vyuctujNajemci, zacatekZaloh, type NajemProVyuctovani, type RadekSluzby, type SluzbaProNajemce } from "@/lib/vyuctovaniNajemce";
 import {
-  lhutaDoruceni, platbyZaloh, NAZVY_STAVU, NAZVY_ZPUSOBU, odkazMailto, sestavSnapshot, stavLhuty, textZpravy,
+  lhutaDoruceni, platbyZaloh, rozpisZaloh, NAZVY_STAVU, NAZVY_ZPUSOBU, odkazMailto, sestavSnapshot, stavLhuty, textZpravy,
   vychoziSplatnost, type SnapshotVyuctovani, type StavVyuctovani,
 } from "@/lib/vyuctovaniVydane";
 import { czk, dateCz } from "@/lib/format";
@@ -112,6 +112,7 @@ export function VyuctovaniNajemceKarta({ nemovitost, najmy, sluzby, vydana, canE
       najemce: { cislo: najem.cislo, name: najem.nazev, adresa: najem.adresa, email: najem.email, phone: najem.phone, ucet: najem.ucet },
       pronajimatel: najem.pronajimatel, v: platne, aktualniZaloha: najem.utilitiesMonthly,
       platby: platbyZaloh(platby, najem.id, zacatekZaloh(platne), platne.do),
+      rozpisZaloh: rozpisZaloh(najem, zacatekZaloh(platne), platne.do, Object.fromEntries(sluzby.map((x) => [x.id, x.nazev]))),
     })
     : null;
 

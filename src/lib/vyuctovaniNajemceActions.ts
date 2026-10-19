@@ -8,7 +8,7 @@ import { vyuctujNajemci, zacatekZaloh } from "./vyuctovaniNajemce";
 import { nactiNavrhPlatby } from "./pravidelnePlatbyData";
 import { nactiVstupyVyuctovani } from "./vyuctovaniData";
 import {
-  dalsiCislo, platbyZaloh, sestavSnapshot, variabilniSymbol, vychoziSplatnost,
+  dalsiCislo, platbyZaloh, rozpisZaloh, sestavSnapshot, variabilniSymbol, vychoziSplatnost,
 } from "./vyuctovaniVydane";
 
 export interface VydaniState {
@@ -70,6 +70,7 @@ export async function vydejVyuctovani(_prev: VydaniState, formData: FormData): P
   const snapshot = sestavSnapshot({
     nemovitost: vstupy.nemovitost, najemce: info, pronajimatel: vstupy.pronajimatelPro(lease.landlordRef), v, aktualniZaloha: najem.utilitiesMonthly,
     platby: platbyZaloh(await nactiNavrhPlatby(lease.propertyId), leaseId, zacatekZaloh(v), v.do),
+    rozpisZaloh: rozpisZaloh(najem, zacatekZaloh(v), v.do, Object.fromEntries(vstupy.sluzbyNajemce.map((x) => [x.id, x.nazev]))),
     zamerne: vstupy.smlouvy.find((s) => s.id === leaseId)?.advanceIntentional,
   });
 

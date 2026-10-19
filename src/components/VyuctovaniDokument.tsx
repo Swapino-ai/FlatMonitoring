@@ -198,6 +198,29 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
         </p>
       )}
 
+      {s.rozpisZaloh && s.rozpisZaloh.length > 0 && (
+        <section className="mt-5 break-inside-avoid">
+          <h3 className="mb-1.5 text-sm font-semibold">Rozpis měsíčních záloh</h3>
+          <div className="space-y-2 text-sm">
+            {s.rozpisZaloh.map((o) => (
+              <div key={o.od} className="rounded-lg border border-line/70 px-3 py-2">
+                <div className="flex justify-between gap-3">
+                  <span>{s.rozpisZaloh!.length > 1 ? obdobi(o.od, o.do) : `${obdobi(o.od, o.do)}`}</span>
+                  <strong className="tabular-nums">{czk(o.mesicne)} měsíčně</strong>
+                </div>
+                {o.polozky.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 text-xs text-ink-secondary">
+                    {o.polozky.map((p) => (
+                      <li key={p.nazev} className="flex justify-between gap-3"><span>{p.nazev}</span><span className="tabular-nums">{czk(p.castka)}</span></li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {s.platby && s.platby.length > 0 && (
         <section className="mt-5 break-inside-avoid">
           <h3 className="mb-1.5 text-sm font-semibold">Platby záloh po měsících</h3>

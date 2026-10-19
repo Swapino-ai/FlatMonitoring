@@ -41,6 +41,49 @@ export interface SnapshotVyuctovani {
   sluzbyDo?: Record<string, string>;
   /** Zalohy nájemce po mesicich: predpis, kolik a kdy prislo */
   platby?: PlatbaZalohy[];
+  /** Mesicni zalohy podle smlouvy po obdobich se stejnou vysi a jejich rozpis po sluzbach */
+  rozpisZaloh?: ObdobiZaloh[];
+}
+
+export interface ObdobiZaloh {
+  od: string;
+  do: string;
+  mesicne: number;
+  polozky: { nazev: string; castka: number }[];
+}
+
+/**
+ * Mesicni zalohy podle smlouvy v rozsahu vyuctovani: kazda zmena vyse (nebo rozpisu)
+ * zacne nove obdobi. Bez rozpisu jen celkova castka.
+ */
+export function rozpisZaloh(
+  n: { utilitiesMonthly: number; advanceItems?: { serviceId: string; amount: number }[] | null; historieZaloh?: { validFrom: Date | string; amount: number; items?: { serviceId: string; amount: number }[] | null }[] },
+  od: string, doDne: string, nazvy: Record<string, string>,
+): ObdobiZaloh[] {
+  const den = (d: Date | string) => new Date(d).toISOString().slice(0, 10);
+  const zmeny = [...(n.historieZaloh ?? [])].sort((a, b) => den(a.validFrom).localeCompare(den(b.validFrom)));
+  const stav = (d: string) => {
+    if (!zmeny.length) return { mesicne: n.utilitiesMonthly, items: n.advanceItems ?? null };
+    const z = [...zmeny].reverse().find((x) => den(x.validFrom) <= d) ?? zmeny[0];
+    return { mesicne: z.amount, items: z.items ?? null };
+  };
+  // Zacatky obdobi: zacatek vyuctovani a kazda zmena uvnitr
+  const zacatky = [od, ...zmeny.map((z) => den(z.validFrom)).filter((d) => d > od && d <= doDne)];
+  return [...new Set(zacatky)].sort().map((z, i, arr) => {
+    const k = arr[i + 1] ? pridejDny(arr[i + 1], -1) : doDne;
+    const s = stav(z);
+    const polozky = (s.items ?? []).filter((x) => x.amount > 0).map((x) => ({ nazev: nazvy[x.serviceId] ?? "služba", castka: x.amount }));
+    const zbytek = s.mesicne - polozky.reduce((a, x) => a + x.castka, 0);
+    if (polozky.length && zbytek > 0.5) polozky.push({ nazev: "ostatní", castka: zbytek });
+    return { od: z, do: k, mesicne: s.mesicne, polozky };
+  })
+    // Stejna obdobi za sebou (zmena bez zmeny castek) se slouci
+    .reduce<ObdobiZaloh[]>((acc, o) => {
+      const p = acc[acc.length - 1];
+      if (p && p.mesicne === o.mesicne && JSON.stringify(p.polozky) === JSON.stringify(o.polozky)) { p.do = o.do; return acc; }
+      acc.push(o);
+      return acc;
+    }, []);
 }
 
 export interface PlatbaZalohy {
@@ -178,6 +221,7 @@ export function sestavSnapshot(a: {
   zamerne?: boolean;
   /** Platby zaloh po mesicich */
   platby?: PlatbaZalohy[];
+  rozpisZaloh?: ObdobiZaloh[];
 }): SnapshotVyuctovani {
   const { v } = a;
   const vyuctovane = v.sluzby.filter((r) => r.stav === "VYUCTOVANO");
@@ -192,6 +236,6 @@ export function sestavSnapshot(a: {
     od: v.od, do: v.do, radky, naklady: v.naklady, zalohy: v.zalohy, rozdil: v.rozdil,
     nepokryto: nepokrytoZRadku(radky), aktualniZaloha: a.aktualniZaloha,
     doporucenaZaloha: a.zamerne ? null : doporucenaZaloha(v.naklady, v.od, v.do, a.aktualniZaloha),
-    skupiny: v.skupiny, preneseno, sluzbyDo: v.sluzbyDo, platby: a.platby ?? [],
+    skupiny: v.skupiny, preneseno, sluzbyDo: v.sluzbyDo, platby: a.platby ?? [], rozpisZaloh: a.rozpisZaloh ?? [],
   };
 }
