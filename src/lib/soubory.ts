@@ -88,9 +88,10 @@ export async function podkladNazvu(kategorie: KategorieKlic, v: KontextRozresen[
     if (casti.length > 1) {
       const skupiny = [...new Set(casti.map((c) => c.service.groupName).filter(Boolean))];
       const dodavatele = [...new Set(casti.map((c) => c.service.provider))];
+      // Vycet vsech sluzeb by byl na nazev moc dlouhy: skupina, jinak dodavatel
       nazevSluzby = skupiny.length === 1 && casti.every((c) => c.service.groupName)
-        ? skupiny[0]!
-        : `${[...new Set(casti.map((c) => nazevDruhu(typy, c.service.type)))].join(", ")}${dodavatele.length === 1 ? ` (${dodavatele[0]})` : ""}`;
+        ? `Společné vyúčtování ${skupiny[0]}`
+        : `Společné vyúčtování${dodavatele.length === 1 ? ` (${dodavatele[0]})` : ""}`;
     }
   }
   const najemceVydani = (vydane?.snapshot as { najemce?: { name?: string } } | null)?.najemce?.name;

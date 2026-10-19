@@ -169,7 +169,7 @@ export function navrhNazvu(p: PodkladNazvu, puvodni: string): string {
   const casti: (string | null | undefined)[] = (() => {
     const kde = p.nemovitost;
     switch (p.kategorie) {
-      case "SLUZBA_VYUCTOVANI": return [`Vyúčtování ${p.sluzba ?? "služby"}`, kde, p.obdobi ? obdobiNazvu(p.obdobi) : p.rok ? String(p.rok) : null];
+      case "SLUZBA_VYUCTOVANI": return [p.sluzba?.startsWith("Společné vyúčtování") ? p.sluzba : `Vyúčtování ${p.sluzba ?? "služby"}`, kde, p.obdobi ? obdobiNazvu(p.obdobi) : p.rok ? String(p.rok) : null];
       case "VYUCTOVANI_NAJEMCE": return [`Vyúčtování nájemci${p.cislo ? ` ${p.cislo}` : ""}`, kde, p.najemce, p.obdobi ? obdobiNazvu(p.obdobi) : null];
       case "NAJEMNI_SMLOUVA":
       case "PREDAVACI_PROTOKOL": return [KATEGORIE[p.kategorie].nazev, kde, p.najemce, p.od ? `od ${dny(p.od)}` : null];
@@ -180,9 +180,11 @@ export function navrhNazvu(p: PodkladNazvu, puvodni: string): string {
       default: return [];
     }
   })();
-  const zaklad = casti.filter(Boolean).join(" – ");
-  if (!zaklad) return bezpecneJmeno(puvodni, "soubor");
-  return `${bezpecneJmeno(zaklad).slice(0, 150)}${ext ? `.${ext}` : ""}`;
+  const dane = casti.filter((x): x is string => !!x);
+  if (!dane.length) return bezpecneJmeno(puvodni, "soubor");
+  // Zkracuje se jen prvni cast (popis), nemovitost a obdobi zustanou vzdy cele
+  const [prvni, ...zbytek] = dane.map((x) => bezpecneJmeno(x));
+  return `${[prvni.slice(0, 80).trim(), ...zbytek].join(" – ")}${ext ? `.${ext}` : ""}`;
 }
 
 /** Dalsi soubor se stejnym nazvem dostane poradove cislo: "… (2).pdf" */
