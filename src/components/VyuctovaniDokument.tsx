@@ -144,6 +144,12 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
         <tfoot className="text-sm">
           <tr><td className="pt-3">Náklady na služby celkem</td><td className="pt-3 text-right font-medium tabular-nums">{czk(s.naklady)}</td></tr>
           <tr><td className="py-1">Zálohy za období</td><td className="py-1 text-right font-medium tabular-nums">{czk(s.zalohy)}</td></tr>
+          {(s.zalohySluzeb?.length ?? 0) > 0 && s.zalohySluzeb!.map((z) => (
+            <tr key={z.nazev} className="text-xs text-ink-muted">
+              <td className="pl-3">{z.nazev} · {dateCz(z.od)} – {dateCz(z.do)}</td>
+              <td className="text-right tabular-nums">{czk(z.castka)}</td>
+            </tr>
+          ))}
           <tr className="border-t-2 border-line text-base font-bold">
             <td className="pt-2">
               {nedoplatek ? "Nedoplatek k úhradě" : preplatek ? "Přeplatek k vrácení" : "Zálohy odpovídají nákladům"}

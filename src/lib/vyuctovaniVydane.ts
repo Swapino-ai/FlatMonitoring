@@ -43,6 +43,8 @@ export interface SnapshotVyuctovani {
   platby?: PlatbaZalohy[];
   /** Mesicni zalohy podle smlouvy po obdobich se stejnou vysi a jejich rozpis po sluzbach */
   rozpisZaloh?: ObdobiZaloh[];
+  /** Z ceho se sklada "Zalohy za obdobi": podil zaloh na kazdou vyuctovanou sluzbu */
+  zalohySluzeb?: { nazev: string; od: string; do: string; castka: number }[];
 }
 
 export interface ObdobiZaloh {
@@ -142,6 +144,18 @@ export function doporucenaZaloha(naklady: number, od: string, doDne: string, akt
   return rozdil >= Math.max(100, aktualni * 0.05) ? zaokrouhleno : null;
 }
 
+/**
+ * Navrh nove mesicni zalohy, kdyz se vyuctovaly jen nektere sluzby: zaloha se upravi jen
+ * o rozdil mezi naklady a zalohami vyuctovanych sluzeb, ostatni sluzby zustanou jak jsou.
+ */
+export function upravaZalohy(naklady: number, zalohy: number, od: string, doDne: string, aktualni: number): number | null {
+  const dnu = dnuVObdobi(od, doDne);
+  if (dnu < 90 || naklady <= 0 || aktualni <= 0) return null;
+  const novy = Math.ceil((aktualni + ((naklady - zalohy) / dnu) * (365 / 12)) / 10) * 10;
+  const rozdil = Math.abs(novy - aktualni);
+  return novy > 0 && rozdil >= Math.max(100, aktualni * 0.05) ? novy : null;
+}
+
 /** Prekryva obdobi jiz vydane (nestornovane) vyuctovani stejne smlouvy? Vraci prvni kolizi. */
 export function kolize(
   existujici: { cislo: string; od: string; do: string; status: string }[], od: string, doDne: string,
@@ -235,7 +249,11 @@ export function sestavSnapshot(a: {
     verze: 2, nemovitost: a.nemovitost, najemce: a.najemce, pronajimatel: a.pronajimatel,
     od: v.od, do: v.do, radky, naklady: v.naklady, zalohy: v.zalohy, rozdil: v.rozdil,
     nepokryto: nepokrytoZRadku(radky), aktualniZaloha: a.aktualniZaloha,
-    doporucenaZaloha: a.zamerne ? null : doporucenaZaloha(v.naklady, v.od, v.do, a.aktualniZaloha),
+    doporucenaZaloha: a.zamerne ? null : upravaZalohy(v.naklady, v.zalohy, v.od, v.do, a.aktualniZaloha),
     skupiny: v.skupiny, preneseno, sluzbyDo: v.sluzbyDo, platby: a.platby ?? [], rozpisZaloh: a.rozpisZaloh ?? [],
+    zalohySluzeb: [
+      ...vyuctovane.filter((r) => r.zalohy > 0.5 && r.od && r.do).map((r) => ({ nazev: r.nazev, od: r.od!, do: r.do!, castka: Math.round(r.zalohy) })),
+      ...(v.zalohyNeprirazene > 0.5 ? [{ nazev: "Ostatní (bez přiřazené služby)", od: v.od, do: v.do, castka: Math.round(v.zalohyNeprirazene) }] : []),
+    ],
   };
 }
