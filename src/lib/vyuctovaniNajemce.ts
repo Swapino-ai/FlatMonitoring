@@ -122,6 +122,8 @@ export interface VysledekNajemce {
   zalohyNeprirazene: number;
   /** Vse, co mel najemce za dny tohoto obdobi na zalohach zaplatit */
   zalohyZaplaceno: number;
+  /** Zalohy, ktere se nevyuctovavaji (sluzba se nepreuctovava / nema vyuctovani): pausal */
+  zalohyPausal: { nazev: string; castka: number }[];
   /** Zalohy za dny obdobi u sluzeb, ktere se zatim nevyuctovaly — zapoctou se s nimi pozdeji */
   zalohyPrenesene: { nazev: string; castka: number; duvod: string }[];
   /** Do kdy je ktera sluzba po tomto vyuctovani vyuctovana */
@@ -158,7 +160,7 @@ export function vyuctujNajemci(
   drivejsi: DrivejsiVyuctovani[] = [],
 ): VysledekNajemce {
   const prazdne = (chyba: string): VysledekNajemce => ({
-    od, do: doDne, sluzby: [], skupiny: [], naklady: 0, zalohy: 0, rozdil: 0, zalohyNeprirazene: 0, zalohyZaplaceno: 0, zalohyPrenesene: [], sluzbyDo: {}, chybiOdecet: false, priblizne: false, chyba,
+    od, do: doDne, sluzby: [], skupiny: [], naklady: 0, zalohy: 0, rozdil: 0, zalohyNeprirazene: 0, zalohyZaplaceno: 0, zalohyPrenesene: [], zalohyPausal: [], sluzbyDo: {}, chybiOdecet: false, priblizne: false, chyba,
   });
   const P = prunik(od, doDne, najem.od, najem.do ?? doDne);
   if (!P) return prazdne("Zvolené období nezasahuje do doby nájmu.");
@@ -321,7 +323,8 @@ export function vyuctujNajemci(
   // Zalohy za dny tohoto obdobi u sluzeb, ktere se zatim nevyuctovaly — zapocitaji se pozdeji se sluzbou
   const prenesZaloh = new Map<string, number>();
   let zaplaceno = 0;
-  let neprirazene = 0;
+  const neprirazene = 0;
+  const pausal = new Map<string, number>();
   const zacatek = [P[0], ...[...vyuctovaneDny.values()].map((x) => x[0])].reduce(min);
   for (let t = cas(zacatek); t <= cas(P[1]); t += DEN) {
     const d = naIso(t);
@@ -338,30 +341,39 @@ export function vyuctujNajemci(
       if (r && r[0] <= d && d <= r[1]) zalohySluzby.set(id, (zalohySluzby.get(id) ?? 0) + castka);
       else if (vObdobi) prenesZaloh.set(id, (prenesZaloh.get(id) ?? 0) + castka);
     };
+    // Zaloha, kterou nejde vyuctovat proti nakladum (sluzba se nepreuctovava, neplati nebo k ni
+    // nikdy neprijde vyuctovani a neni komu ji dat) = pausal: nevraci se ani nedoplaci
+    const pausalem = (nazev: string, castka: number) => {
+      rozdeleno += castka;
+      if (vObdobi && castka > 0) pausal.set(nazev, (pausal.get(nazev) ?? 0) + castka);
+    };
     if (z.polozky?.length) {
+      // Celkova zaloha se rozdeli podle rozpisu (i kdyz se soucet rozpisu od zalohy lisi)
+      const soucet = z.polozky.reduce((a, p) => a + Math.max(0, p.amount), 0);
+      const koef = soucet > 0 ? (z.celkem * z.dnuVMesici) / soucet : 0;
       // Zaloha na sluzbu, ktera nema zadne vyuctovani od dodavatele (napr. "Teplo" v rozpisu,
-      // ale SVJ uctuje teplou vodu, uklid, vytah), by se nikdy nezapocitala. Takove zalohy jdou
-      // do spolecneho baliku pro sluzby bez vlastni zalohy — podle jejich mesicnich nakladu.
+      // ale SVJ uctuje teplou vodu, uklid, vytah), jde do spolecneho baliku pro sluzby bez
+      // vlastni zalohy — podle jejich mesicnich nakladu
       let balik = 0;
+      const balikPolozky: { nazev: string; castka: number }[] = [];
       for (const p of z.polozky) {
+        const castka = (Math.max(0, p.amount) * koef) / z.dnuVMesici;
         const s = aktivni.find((x) => x.id === p.serviceId);
-        if (!s) continue;
-        const castka = Math.max(0, Math.min(p.amount / z.dnuVMesici, z.celkem - rozdeleno - balik));
-        if (s.vyuctovani.length) pridej(p.serviceId, castka); else balik += castka;
+        if (!s) { pausalem(sluzby.find((x) => x.id === p.serviceId)?.nazev ?? "Ostatní", castka); continue; }
+        if (s.vyuctovani.length) pridej(p.serviceId, castka);
+        else { balik += castka; balikPolozky.push({ nazev: s.nazev, castka }); }
       }
       const vlastni = new Set(z.polozky.map((p) => p.serviceId));
       const prijemci = aktivni.filter((s) => !vlastni.has(s.id) && s.vyuctovani.length > 0);
       if (balik > 0 && prijemci.length) {
         const vahy = prijemci.reduce((a, s) => a + Math.max(0, s.vaha), 0);
         for (const s of prijemci) pridej(s.id, balik * (vahy > 0 ? Math.max(0, s.vaha) / vahy : 1 / prijemci.length));
-      }
+      } else for (const x of balikPolozky) pausalem(x.nazev, x.castka);
     } else {
       const vahy = aktivni.reduce((a, s) => a + Math.max(0, s.vaha), 0);
       if (vahy > 0) for (const s of aktivni) pridej(s.id, (z.celkem * Math.max(0, s.vaha)) / vahy);
+      else pausalem("Zálohy bez přeúčtovaných služeb", z.celkem);
     }
-    // Co nejde priradit zadne sluzbe, patri do obdobi, kde ho jeste nic nevyuctovalo
-    const zbytek = z.celkem - rozdeleno;
-    if (zbytek > 0.0001 && d >= P[0] && !drivePokryto(d)) neprirazene += zbytek;
   }
   for (const r of radky) r.zalohy = zalohySluzby.get(r.sluzbaId) ?? 0;
 
@@ -376,6 +388,7 @@ export function vyuctujNajemci(
   return {
     od: P[0], do: P[1], sluzby: radky, skupiny, naklady, zalohy, rozdil: zalohy - naklady, zalohyNeprirazene: neprirazene,
     zalohyZaplaceno: Math.round(zaplaceno * 100) / 100,
+    zalohyPausal: [...pausal.entries()].filter(([, c]) => c >= 0.5).map(([nazev, castka]) => ({ nazev, castka: Math.round(castka * 100) / 100 })),
     zalohyPrenesene: radky.filter((r) => (prenesZaloh.get(r.sluzbaId) ?? 0) >= 0.5).map((r) => ({
       nazev: r.nazev, castka: Math.round(prenesZaloh.get(r.sluzbaId)! * 100) / 100,
       duvod: r.duvodPrenosu ?? (r.stav === "NEVYBRANA" ? "služba není v tomto vyúčtování vybraná" : "dodavatel zatím nevyúčtoval"),

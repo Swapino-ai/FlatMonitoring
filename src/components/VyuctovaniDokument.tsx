@@ -143,14 +143,26 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
         </tbody>
         <tfoot className="text-sm">
           <tr><td className="pt-3">Náklady na služby celkem</td><td className="pt-3 text-right font-medium tabular-nums">{czk(s.naklady)}</td></tr>
-          {s.zalohyZaplaceno != null && (s.zalohyPrenesene?.length ?? 0) > 0 && (() => {
-            const prenesene = s.zalohyPrenesene!.reduce((a, z) => a + z.castka, 0);
-            const zMinula = Math.round(s.zalohy - (s.zalohyZaplaceno - prenesene));
+          {s.zalohyZaplaceno != null && ((s.zalohyPrenesene?.length ?? 0) > 0 || (s.zalohyPausal?.length ?? 0) > 0) && (() => {
+            const prenesene = (s.zalohyPrenesene ?? []).reduce((a, z) => a + z.castka, 0);
+            const pausal = (s.zalohyPausal ?? []).reduce((a, z) => a + z.castka, 0);
+            const zMinula = Math.round(s.zalohy - (s.zalohyZaplaceno - prenesene - pausal));
             return (
               <>
                 <tr><td className="py-1">Zálohy zaplacené za období</td><td className="py-1 text-right tabular-nums">{czk(s.zalohyZaplaceno)}</td></tr>
-                <tr><td className="py-0.5 pl-3">Přeneseno do dalšího vyúčtování — vyúčtování zatím není, vyúčtuje se později</td><td className="py-0.5 text-right tabular-nums">−{czk(prenesene)}</td></tr>
-                {s.zalohyPrenesene!.map((z) => (
+                {(s.zalohyPausal?.length ?? 0) > 0 && (
+                  <>
+                    <tr><td className="py-0.5 pl-3">Paušální platby — nevyúčtovávají se</td><td className="py-0.5 text-right tabular-nums">−{czk(pausal)}</td></tr>
+                    {s.zalohyPausal!.map((z) => (
+                      <tr key={z.nazev} className="text-xs text-ink-muted">
+                        <td className="pl-6">{z.nazev}</td>
+                        <td className="text-right tabular-nums">{czk(z.castka)}</td>
+                      </tr>
+                    ))}
+                  </>
+                )}
+                {prenesene > 0 && <tr><td className="py-0.5 pl-3">Přeneseno do dalšího vyúčtování — vyúčtování zatím není, vyúčtuje se později</td><td className="py-0.5 text-right tabular-nums">−{czk(prenesene)}</td></tr>}
+                {(s.zalohyPrenesene ?? []).map((z) => (
                   <tr key={z.nazev} className="text-xs text-ink-muted">
                     <td className="pl-6">{z.nazev}</td>
                     <td className="text-right tabular-nums">{czk(z.castka)}</td>
@@ -162,7 +174,7 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
               </>
             );
           })()}
-          <tr><td className="py-1">{(s.zalohyPrenesene?.length ?? 0) > 0 ? "Zálohy započtené k vyúčtovaným službám" : "Zálohy za období"}</td><td className="py-1 text-right font-medium tabular-nums">{czk(s.zalohy)}</td></tr>
+          <tr><td className="py-1">{(s.zalohyPrenesene?.length ?? 0) > 0 || (s.zalohyPausal?.length ?? 0) > 0 ? "Zálohy započtené k vyúčtovaným službám" : "Zálohy za období"}</td><td className="py-1 text-right font-medium tabular-nums">{czk(s.zalohy)}</td></tr>
           {(s.zalohySluzeb?.length ?? 0) > 0 && s.zalohySluzeb!.map((z) => (
             <tr key={z.nazev} className="text-xs text-ink-muted">
               <td className="pl-3">{z.nazev} · {dateCz(z.od)} – {dateCz(z.do)}</td>

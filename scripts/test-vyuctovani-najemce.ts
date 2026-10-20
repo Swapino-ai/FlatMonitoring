@@ -104,5 +104,18 @@ over("nájemce celou dobu sám → celá faktura bez měřáků", rm3.sluzby[0].
   over("přiřazený konečný odečet a předání: 600 z 1 000 kWh, bez upozornění", Math.round(r.sluzby[0].castka) === 6000 && !z?.priblizne, `${Math.round(r.sluzby[0].castka)} ${JSON.stringify(z?.priblizne ?? null)}`);
 }
 
+// Pausal: zaloha na nepreuctovanou sluzbu (internet) se nevraci; rozdil zalohy a rozpisu se rozpocita do polozek
+{
+  const n = { id: "P", nazev: "P", od: "2026-03-01", do: null, utilitiesMonthly: 4550,
+    advanceItems: [{ serviceId: "net", amount: 300 }, { serviceId: "el", amount: 1200 }, { serviceId: "voda", amount: 3000 }] };
+  const sl = [sluzba("net", { prectena: false }), sluzba("el", { vyuctovani: [v("e", "2026-03-01", "2026-06-30", 4000)] }), sluzba("voda", { vyuctovani: [v("w", "2026-01-01", "2026-12-31", 30000)] })];
+  const r = vyuctujNajemci(n, [n], sl, "2026-03-01", "2026-06-30", null);
+  const pausal = r.zalohyPausal.reduce((a, z) => a + z.castka, 0);
+  const pren = r.zalohyPrenesene.reduce((a, z) => a + z.castka, 0);
+  over("paušál internet (300 × 4550/4500 × 4 měs.)", r.zalohyPausal.length === 1 && Math.abs(pausal - 4 * 300 * 4550 / 4500) < 2, `${JSON.stringify(r.zalohyPausal)}`);
+  over("zaplaceno = započteno + přeneseno + paušál, nic bez služby", Math.abs(r.zalohyZaplaceno - r.zalohy - pren - pausal) < 2 && r.zalohyNeprirazene === 0,
+    `${kc(r.zalohyZaplaceno)} = ${kc(r.zalohy)} + ${kc(pren)} + ${kc(pausal)}`);
+}
+
 console.log(chyby ? `${chyby} chyb` : "vše v pořádku");
 process.exit(chyby ? 1 : 0);

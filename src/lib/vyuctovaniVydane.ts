@@ -47,6 +47,8 @@ export interface SnapshotVyuctovani {
   zalohySluzeb?: { nazev: string; od: string; do: string; castka: number }[];
   /** Zalohy zaplacene za dny obdobi celkem */
   zalohyZaplaceno?: number;
+  /** Pausalni zalohy (nevyuctovavaji se) */
+  zalohyPausal?: { nazev: string; castka: number }[];
   /** Zalohy nevyuctovanych sluzeb — zapoctou se v dalsim vyuctovani */
   zalohyPrenesene?: { nazev: string; castka: number; duvod: string }[];
 }
@@ -257,6 +259,7 @@ export function sestavSnapshot(a: {
     skupiny: v.skupiny, preneseno, sluzbyDo: v.sluzbyDo, platby: a.platby ?? [], rozpisZaloh: a.rozpisZaloh ?? [],
     zalohyZaplaceno: Math.round(v.zalohyZaplaceno),
     zalohyPrenesene: v.zalohyPrenesene.map((z) => ({ ...z, castka: Math.round(z.castka) })),
+    zalohyPausal: (v.zalohyPausal ?? []).map((z) => ({ ...z, castka: Math.round(z.castka) })),
     zalohySluzeb: [
       ...vyuctovane.filter((r) => r.zalohy > 0.5 && r.od && r.do).map((r) => ({ nazev: r.nazev, od: r.od!, do: r.do!, castka: Math.round(r.zalohy) })),
       ...(v.zalohyNeprirazene > 0.5 ? [{ nazev: "Ostatní (bez přiřazené služby)", od: v.od, do: v.do, castka: Math.round(v.zalohyNeprirazene) }] : []),
