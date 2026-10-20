@@ -15,7 +15,7 @@ import { NEMOVITOST_MAP, nazevNemovitosti } from "@/lib/catalogs";
 import { denISO } from "@/lib/format";
 import { nahledAi } from "@/lib/market/aiNahled";
 import { odhadZeZarazenych } from "@/lib/market/zarazeni";
-import { OKNO_ODHADU, navrhniProNemovitost, korenOceneni, okruhNemovitosti } from "@/lib/market/inzeraty";
+import { OKNO_ODHADU, najdiShody, navrhniProNemovitost, korenOceneni, okruhNemovitosti } from "@/lib/market/inzeraty";
 import { cenaVJednotce, jednotkaOdhadu, odhadNaM2, polohaNabidky, vahaZarazeni, vzdalenost } from "@/lib/market/zarazeni";
 import { hodnotyZaznamu, profilTypu } from "@/lib/market/profily";
 
@@ -48,6 +48,11 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
   // Pri otevreni: odebrat navrhy, ktere uz pravidlum nevyhovuji, a doplnit nove z databaze trhu
   if (korenP?.sledovatTrh) await navrhniProNemovitost(koren);
   const diag = await navrhniProNemovitost(koren, { zapsat: false });
+  // Zarazene nabidky posledniho mesice: nejsou to znovu vlozene drivejsi inzeraty (zlevneni)?
+  const cerstve = await prisma.zarazeniInzeratu.findMany({
+    where: { propertyId: koren, stav: "ZARAZENO", inzerat: { zmizelAt: null, firstSeenAt: { gte: new Date(Date.now() - 31 * 86400000) } } }, select: { inzeratId: true },
+  });
+  if (cerstve.length) await najdiShody(cerstve.map((z) => z.inzeratId)).catch(() => null);
 
   const zaznamy = await prisma.zarazeniInzeratu.findMany({
     where: { propertyId: koren },

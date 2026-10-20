@@ -37,9 +37,22 @@ export function CenyAShody({ ceny, najem, shody = [], canEdit, onRozhodni }: {
   const predchozi = ceny.length > 1 ? ceny[ceny.length - 2] : null;
   const zmena = posledni && predchozi ? posledni.price - predchozi.price : 0;
   const celkem = posledni && ceny.length > 1 ? ((posledni.price - ceny[0].price) / ceny[0].price) * 100 : 0;
+  // Znovu vlozeny inzerat: porovnani s posledni cenou drivejsiho inzeratu tehoz bytu (stejny typ nabidky)
+  const drivejsi = viditelne.filter((s) => s.drivejsi && s.jiny.najem === najem).sort((a, b) => b.jiny.do.localeCompare(a.jiny.do))[0];
+  const proti = drivejsi && posledni ? posledni.price - drivejsi.jiny.price : 0;
+  const protiPct = drivejsi && drivejsi.jiny.price ? (proti / drivejsi.jiny.price) * 100 : 0;
 
   return (
     <div className="space-y-1.5">
+      {drivejsi && posledni && Math.abs(proti) >= 1 && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className={`rounded-full px-2.5 py-0.5 font-semibold ${proti < 0 ? "bg-good/15 text-good" : "bg-bad/15 text-bad"}`}
+            title={`Dřívější inzerát téhož bytu ${dateCz(drivejsi.jiny.od)}–${dateCz(drivejsi.jiny.do)} končil na ${cena(drivejsi.jiny.price)}`}>
+            {proti < 0 ? "▼ Zlevněno" : "▲ Zdraženo"} proti dřívějšímu inzerátu: {proti > 0 ? "+" : ""}{czk(proti)} ({protiPct > 0 ? "+" : ""}{protiPct.toFixed(1).replace(".", ",")} %)
+            {drivejsi.stav === "NAVRH" ? " · pokud jde o stejný byt" : ""}
+          </span>
+        </div>
+      )}
       {predchozi && posledni && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <button type="button" onClick={() => setHistorie((x) => !x)}
@@ -65,7 +78,7 @@ export function CenyAShody({ ceny, najem, shody = [], canEdit, onRozhodni }: {
 
       {viditelne.map((s) => {
         const j = s.jiny;
-        const popis = <>{s.drivejsi ? "dřívější smazaný inzerát, který byl v odhadu," : "novější inzerát"} {j.najem ? "(pronájem)" : ""} {dateCz(j.od)}–{j.zmizel ? dateCz(j.do) : "dosud"}: <strong>{j.najem ? `${czk(j.price)}/měs.` : czk(j.price)}</strong>
+        const popis = <>{s.drivejsi ? "dřívější smazaný inzerát" : "novější inzerát"} {j.najem ? "(pronájem)" : ""} {dateCz(j.od)}–{j.zmizel ? dateCz(j.do) : "dosud"}: <strong>{j.najem ? `${czk(j.price)}/měs.` : czk(j.price)}</strong>
           {j.ceny.length > 1 && <> (začínal na {j.najem ? `${czk(j.ceny[0].price)}/měs.` : czk(j.ceny[0].price)})</>}</>;
         return s.stav === "NAVRH" ? (
           <div key={s.id} className="rounded-lg border border-warn/40 bg-warn/10 px-2.5 py-1.5 text-xs">

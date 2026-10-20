@@ -288,16 +288,16 @@ function proShodu(i: { category: string; disposition: string | null; areaM2: num
 
 /**
  * Hleda, jestli navrzena nebo zarazena nabidka neni stejny byt jako drivejsi, uz smazany
- * inzerat, ktery byl zarazeny do odhadu (urcoval cenu). Jen takove shody maji smysl:
- * ukazi, za kolik se ten byt nabizel driv. Pravdepodobne shody ulozi jako navrh ke
- * schvaleni; o jednou rozhodnutych parech uz znovu nenavrhuje.
+ * inzerat (znovu vlozeny inzerat = jine cislo). Ukaze, za kolik se ten byt nabizel driv —
+ * zlevneni / zdrazeni. Pravdepodobne shody ulozi jako navrh ke schvaleni; o jednou
+ * rozhodnutych parech uz znovu nenavrhuje. `jen` omezi hledani na dane inzeraty.
  */
-export async function najdiShody(): Promise<{ porovnano: number; novych: number; odebrano: number }> {
-  // Drivejsi = zmizely z trhu a byl zarazeny do odhadu
-  const drivejsiPodminka = { zmizelAt: { not: null }, zarazeni: { some: { stav: "ZARAZENO" } } };
+export async function najdiShody(jen?: string[]): Promise<{ porovnano: number; novych: number; odebrano: number }> {
+  // Drivejsi = zmizely z trhu (jakykoli, ktery sken videl)
+  const drivejsiPodminka = { zmizelAt: { not: null } };
   // Navrhy z drivejsich pravidel, ktere tomu neodpovidaji, zmizi (rozhodnute zustavaji)
-  const odebrano = (await prisma.shodaInzeratu.deleteMany({ where: { stav: "NAVRH", NOT: { drivejsi: drivejsiPodminka } } })).count;
-  const sledovane = await prisma.inzerat.findMany({ where: { zmizelAt: null, zarazeni: { some: { stav: { in: ["NAVRH", "ZARAZENO"] } } }, areaM2: { not: null } } });
+  const odebrano = jen ? 0 : (await prisma.shodaInzeratu.deleteMany({ where: { stav: "NAVRH", NOT: { drivejsi: drivejsiPodminka } } })).count;
+  const sledovane = await prisma.inzerat.findMany({ where: { zmizelAt: null, zarazeni: { some: { stav: { in: ["NAVRH", "ZARAZENO"] } } }, areaM2: { not: null }, ...(jen ? { id: { in: jen } } : {}) } });
   const znamePary = new Set((await prisma.shodaInzeratu.findMany({ select: { inzeratId: true, drivejsiId: true } }))
     .flatMap((s) => [`${s.inzeratId}|${s.drivejsiId}`, `${s.drivejsiId}|${s.inzeratId}`]));
   let porovnano = 0, novych = 0;
@@ -306,6 +306,8 @@ export async function najdiShody(): Promise<{ porovnano: number; novych: number;
     const kandidati = await prisma.inzerat.findMany({
       where: {
         id: { not: a.id }, category: a.category, ...drivejsiPodminka,
+        // Drivejsi inzerat musel zmizet drive, nez se objevil tento
+        zmizelAt: { not: null, lte: new Date(a.firstSeenAt.getTime() + 7 * 86400000) },
         ...(a.disposition ? { OR: [{ disposition: a.disposition }, { disposition: null }] } : {}),
         areaM2: { gte: plocha * 0.96, lte: plocha * 1.04 },
         AND: [{

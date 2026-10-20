@@ -11,7 +11,7 @@
 import { PrismaClient, type Prisma } from "@prisma/client";
 import Anthropic from "@anthropic-ai/sdk";
 import type { BrowserContext } from "playwright";
-import { AI_MODEL, CENIK, PROFILY_OD, vytahniParametry } from "../src/lib/market/aiParametry";
+import { AI_MODEL, CENIK, NAJEM_OD, PROFILY_OD, vytahniParametry } from "../src/lib/market/aiParametry";
 import { hodnotyNabidky, hodnotyZaznamu, profilTypu } from "../src/lib/market/profily";
 import { HLAVICKY_PROHLIZECE, sleep } from "../src/lib/market/util";
 import { nactiDetail } from "./sreality-detail";
@@ -24,7 +24,8 @@ export async function doplnParametry(prisma: PrismaClient, limit = 150, kontextZ
   const cekajici = await prisma.inzerat.findMany({
     // Bez parametru, nebo bez fotek galerie (ty se pak jen doplni, AI se znovu nevola)
     // Bez parametru, prectene pred profily typu, nebo bez fotek (ty se jen doplni)
-    where: { OR: [{ parametryAt: null }, { parametryAt: { lt: PROFILY_OD } }, { fotkyUrl: { isEmpty: true } }], url: { not: null }, zmizelAt: null, zarazeni: { some: { stav: { in: ["NAVRH", "ZARAZENO"] } } } },
+    // Pronajmy prectene pred ctenim platebnich podminek znovu
+    where: { OR: [{ parametryAt: null }, { parametryAt: { lt: PROFILY_OD } }, { fotkyUrl: { isEmpty: true } }, { dealType: "RENT", parametryAt: { lt: NAJEM_OD } }], url: { not: null }, zmizelAt: null, zarazeni: { some: { stav: { in: ["NAVRH", "ZARAZENO"] } } } },
     include: { zarazeni: { select: { stav: true } } },
   });
   // Zarazene napred (z nich se pocita odhad), pak navrhy
@@ -56,12 +57,12 @@ export async function doplnParametry(prisma: PrismaClient, limit = 150, kontextZ
         console.log(`  ${i.externalId}: stránka není detail inzerátu (${new URL(stranka.url()).pathname.slice(0, 40)}), přeskočeno`);
         continue;
       }
-      if (i.parametryAt && i.parametryAt >= PROFILY_OD) {
+      if (i.parametryAt && i.parametryAt >= PROFILY_OD && (i.dealType !== "RENT" || i.parametryAt >= NAJEM_OD)) {
         // Parametry uz jsou, chybely jen fotky
         await prisma.inzerat.update({ where: { id: i.id }, data: { fotkyUrl: d.fotky } });
         continue;
       }
-      const r = await vytahniParametry(d.text, profilTypu(i.category), client);
+      const r = await vytahniParametry(d.text, profilTypu(i.category), client, i.dealType === "RENT");
       vstup += r.vstup; vystup += r.vystup;
       await prisma.inzerat.update({
         where: { id: i.id },

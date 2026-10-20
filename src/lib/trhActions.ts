@@ -5,7 +5,7 @@ import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./auth";
-import { aktualizujSkupinu, clenoveOceneni, korenOceneni, navrhniProNemovitost } from "./market/inzeraty";
+import { aktualizujSkupinu, clenoveOceneni, korenOceneni, najdiShody, navrhniProNemovitost } from "./market/inzeraty";
 
 export interface TrhState { error?: string; success?: string }
 
@@ -44,6 +44,8 @@ export async function rozhodniInzeraty(propertyId: string, ids: string[], stav: 
     data: { stav, rozhodnutoAt: stav === "NAVRH" ? null : new Date() },
   });
   await aktualizujSkupinu(koren);
+  // Zarazeny inzerat: neni to znovu vlozeny drivejsi (zlevneni / zdrazeni)?
+  if (stav === "ZARAZENO") await najdiShody(zaznamy.map((z) => z.inzeratId)).catch(() => null);
   for (const id of await clenoveOceneni(koren)) obnov(id);
   const slovo = stav === "ZARAZENO" ? "Zařazeno" : stav === "VYRAZENO" ? "Vyřazeno" : "Vráceno do návrhů";
   return { success: `${slovo}: ${zaznamy.length}.` };

@@ -3,6 +3,7 @@
  * drobne udaje a jednovetne shrnuti. Ciste funkce, bez SDK.
  */
 import { platneHodnoty, type Profil } from "./profily";
+import type { PodminkyNajmu } from "./aiParametry";
 
 export interface AiNahled {
   /** Hodnoty vlastnosti (klic -> hodnota) */
@@ -12,6 +13,8 @@ export interface AiNahled {
   /** Drobne udaje k zobrazeni jako text */
   stitky: string[];
   shrnuti: string;
+  /** Pronajem: jak se plati (najem, sluzby, energie, kauce, provize) */
+  najem?: PodminkyNajmu | null;
 }
 
 export function nahledAi(parametry: unknown, profil: Profil): AiNahled | null {
@@ -24,6 +27,7 @@ export function nahledAi(parametry: unknown, profil: Profil): AiNahled | null {
       duvody: (p.duvody && typeof p.duvody === "object" ? p.duvody : {}) as Record<string, string>,
       stitky: Array.isArray(p.info) ? (p.info as unknown[]).filter((x): x is string => typeof x === "string") : [],
       shrnuti: typeof p.shrnuti === "string" ? p.shrnuti : "",
+      najem: p.najem && typeof p.najem === "object" ? p.najem as PodminkyNajmu : null,
     };
   }
   // Starsi tvar (jen byty): hodnoty v koreni, zduvodneni jako typDomuDuvod
