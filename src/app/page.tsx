@@ -13,6 +13,8 @@ import { cashFlowSeries, equitySeries } from "@/lib/series";
 import { nactiTypySluzeb } from "@/lib/typySluzeb";
 import { findBundleOpportunities, summarizeSavings } from "@/lib/savings";
 import { czk, czkCompact, dateCz, pct, STATUS_LABELS } from "@/lib/format";
+import { nactiUpozorneni } from "@/lib/upozorneni";
+import { Upozorneni } from "@/components/Upozorneni";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +27,9 @@ export default async function Dashboard() {
   const savings = summarizeSavings(findBundleOpportunities(properties, new Date(), nazvyDruhu));
 
   const equity = equitySeries(properties);
-  const cashflow = cashFlowSeries(properties, 12, new Date(), await nactiNavrhyPortfolia(properties));
+  const navrhyPlateb = await nactiNavrhyPortfolia(properties);
+  const cashflow = cashFlowSeries(properties, 12, new Date(), navrhyPlateb);
+  const upozorneni = await nactiUpozorneni(properties, navrhyPlateb);
   const yields = analyses
     .filter((a) => a.property.status !== "SOLD")
     .map((a) => ({ name: a.property.name, vynos: Number(a.metrics.netYield.toFixed(2)) }))
@@ -70,6 +74,8 @@ export default async function Dashboard() {
             <Link href="/reports" className="btn no-print">Vygenerovat PDF report</Link>
           </div>
         </div>
+
+        {upozorneni.length > 0 && <Upozorneni polozky={upozorneni} />}
 
         {properties.length === 0 ? (
           <Card>
