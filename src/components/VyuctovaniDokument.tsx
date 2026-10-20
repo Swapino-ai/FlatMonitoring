@@ -157,13 +157,7 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
             return (
               <>
                 <tr><td className="py-1">Zálohy zaplacené za období</td><td className="py-1 text-right tabular-nums">{czk(s.zalohyZaplaceno)}</td></tr>
-                <tr><td className="py-0.5 pl-3">Přeneseno do dalšího vyúčtování — vyúčtování zatím není, vyúčtuje se později</td><td className="py-0.5 text-right tabular-nums">{prenesene > 0 ? `−${czk(prenesene)}` : ""}</td></tr>
-                {(s.zalohyPrenesene ?? []).map((z, i) => (
-                  <tr key={`${z.nazev}${i}`} className="text-xs text-ink-muted">
-                    <td className="pl-6">{z.nazev}</td>
-                    <td className="text-right tabular-nums">{czk(z.castka)}</td>
-                  </tr>
-                ))}
+                <tr><td className="py-0.5 pl-3">Přeneseno do dalšího vyúčtování (rozpis níže)</td><td className="py-0.5 text-right tabular-nums">{prenesene > 0 ? `−${czk(prenesene)}` : ""}</td></tr>
                 {Math.abs(zMinula) >= 1 && (
                   <tr><td className="py-0.5 pl-3">Přeneseno z minulého vyúčtování</td><td className="py-0.5 text-right tabular-nums">+{czk(zMinula)}</td></tr>
                 )}
@@ -187,6 +181,54 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
           </tr>
         </tfoot>
       </table>
+
+      {(s.zalohyPrenesene?.length ?? 0) > 0 && (() => {
+        // Seskupeni jako u vyuctovanych sluzeb: skupina se souctem, sluzby pod ni
+        const skupiny: { nazev: string | null; polozky: NonNullable<typeof s.zalohyPrenesene> }[] = [];
+        for (const z of s.zalohyPrenesene!) {
+          const g = z.skupina ? skupiny.find((x) => x.nazev === z.skupina) : null;
+          if (g) g.polozky.push(z); else skupiny.push({ nazev: z.skupina ?? null, polozky: [z] });
+        }
+        const radek = (z: NonNullable<typeof s.zalohyPrenesene>[number], vnoreny: boolean, i: number) => (
+          <div key={`${z.nazev}${i}`} className={`flex justify-between gap-3 ${vnoreny ? "mt-1 pl-3" : ""}`}>
+            <span>{z.nazev}{z.dodavatel && <span className="text-xs text-ink-muted"> · {z.dodavatel}</span>}</span>
+            {vnoreny && <span className="tabular-nums">{czk(z.castka)}</span>}
+          </div>
+        );
+        return (
+          <section className="mt-5 break-inside-avoid">
+            <h3 className="text-sm font-semibold">Přeneseno do dalšího vyúčtování</h3>
+            <p className="mb-1 text-xs text-ink-muted">Vyúčtování od dodavatele zatím není, vyúčtuje se později.</p>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-line text-left text-xs text-ink-muted">
+                  <th className="py-1.5 font-medium">Služba</th>
+                  <th className="py-1.5 text-right font-medium">Přenesené zálohy</th>
+                </tr>
+              </thead>
+              <tbody>
+                {skupiny.map((g, i) => (
+                  <tr key={g.nazev ?? `p${i}`} className="border-b border-line/60 align-top">
+                    <td className="py-2">
+                      {g.nazev ? (
+                        <>
+                          <div className="font-medium">{g.nazev}</div>
+                          {g.polozky.map((z, k) => radek(z, true, k))}
+                        </>
+                      ) : g.polozky.map((z, k) => radek(z, false, k))}
+                    </td>
+                    <td className="py-2 text-right font-medium tabular-nums">{czk(g.polozky.reduce((a, z) => a + z.castka, 0))}</td>
+                  </tr>
+                ))}
+                <tr>
+                  <td className="pt-2 font-medium">Přeneseno celkem</td>
+                  <td className="pt-2 text-right font-semibold tabular-nums">{czk(s.zalohyPrenesene!.reduce((a, z) => a + z.castka, 0))}</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+        );
+      })()}
 
 
       {(nedoplatek || preplatek) && (

@@ -50,7 +50,7 @@ export interface SnapshotVyuctovani {
   /** Pausalni zalohy (nevyuctovavaji se) */
   zalohyPausal?: { nazev: string; castka: number }[];
   /** Zalohy nevyuctovanych sluzeb — zapoctou se v dalsim vyuctovani */
-  zalohyPrenesene?: { nazev: string; castka: number; duvod: string }[];
+  zalohyPrenesene?: { nazev: string; castka: number; duvod: string; dodavatel?: string; skupina?: string | null }[];
 }
 
 export interface ObdobiZaloh {

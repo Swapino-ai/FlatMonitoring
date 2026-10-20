@@ -125,7 +125,7 @@ export interface VysledekNajemce {
   /** Zalohy, ktere se nevyuctovavaji (sluzba se nepreuctovava / nema vyuctovani): pausal */
   zalohyPausal: { nazev: string; castka: number }[];
   /** Zalohy za dny obdobi u sluzeb, ktere se zatim nevyuctovaly — zapoctou se s nimi pozdeji */
-  zalohyPrenesene: { nazev: string; castka: number; duvod: string }[];
+  zalohyPrenesene: { nazev: string; castka: number; duvod: string; dodavatel?: string; skupina?: string | null }[];
   /** Do kdy je ktera sluzba po tomto vyuctovani vyuctovana */
   sluzbyDo: Record<string, string>;
   chybiOdecet: boolean;
@@ -325,6 +325,7 @@ export function vyuctujNajemci(
   let zaplaceno = 0;
   const neprirazene = 0;
   const pausal = new Map<string, number>();
+  const pausalSluzby = new Set<string>();
   const zacatek = [P[0], ...[...vyuctovaneDny.values()].map((x) => x[0])].reduce(min);
   for (let t = cas(zacatek); t <= cas(P[1]); t += DEN) {
     const d = naIso(t);
@@ -355,20 +356,20 @@ export function vyuctujNajemci(
       // ale SVJ uctuje teplou vodu, uklid, vytah), jde do spolecneho baliku pro sluzby bez
       // vlastni zalohy — podle jejich mesicnich nakladu
       let balik = 0;
-      const balikPolozky: { nazev: string; castka: number }[] = [];
+      const balikPolozky: { id: string; nazev: string; castka: number }[] = [];
       for (const p of z.polozky) {
         const castka = (Math.max(0, p.amount) * koef) / z.dnuVMesici;
         const s = aktivni.find((x) => x.id === p.serviceId);
-        if (!s) { pausalem(sluzby.find((x) => x.id === p.serviceId)?.nazev ?? "Ostatní", castka); continue; }
+        if (!s) { pausalSluzby.add(p.serviceId); pausalem(sluzby.find((x) => x.id === p.serviceId)?.nazev ?? "Ostatní", castka); continue; }
         if (s.vyuctovani.length) pridej(p.serviceId, castka);
-        else { balik += castka; balikPolozky.push({ nazev: s.nazev, castka }); }
+        else { balik += castka; balikPolozky.push({ id: s.id, nazev: s.nazev, castka }); }
       }
       const vlastni = new Set(z.polozky.map((p) => p.serviceId));
       const prijemci = aktivni.filter((s) => !vlastni.has(s.id) && s.vyuctovani.length > 0);
       if (balik > 0 && prijemci.length) {
         const vahy = prijemci.reduce((a, s) => a + Math.max(0, s.vaha), 0);
         for (const s of prijemci) pridej(s.id, balik * (vahy > 0 ? Math.max(0, s.vaha) / vahy : 1 / prijemci.length));
-      } else for (const x of balikPolozky) pausalem(x.nazev, x.castka);
+      } else for (const x of balikPolozky) { pausalSluzby.add(x.id); pausalem(x.nazev, x.castka); }
     } else {
       const vahy = aktivni.reduce((a, s) => a + Math.max(0, s.vaha), 0);
       if (vahy > 0) for (const s of aktivni) pridej(s.id, (z.celkem * Math.max(0, s.vaha)) / vahy);
@@ -393,8 +394,8 @@ export function vyuctujNajemci(
     zalohyPausal: [...pausal.entries()].filter(([, c]) => c >= 0.5).map(([nazev, castka]) => ({ nazev, castka: Math.round(castka * 100) / 100 })),
     // Vsechny sluzby, ktere se presouvaji do dalsiho vyuctovani — i bez vlastni zalohy (uklid, vytah ...)
     zalohyPrenesene: radky.filter((r) => (prenesZaloh.get(r.sluzbaId) ?? 0) >= 0.5
-      || (r.vybrana && sluzby.find((x) => x.id === r.sluzbaId)?.prectena && (r.stav === "BEZ_VYUCTOVANI" || (r.stav === "VYUCTOVANO" && !!r.preneseno)))).map((r) => ({
-      nazev: r.nazev, castka: Math.round((prenesZaloh.get(r.sluzbaId) ?? 0) * 100) / 100,
+      || (r.vybrana && !pausalSluzby.has(r.sluzbaId) && sluzby.find((x) => x.id === r.sluzbaId)?.prectena && (r.stav === "BEZ_VYUCTOVANI" || (r.stav === "VYUCTOVANO" && !!r.preneseno)))).map((r) => ({
+      nazev: r.nazev, dodavatel: r.dodavatel, skupina: r.skupina, castka: Math.round((prenesZaloh.get(r.sluzbaId) ?? 0) * 100) / 100,
       duvod: r.duvodPrenosu ?? (r.stav === "NEVYBRANA" ? "služba není v tomto vyúčtování vybraná" : "dodavatel zatím nevyúčtoval"),
     })),
     sluzbyDo, chybiOdecet: vyuctovane.some((r) => r.zdroje.some((z) => z.chybiOdecet)),
