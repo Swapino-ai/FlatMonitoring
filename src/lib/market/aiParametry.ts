@@ -17,13 +17,15 @@ export const AI_MODEL = process.env.AI_MODEL || "claude-haiku-5-5";
 /** Parametry vyctene pred zavedenim profilu se prectou znovu (nove vlastnosti, jine typy). */
 export const PROFILY_OD = new Date("2026-10-17T20:30:00Z");
 /** Najmy prectene pred ctenim platebnich podminek se prectou znovu. */
-export const NAJEM_OD = new Date("2026-10-20T12:00:00Z");
+export const NAJEM_OD = new Date("2026-10-20T15:00:00Z");
 
 /** Jak se u pronajmu plati (z textu inzeratu); castky mesicne v Kc, null = v textu neni. */
 export interface PodminkyNajmu {
   najem: number | null;
-  /** Zalohy na sluzby / poplatky SVJ mesicne */
+  /** Zalohy na sluzby / poplatky SVJ mesicne (soucet) */
   sluzby: number | null;
+  /** Rozpis sluzeb, jak je v inzeratu (castka null = uvedeno bez castky) */
+  polozky?: { nazev: string; castka: number | null }[];
   /** Energie (elektrina, plyn): v cene / zvlast / zaloha */
   energie: string | null;
   /** Kauce v Kc (kdyz je uvedena v mesicich, prepocet z najmu) */
@@ -61,7 +63,11 @@ function schema(profil: Profil, pronajem: boolean) {
   if (pronajem) {
     pole.najem = z.object({
       najem: z.number().nullable().describe("Cista mesicni cena najmu v Kc bez sluzeb a energii; null, kdyz z textu nejde oddelit."),
-      sluzby: z.number().nullable().describe("Mesicni zalohy na sluzby / poplatky (voda, teplo, SVJ, fond oprav) v Kc; null, kdyz nejsou uvedene."),
+      sluzby: z.number().nullable().describe("Soucet mesicnich zaloh na sluzby a poplatku (voda, teplo, SVJ, fond oprav, internet, zalohy na energie, pokud jsou zvlast vycislene) v Kc; null, kdyz nejsou uvedene."),
+      polozky: z.array(z.object({
+        nazev: z.string().describe("Polozka cesky, kratce (napr. 'Voda', 'Teplo', 'Fond oprav', 'Elektřina — záloha', 'Internet')."),
+        castka: z.number().nullable().describe("Mesicne v Kc; null, kdyz inzerat polozku zminuje bez castky."),
+      })).describe("Rozpis sluzeb a poplatku tak, jak je v inzeratu; prazdne, kdyz rozpis neni."),
       energie: z.string().nullable().describe("Energie (elektrina, plyn): 'v cene', 'zvlast' nebo 'zaloha X Kc'; null, kdyz neni uvedeno."),
       kauce: z.number().nullable().describe("Vratna kauce v Kc; kdyz je v mesicich, prepocti z najmu (s poplatky, pokud tak text pise); null, kdyz neni uvedena."),
       provize: z.number().nullable().describe("Provize realitni kancelare v Kc; 0 kdyz text rika bez provize; null, kdyz neni uvedena."),
@@ -117,6 +123,10 @@ const kladne = (x: unknown) => (typeof x === "number" && Number.isFinite(x) && x
 function podminky(p: Record<string, unknown>): PodminkyNajmu {
   return {
     najem: kladne(p.najem), sluzby: kladne(p.sluzby), kauce: kladne(p.kauce), provize: kladne(p.provize),
+    polozky: Array.isArray(p.polozky)
+      ? (p.polozky as Record<string, unknown>[]).filter((x) => x && typeof x.nazev === "string" && x.nazev.trim())
+        .map((x) => ({ nazev: String(x.nazev).trim(), castka: kladne(x.castka) })).slice(0, 15)
+      : [],
     energie: typeof p.energie === "string" && p.energie.trim() ? p.energie.trim() : null,
     popis: typeof p.popis === "string" ? p.popis.trim() : "",
   };
