@@ -161,7 +161,7 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
                 {(s.zalohyPrenesene ?? []).map((z, i) => (
                   <tr key={`${z.nazev}${i}`} className="text-xs text-ink-muted">
                     <td className="pl-6">{z.nazev}</td>
-                    <td className="text-right tabular-nums">{z.castka >= 1 ? czk(z.castka) : "bez zálohy"}</td>
+                    <td className="text-right tabular-nums">{czk(z.castka)}</td>
                   </tr>
                 ))}
                 {Math.abs(zMinula) >= 1 && (
