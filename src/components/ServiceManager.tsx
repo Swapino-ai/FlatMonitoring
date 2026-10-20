@@ -8,6 +8,7 @@ import {
 import { navrhniIkonu, nazevDruhu, type TypySluzeb } from "@/lib/categories";
 import { czk, dateCz } from "@/lib/format";
 import { Ikona, type NazevIkony } from "./Ikony";
+import { druhyMerakuProSluzbu, merakySluzby } from "@/lib/meraky";
 import { DatumPole } from "./DatumPole";
 import { ZalohyUpozorneni } from "./ZalohyUpozorneni";
 import type { PorovnaniZaloh } from "@/lib/zalohy";
@@ -352,6 +353,11 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka, typy, skupi
   // Je to jen vychozi hodnota — jakmile ji clovek prepne, druh ji uz neprepise.
   const [prect, setPrect] = useState(r ? r.chargedToTenant : (typy.ELECTRICITY?.chargedByDefault ?? false));
   const rucne = useRef(false);
+  // Volba meraku jen u druhu, ktere se meri (elektrina, plyn, voda, teplo)
+  const [druh, setDruh] = useState(r?.type ?? "ELECTRICITY");
+  const meritelna = druhyMerakuProSluzbu(typy[druh]?.icon).length > 0;
+  // Dosud nenastavena sluzba: predvybere se to, co aplikace pouzivala (spolecna spotreba SVJ = ne)
+  const merakVychozi = r ? merakySluzby(typy[r.type]?.icon, r).length > 0 : false;
 
   const [mesicne, setMesicne] = useState(String(r?.monthlyCost ?? 0));
   const [rocne, setRocne] = useState(r?.annualCost != null ? String(r.annualCost) : "");
@@ -365,7 +371,7 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka, typy, skupi
       <input type="hidden" name="propertyId" value={propertyId} />
       <Vyber label="Druh služby" name="type" defaultValue={r?.type ?? "ELECTRICITY"}
         options={Object.entries(typy).map(([k, t]) => [k, t.name] as [string, string])}
-        onChange={(druh) => { if (!r && !rucne.current) setPrect(typy[druh]?.chargedByDefault ?? false); }} />
+        onChange={(druh) => { setDruh(druh); if (!r && !rucne.current) setPrect(typy[druh]?.chargedByDefault ?? false); }} />
       <Pole label="Dodavatel" name="provider" required placeholder="např. ČEZ Prodej" defaultValue={r?.provider} />
       <Pole label="Měsíční náklad (Kč)" name="monthlyCost" type="number"
         value={mesicne} onChange={(e) => setMesicne(e.target.value)} />
@@ -404,11 +410,13 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka, typy, skupi
           checked={prect} onChange={(v) => { rucne.current = true; setPrect(v); }}
           hint="Součet takových služeb je to, co má nájemce měsíčně platit. Porovná se se zálohami ve smlouvě." />
       </div>
-      <div className="sm:col-span-2">
-        <Vyber label="Měří se měřákem v bytě" name="merak" defaultValue={r?.merak == null ? "" : r.merak ? "1" : "0"}
-          options={[["", "Automaticky (společná elektřina a plyn SVJ ne)"], ["1", "Ano — spotřeba podle měřáku v bytě"], ["0", "Ne — měřák v bytě se nepoužívá (např. společná elektřina)"]]} />
-        <p className="mt-1 text-xs text-ink-muted">Podle toho se ve vyúčtování nájemci použijí stavy měřáků. Společná spotřeba domu se rozpočítá podle dnů.</p>
-      </div>
+      {meritelna ? (
+        <div className="sm:col-span-2">
+          <Vyber label="Měří se měřákem v bytě" name="merak" defaultValue={(r?.merak ?? merakVychozi) ? "1" : "0"}
+            options={[["0", "Ne — měřák v bytě se nepoužívá (např. společná elektřina)"], ["1", "Ano — spotřeba podle měřáku v bytě"]]} />
+          <p className="mt-1 text-xs text-ink-muted">Ano = ve vyúčtování nájemci se spotřeba počítá ze stavů měřáků. Ne = náklad se rozpočítá podle dnů.</p>
+        </div>
+      ) : <input type="hidden" name="merak" value="0" />}
       <TextPole label="Poznámka" name="notes" sirka="sm:col-span-2" defaultValue={r?.notes ?? ""}
         placeholder="nepovinné" hint="Číslo odběrného místa, kontakt na technika, co bylo dohodnuto po telefonu" />
       <div className="sm:col-span-2">
