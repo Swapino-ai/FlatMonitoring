@@ -506,36 +506,48 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                 const moje = vazbyRadku(r);
                 const vzdalenost = (v: VyuctovaniMeraku) => Math.abs(Date.parse(v.do) - Date.parse(datum || v.do));
                 const serazena = [...vyuctovani].sort((a, b) => vzdalenost(a) - vzdalenost(b));
-                const ukazat = vsechnaVyuct ? serazena : serazena.filter((v, i) => i < 4 || moje.includes(v.id));
+                // Vyuctovani prirazena k jinym odectum jsou schovana v "Již přiřazené"
+                const volna = serazena.filter((v) => moje.includes(v.id) || !odecetVyuctovani(v.id));
+                const prirazena = serazena.filter((v) => !moje.includes(v.id) && odecetVyuctovani(v.id));
+                const ukazat = vsechnaVyuct ? volna : volna.filter((v, i) => i < 4 || moje.includes(v.id));
+                const polozka = (v: VyuctovaniMeraku) => {
+                  const zapnuto = moje.includes(v.id);
+                  const jinde = !zapnuto ? odecetVyuctovani(v.id) : null;
+                  return (
+                    <label key={v.id} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-1.5 text-sm ${zapnuto ? "border-accent bg-accent-soft/50" : "border-line"}`}>
+                      <input type="checkbox" className="mt-0.5 h-4 w-4 accent-accent" checked={zapnuto} onChange={(e) => prirad(r, v.id, e.target.checked)} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block">{v.nazev}{v.spolecne ? <span className="text-ink-muted"> · společné</span> : null}</span>
+                        <span className="block text-xs text-ink-muted">
+                          {dmy(v.od)} – {dmy(v.do)}
+                          {jinde ? ` · přiřazeno k odečtu ${dmy(jinde)}` : ""}
+                        </span>
+                        {zapnuto && datum && datum !== v.do && (
+                          <button type="button" className="mt-0.5 text-xs text-accent hover:underline" onClick={(e) => { e.preventDefault(); zmenDatum(r, v.do); }}>
+                            Vyúčtování končí {dmy(v.do)} — použít toto datum odečtu
+                          </button>
+                        )}
+                      </span>
+                    </label>
+                  );
+                };
                 return (
                   <div className="border-b border-line py-3">
                     <div className="label mb-1.5">Konečný odečet k vyúčtování od dodavatele</div>
                     <p className="mb-2 text-xs text-ink-muted">Zaškrtni vyúčtování, ke kterému tenhle odečet patří — spotřeba se pak počítá přesně od něj, bez ohledu na datum. Bez zaškrtnutí je to jen průběžný odečet.</p>
-                    <div className="grid gap-1.5 sm:grid-cols-2">
-                      {ukazat.map((v) => {
-                        const zapnuto = moje.includes(v.id);
-                        const jinde = !zapnuto ? odecetVyuctovani(v.id) : null;
-                        return (
-                          <label key={v.id} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-1.5 text-sm ${zapnuto ? "border-accent bg-accent-soft/50" : "border-line"}`}>
-                            <input type="checkbox" className="mt-0.5 h-4 w-4 accent-accent" checked={zapnuto} onChange={(e) => prirad(r, v.id, e.target.checked)} />
-                            <span className="min-w-0 flex-1">
-                              <span className="block">{v.nazev}{v.spolecne ? <span className="text-ink-muted"> · společné</span> : null}</span>
-                              <span className="block text-xs text-ink-muted">
-                                {dmy(v.od)} – {dmy(v.do)}
-                                {jinde ? ` · teď u odečtu ${dmy(jinde)}` : ""}
-                              </span>
-                              {zapnuto && datum && datum !== v.do && (
-                                <button type="button" className="mt-0.5 text-xs text-accent hover:underline" onClick={(e) => { e.preventDefault(); zmenDatum(r, v.do); }}>
-                                  Vyúčtování končí {dmy(v.do)} — použít toto datum odečtu
-                                </button>
-                              )}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                    {serazena.length > ukazat.length && (
-                      <button type="button" className="mt-2 text-xs text-accent hover:underline" onClick={() => setVsechnaVyuct(true)}>Zobrazit všechna vyúčtování ({serazena.length})</button>
+                    {ukazat.length > 0 ? (
+                      <div className="grid gap-1.5 sm:grid-cols-2">{ukazat.map(polozka)}</div>
+                    ) : (
+                      <p className="text-xs text-ink-muted">Všechna vyúčtování už mají konečný odečet.</p>
+                    )}
+                    {volna.length > ukazat.length && (
+                      <button type="button" className="mt-2 text-xs text-accent hover:underline" onClick={() => setVsechnaVyuct(true)}>Zobrazit další nepřiřazená ({volna.length - ukazat.length})</button>
+                    )}
+                    {prirazena.length > 0 && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-xs text-ink-muted hover:text-ink-primary">Již přiřazené ({prirazena.length})</summary>
+                        <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2">{prirazena.map(polozka)}</div>
+                      </details>
                     )}
                   </div>
                 );
