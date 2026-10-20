@@ -383,8 +383,10 @@ export function vyuctujNajemci(
     const g = skupiny.find((x) => x.nazev === (r.skupina ?? null) && r.skupina) ?? null;
     if (g) { g.radky.push(r); g.castka += r.castka; } else skupiny.push({ nazev: r.skupina ?? null, radky: [r], castka: r.castka });
   }
-  const naklady = vyuctovane.reduce((a, r) => a + r.castka, 0);
-  const zalohy = vyuctovane.reduce((a, r) => a + r.zalohy, 0) + neprirazene;
+  // Pausal: co se na zalohach vybere, to se spotrebuje — je v nakladech i zalohach stejne
+  const pausalCelkem = [...pausal.values()].reduce((a, x) => a + x, 0);
+  const naklady = vyuctovane.reduce((a, r) => a + r.castka, 0) + pausalCelkem;
+  const zalohy = vyuctovane.reduce((a, r) => a + r.zalohy, 0) + neprirazene + pausalCelkem;
   return {
     od: P[0], do: P[1], sluzby: radky, skupiny, naklady, zalohy, rozdil: zalohy - naklady, zalohyNeprirazene: neprirazene,
     zalohyZaplaceno: Math.round(zaplaceno * 100) / 100,

@@ -113,8 +113,9 @@ over("nájemce celou dobu sám → celá faktura bez měřáků", rm3.sluzby[0].
   const pausal = r.zalohyPausal.reduce((a, z) => a + z.castka, 0);
   const pren = r.zalohyPrenesene.reduce((a, z) => a + z.castka, 0);
   over("paušál internet (300 × 4550/4500 × 4 měs.)", r.zalohyPausal.length === 1 && Math.abs(pausal - 4 * 300 * 4550 / 4500) < 2, `${JSON.stringify(r.zalohyPausal)}`);
-  over("zaplaceno = započteno + přeneseno + paušál, nic bez služby", Math.abs(r.zalohyZaplaceno - r.zalohy - pren - pausal) < 2 && r.zalohyNeprirazene === 0,
-    `${kc(r.zalohyZaplaceno)} = ${kc(r.zalohy)} + ${kc(pren)} + ${kc(pausal)}`);
+  over("zaplaceno = započteno (vč. paušálu) + přeneseno, nic bez služby", Math.abs(r.zalohyZaplaceno - r.zalohy - pren) < 2 && r.zalohyNeprirazene === 0,
+    `${kc(r.zalohyZaplaceno)} = ${kc(r.zalohy)} + ${kc(pren)}`);
+  over("paušál je v nákladech i zálohách stejně (nic se nevrací)", Math.abs(r.rozdil - (r.zalohy - pausal - (r.naklady - pausal))) < 1 && r.naklady >= pausal - 1);
 }
 
 console.log(chyby ? `${chyby} chyb` : "vše v pořádku");
