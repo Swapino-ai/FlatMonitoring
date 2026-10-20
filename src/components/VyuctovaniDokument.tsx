@@ -149,10 +149,10 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
             return (
               <>
                 <tr><td className="py-1">Zálohy zaplacené za období</td><td className="py-1 text-right tabular-nums">{czk(s.zalohyZaplaceno)}</td></tr>
-                <tr><td className="py-0.5 pl-3">Přeneseno do dalšího vyúčtování (služby zatím nevyúčtované)</td><td className="py-0.5 text-right tabular-nums">−{czk(prenesene)}</td></tr>
+                <tr><td className="py-0.5 pl-3">Přeneseno do dalšího vyúčtování — vyúčtování zatím není, vyúčtuje se později</td><td className="py-0.5 text-right tabular-nums">−{czk(prenesene)}</td></tr>
                 {s.zalohyPrenesene!.map((z) => (
                   <tr key={z.nazev} className="text-xs text-ink-muted">
-                    <td className="pl-6">{z.nazev} · {z.duvod.split(" — ")[0]}</td>
+                    <td className="pl-6">{z.nazev}</td>
                     <td className="text-right tabular-nums">{czk(z.castka)}</td>
                   </tr>
                 ))}
