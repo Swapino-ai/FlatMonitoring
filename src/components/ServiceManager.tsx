@@ -412,9 +412,8 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka, typy, skupi
       </div>
       {meritelna ? (
         <div className="sm:col-span-2">
-          <Vyber label="Měří se měřákem v bytě" name="merak" defaultValue={(r?.merak ?? merakVychozi) ? "1" : "0"}
-            options={[["0", "Ne — měřák v bytě se nepoužívá (např. společná elektřina)"], ["1", "Ano — spotřeba podle měřáku v bytě"]]} />
-          <p className="mt-1 text-xs text-ink-muted">Ano = ve vyúčtování nájemci se spotřeba počítá ze stavů měřáků. Ne = náklad se rozpočítá podle dnů.</p>
+          <Zaskrtavatko name="merak" label="Měřák namontován" defaultChecked={r?.merak ?? merakVychozi}
+            hint="Zaškrtnuto = ve vyúčtování nájemci se spotřeba počítá ze stavů měřáku v bytě. Nezaškrtnuto (např. společná elektřina) = náklad se rozpočítá podle dnů." />
         </div>
       ) : <input type="hidden" name="merak" value="0" />}
       <TextPole label="Poznámka" name="notes" sirka="sm:col-span-2" defaultValue={r?.notes ?? ""}

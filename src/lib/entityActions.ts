@@ -387,8 +387,8 @@ const sluzbaSchema = z.object({
   noticePeriodMonths: cislo(),
   isBundleable: z.preprocess((v) => v === "on" || v === true, z.boolean()),
   chargedToTenant: z.preprocess((v) => v === "on" || v === true, z.boolean()),
-  /** Meri se merakem v bytu: "" automaticky, "1" ano, "0" ne */
-  merak: z.preprocess((v) => (v === "1" ? true : v === "0" ? false : null), z.boolean().nullable()),
+  /** Meri se merakem v bytu (zaskrtavatko "Měřák namontován") */
+  merak: z.preprocess((v) => v === "on" || v === "1" || v === true, z.boolean()),
   /** Od kdy plati novy naklad; potreba jen pri zmene nakladu u existujici sluzby. */
   costValidFrom: datumNeboNic,
   notes: textNeboNic,
