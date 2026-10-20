@@ -6,7 +6,7 @@ import {
   type VydaniState,
 } from "@/lib/vyuctovaniNajemceActions";
 import { pridejDny, type NajemVstup } from "@/lib/vyuctovani";
-import { popisOdchylky, vyuctujNajemci, zacatekZaloh, type NajemProVyuctovani, type RadekSluzby, type SluzbaProNajemce } from "@/lib/vyuctovaniNajemce";
+import { vyuctujNajemci, zacatekZaloh, type NajemProVyuctovani, type RadekSluzby, type SluzbaProNajemce } from "@/lib/vyuctovaniNajemce";
 import {
   lhutaDoruceni, platbyZaloh, rozpisZaloh, NAZVY_STAVU, NAZVY_ZPUSOBU, odkazMailto, sestavSnapshot, stavLhuty, textZpravy,
   vychoziSplatnost, type SnapshotVyuctovani, type StavVyuctovani,
@@ -191,12 +191,6 @@ export function VyuctovaniNajemceKarta({ nemovitost, najmy, sluzby, vydana, canE
                   <DatumPole key={`spl-${najemId}-${klic}`} label={ostra < 0 ? "Splatnost nedoplatku" : "Přeplatek vrátit do"}
                     name="dueDate" defaultValue={splatnostVychozi} onChange={(x) => setSplatnost(x)}
                     hint={`Výchozí je ${dateCz(vychoziSplatnost(dnes))}, tedy 30 dní od vydání.`} />
-                )}
-                {platne.priblizne && (
-                  <label className="flex items-start gap-2 text-sm">
-                    <input type="checkbox" name="potvrditPriblizne" className="mt-1" />
-                    <span>U některé služby chybí odečet přesně k danému dni a použije se <strong>nejbližší odečet</strong> (viz upozornění u služeb). Opravdu chci takto fakturovat.</span>
-                  </label>
                 )}
                 {neuplne && (
                   <label className="flex items-start gap-2 text-sm">
@@ -466,9 +460,6 @@ function KrokSluzby({ radky, prepni, canEdit }: { radky: RadekSluzby[]; prepni: 
                   <span className="min-w-0">
                     <span className="font-medium">{r.nazev}</span> <span className="text-xs text-ink-muted">· {r.dodavatel}</span>
                     <span className="block text-xs text-ink-secondary">{popis(r)}</span>
-                    {r.vybrana && r.stav === "VYUCTOVANO" && r.zdroje.flatMap((z) => z.priblizne ?? []).map((o, i) => (
-                      <span key={i} className="block text-xs font-medium text-warn">⚠ {popisOdchylky(o)} — zadej přesnější odečet na záložce Měřáky, nebo to při vydání potvrď</span>
-                    ))}
                     {r.vybrana && r.stav === "VYUCTOVANO" && r.preneseno && (
                       <span className="block text-xs text-warn">{ddmm(r.preneseno[0])} – {ddmm(r.preneseno[1])} se přenese do dalšího vyúčtování (náklady i zálohy): {r.duvodPrenosu ?? "dodavatel zatím nevyúčtoval"}</span>
                     )}
