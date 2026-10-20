@@ -45,6 +45,10 @@ export interface SnapshotVyuctovani {
   rozpisZaloh?: ObdobiZaloh[];
   /** Z ceho se sklada "Zalohy za obdobi": podil zaloh na kazdou vyuctovanou sluzbu */
   zalohySluzeb?: { nazev: string; od: string; do: string; castka: number }[];
+  /** Zalohy zaplacene za dny obdobi celkem */
+  zalohyZaplaceno?: number;
+  /** Zalohy nevyuctovanych sluzeb — zapoctou se v dalsim vyuctovani */
+  zalohyPrenesene?: { nazev: string; castka: number; duvod: string }[];
 }
 
 export interface ObdobiZaloh {
@@ -251,6 +255,8 @@ export function sestavSnapshot(a: {
     nepokryto: nepokrytoZRadku(radky), aktualniZaloha: a.aktualniZaloha,
     doporucenaZaloha: a.zamerne ? null : upravaZalohy(v.naklady, v.zalohy, v.od, v.do, a.aktualniZaloha),
     skupiny: v.skupiny, preneseno, sluzbyDo: v.sluzbyDo, platby: a.platby ?? [], rozpisZaloh: a.rozpisZaloh ?? [],
+    zalohyZaplaceno: Math.round(v.zalohyZaplaceno),
+    zalohyPrenesene: v.zalohyPrenesene.map((z) => ({ ...z, castka: Math.round(z.castka) })),
     zalohySluzeb: [
       ...vyuctovane.filter((r) => r.zalohy > 0.5 && r.od && r.do).map((r) => ({ nazev: r.nazev, od: r.od!, do: r.do!, castka: Math.round(r.zalohy) })),
       ...(v.zalohyNeprirazene > 0.5 ? [{ nazev: "Ostatní (bez přiřazené služby)", od: v.od, do: v.do, castka: Math.round(v.zalohyNeprirazene) }] : []),

@@ -34,6 +34,9 @@ const zalohyCele = 6 * 3000;
 const prenesene = 3 * 1000; // tretina zaloh rijen–prosinec
 over("zálohy bez přenesené elektřiny", Math.abs(r.zalohy - (zalohyCele - prenesene)) < 2, `${kc(r.zalohy)} ≈ ${zalohyCele - prenesene}`);
 
+over("zaplacené = započtené + přenesené", Math.abs(r.zalohyZaplaceno - r.zalohy - r.zalohyPrenesene.reduce((a, z) => a + z.castka, 0)) < 2,
+  `${kc(r.zalohyZaplaceno)} = ${kc(r.zalohy)} + ${kc(r.zalohyPrenesene.reduce((a, z) => a + z.castka, 0))}`);
+
 // Dalsi vyuctovani za 2026: elektrina navaze od 1. 10. 2025
 const sluzby2 = sluzby.map((s) => s.id === "elektrina" ? { ...s, vyuctovani: [...s.vyuctovani, v("e2", "2025-10-01", "2026-09-30", 36500)] } : s);
 const drive = [{ od: r.od, do: r.do, sluzbyDo: r.sluzbyDo }];

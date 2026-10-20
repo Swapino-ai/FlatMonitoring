@@ -143,7 +143,26 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
         </tbody>
         <tfoot className="text-sm">
           <tr><td className="pt-3">Náklady na služby celkem</td><td className="pt-3 text-right font-medium tabular-nums">{czk(s.naklady)}</td></tr>
-          <tr><td className="py-1">Zálohy za období</td><td className="py-1 text-right font-medium tabular-nums">{czk(s.zalohy)}</td></tr>
+          {s.zalohyZaplaceno != null && (s.zalohyPrenesene?.length ?? 0) > 0 && (() => {
+            const prenesene = s.zalohyPrenesene!.reduce((a, z) => a + z.castka, 0);
+            const zMinula = Math.round(s.zalohy - (s.zalohyZaplaceno - prenesene));
+            return (
+              <>
+                <tr><td className="py-1">Zálohy zaplacené za období</td><td className="py-1 text-right tabular-nums">{czk(s.zalohyZaplaceno)}</td></tr>
+                <tr><td className="py-0.5 pl-3">Přeneseno do dalšího vyúčtování (služby zatím nevyúčtované)</td><td className="py-0.5 text-right tabular-nums">−{czk(prenesene)}</td></tr>
+                {s.zalohyPrenesene!.map((z) => (
+                  <tr key={z.nazev} className="text-xs text-ink-muted">
+                    <td className="pl-6">{z.nazev} · {z.duvod.split(" — ")[0]}</td>
+                    <td className="text-right tabular-nums">{czk(z.castka)}</td>
+                  </tr>
+                ))}
+                {Math.abs(zMinula) >= 1 && (
+                  <tr><td className="py-0.5 pl-3">Přeneseno z minulého vyúčtování</td><td className="py-0.5 text-right tabular-nums">+{czk(zMinula)}</td></tr>
+                )}
+              </>
+            );
+          })()}
+          <tr><td className="py-1">{(s.zalohyPrenesene?.length ?? 0) > 0 ? "Zálohy započtené k vyúčtovaným službám" : "Zálohy za období"}</td><td className="py-1 text-right font-medium tabular-nums">{czk(s.zalohy)}</td></tr>
           {(s.zalohySluzeb?.length ?? 0) > 0 && s.zalohySluzeb!.map((z) => (
             <tr key={z.nazev} className="text-xs text-ink-muted">
               <td className="pl-3">{z.nazev} · {dateCz(z.od)} – {dateCz(z.do)}</td>
