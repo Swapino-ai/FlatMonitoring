@@ -157,11 +157,11 @@ export function VyuctovaniDokument({ s, cislo, vydano, splatnost, koncept = fals
             return (
               <>
                 <tr><td className="py-1">Zálohy zaplacené za období</td><td className="py-1 text-right tabular-nums">{czk(s.zalohyZaplaceno)}</td></tr>
-                {prenesene > 0 && <tr><td className="py-0.5 pl-3">Přeneseno do dalšího vyúčtování — vyúčtování zatím není, vyúčtuje se později</td><td className="py-0.5 text-right tabular-nums">−{czk(prenesene)}</td></tr>}
-                {(s.zalohyPrenesene ?? []).map((z) => (
-                  <tr key={z.nazev} className="text-xs text-ink-muted">
+                <tr><td className="py-0.5 pl-3">Přeneseno do dalšího vyúčtování — vyúčtování zatím není, vyúčtuje se později</td><td className="py-0.5 text-right tabular-nums">{prenesene > 0 ? `−${czk(prenesene)}` : ""}</td></tr>
+                {(s.zalohyPrenesene ?? []).map((z, i) => (
+                  <tr key={`${z.nazev}${i}`} className="text-xs text-ink-muted">
                     <td className="pl-6">{z.nazev}</td>
-                    <td className="text-right tabular-nums">{czk(z.castka)}</td>
+                    <td className="text-right tabular-nums">{z.castka >= 1 ? czk(z.castka) : "bez zálohy"}</td>
                   </tr>
                 ))}
                 {Math.abs(zMinula) >= 1 && (

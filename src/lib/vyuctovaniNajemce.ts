@@ -391,8 +391,10 @@ export function vyuctujNajemci(
     od: P[0], do: P[1], sluzby: radky, skupiny, naklady, zalohy, rozdil: zalohy - naklady, zalohyNeprirazene: neprirazene,
     zalohyZaplaceno: Math.round(zaplaceno * 100) / 100,
     zalohyPausal: [...pausal.entries()].filter(([, c]) => c >= 0.5).map(([nazev, castka]) => ({ nazev, castka: Math.round(castka * 100) / 100 })),
-    zalohyPrenesene: radky.filter((r) => (prenesZaloh.get(r.sluzbaId) ?? 0) >= 0.5).map((r) => ({
-      nazev: r.nazev, castka: Math.round(prenesZaloh.get(r.sluzbaId)! * 100) / 100,
+    // Vsechny sluzby, ktere se presouvaji do dalsiho vyuctovani — i bez vlastni zalohy (uklid, vytah ...)
+    zalohyPrenesene: radky.filter((r) => (prenesZaloh.get(r.sluzbaId) ?? 0) >= 0.5
+      || (r.vybrana && sluzby.find((x) => x.id === r.sluzbaId)?.prectena && (r.stav === "BEZ_VYUCTOVANI" || (r.stav === "VYUCTOVANO" && !!r.preneseno)))).map((r) => ({
+      nazev: r.nazev, castka: Math.round((prenesZaloh.get(r.sluzbaId) ?? 0) * 100) / 100,
       duvod: r.duvodPrenosu ?? (r.stav === "NEVYBRANA" ? "služba není v tomto vyúčtování vybraná" : "dodavatel zatím nevyúčtoval"),
     })),
     sluzbyDo, chybiOdecet: vyuctovane.some((r) => r.zdroje.some((z) => z.chybiOdecet)),
