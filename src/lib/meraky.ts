@@ -180,6 +180,23 @@ export function spotrebaVObdobi(retezec: MerakSeStavy[], od: string, doDne: stri
   return pouzito ? { spotreba: Math.round(spotreba * 1000) / 1000, od: prvni!, do: posledni!, ...(neuplna ? { neuplna } : {}) } : null;
 }
 
+/**
+ * Spolecna spotreba domu (spolecna elektrina, plyn kotelny SVJ): elektromer ani plynomer
+ * v bytu ji nemeri. Pozna se podle dodavatele, skupiny nebo poznamky. Voda a teplo od SVJ
+ * se ale podle meraku v bytu rozuctovavaji, ty se nevylucuji.
+ */
+export function jeSpolecnaSpotreba(s: { provider?: string | null; groupName?: string | null; notes?: string | null }): boolean {
+  return /společn|spolecn|\bSVJ\b|\bS?BD\b|družstv|druzstv|chodb|osvětlen|osvetlen/i.test(`${s.provider ?? ""} ${s.groupName ?? ""} ${s.notes ?? ""}`);
+}
+
+/** Meraky sluzby s ohledem na nastaveni sluzby (rucne / automaticky bez spolecne spotreby). */
+export function merakySluzby(ikona: string | undefined, s: { merak?: boolean | null; provider?: string | null; groupName?: string | null; notes?: string | null }): string[] {
+  const druhy = druhyMerakuProSluzbu(ikona);
+  if (s.merak === false) return [];
+  if (s.merak == null && (ikona === "blesk" || ikona === "plamen") && jeSpolecnaSpotreba(s)) return [];
+  return druhy;
+}
+
 /** Ktere meraky patri ke sluzbe (podle ikony druhu sluzby — plati i pro vlastni druhy). */
 export function druhyMerakuProSluzbu(ikonaSluzby: string | undefined): string[] {
   switch (ikonaSluzby) {

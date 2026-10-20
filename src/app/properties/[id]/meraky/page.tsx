@@ -5,7 +5,7 @@ import { Verze } from "@/components/Verze";
 import { HlavickaNemovitosti } from "@/components/HlavickaNemovitosti";
 import { MerakyNemovitosti } from "@/components/MerakyNemovitosti";
 import { prisma } from "@/lib/db";
-import { druhyMerakuProSluzbu, udalostiNajmu } from "@/lib/meraky";
+import { merakySluzby, udalostiNajmu } from "@/lib/meraky";
 import { nactiTypySluzeb } from "@/lib/typySluzeb";
 import { nazevDruhu } from "@/lib/categories";
 import { svjNastaveno, synchronizujSvjKdyzJeCas, type SvjStavMeraku } from "@/lib/svj";
@@ -33,7 +33,7 @@ export default async function MerakyPage({ params }: { params: Promise<{ id: str
   const typy = await nactiTypySluzeb();
   const druhyBytu = new Set(property.meraky.map((m) => m.druh));
   const vyuctovaniMeraku = property.services.flatMap((s) => {
-    const druhy = druhyMerakuProSluzbu(typy[s.type]?.icon).filter((d) => druhyBytu.has(d));
+    const druhy = merakySluzby(typy[s.type]?.icon, s).filter((d) => druhyBytu.has(d));
     return druhy.length ? s.settlements.map((v) => ({
       id: v.id, nazev: `${nazevDruhu(typy, s.type)} · ${s.provider}`, od: denISO(v.periodFrom), do: denISO(v.periodTo), druhy, spolecne: !!v.batchId,
     })) : [];

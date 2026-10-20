@@ -387,6 +387,8 @@ const sluzbaSchema = z.object({
   noticePeriodMonths: cislo(),
   isBundleable: z.preprocess((v) => v === "on" || v === true, z.boolean()),
   chargedToTenant: z.preprocess((v) => v === "on" || v === true, z.boolean()),
+  /** Meri se merakem v bytu: "" automaticky, "1" ano, "0" ne */
+  merak: z.preprocess((v) => (v === "1" ? true : v === "0" ? false : null), z.boolean().nullable()),
   /** Od kdy plati novy naklad; potreba jen pri zmene nakladu u existujici sluzby. */
   costValidFrom: datumNeboNic,
   notes: textNeboNic,
@@ -424,6 +426,7 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
     noticePeriodMonths: Math.round(d.noticePeriodMonths),
     isBundleable: d.isBundleable,
     chargedToTenant: d.chargedToTenant,
+    merak: d.merak,
     notes: d.notes,
   };
 

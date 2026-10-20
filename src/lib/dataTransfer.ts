@@ -224,7 +224,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       monthlyCost: c(x.monthlyCost), annualCost: x.annualCost == null ? null : c(x.annualCost),
       contractStart: d(x.contractStart), contractEnd: d(x.contractEnd), activeTo: d(x.activeTo), groupName: s(x.groupName),
       noticePeriodMonths: Math.round(c(x.noticePeriodMonths)),
-      isBundleable: x.isBundleable !== false, notes: s(x.notes),
+      isBundleable: x.isBundleable !== false, notes: s(x.notes), merak: typeof x.merak === "boolean" ? x.merak : null,
       // Starsi zalohy pole nemaji; chybejici hodnota znamena "nepreuctovava se"
       chargedToTenant: x.chargedToTenant === true,
     }));

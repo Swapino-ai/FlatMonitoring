@@ -12,13 +12,15 @@ import { nazevDruhu, type TypySluzeb } from "@/lib/categories";
 import { czk, dateCz } from "@/lib/format";
 import { Hlaska, Pole, Rozbalovaci, SmazatTlacitko, TextPole, UpravaPanel, UpravitTlacitko, Vyber } from "./form";
 import { DatumPole } from "./DatumPole";
-import { DRUH_MERAKU_MAP, druhyMerakuProSluzbu, retezceMeraku, spotrebaVObdobi, type MerakSeStavy } from "@/lib/meraky";
+import { DRUH_MERAKU_MAP, merakySluzby, retezceMeraku, spotrebaVObdobi, type MerakSeStavy } from "@/lib/meraky";
 import { Ikona, type NazevIkony } from "./Ikony";
 import { Badge } from "./Stat";
 import { Dokumenty, type DokumentRadek } from "./Dokumenty";
 
 export interface SluzbaRadek {
   id: string; type: string; provider: string; chargedToTenant: boolean; groupName?: string | null; notes?: string | null;
+  /** Meri se merakem v bytu (null = automaticky) */
+  merak?: boolean | null;
   /** Kdy sluzba platila (ISO); null = bez omezeni */
   od?: string | null; do?: string | null;
 }
@@ -685,7 +687,7 @@ function Formular({ r, services, leases, vyuctovani, action, pending, popisekTla
   // Spotreba najemcu ze zapsanych stavu meraku (i pres vymenu meraku), pro zvolenou sluzbu
   const zMeraku = useMemo(() => {
     const sluzba = services.find((x) => x.id === sluzbaId);
-    const druhy = druhyMerakuProSluzbu(sluzba ? typy[sluzba.type]?.icon : undefined);
+    const druhy = sluzba ? merakySluzby(typy[sluzba.type]?.icon, sluzba) : [];
     const retezce = retezceMeraku(meraky.filter((m) => druhy.includes(m.druh)));
     if (!retezce.length || !od || !doDne) return null;
     const vysledek: Record<string, { spotreba: number; od: string; do: string; neuplna?: boolean } | null> = {};

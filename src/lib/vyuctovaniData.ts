@@ -6,7 +6,7 @@ import { pronajimatelNemovitosti, pronajimatelZRef } from "./provozovatel";
 import { nactiStrany } from "./strany";
 import type { SluzbaVyuctovani } from "./vyuctovani";
 import { sluzbyProNajemce, type DrivejsiVyuctovani, type NajemProVyuctovani } from "./vyuctovaniNajemce";
-import { DRUH_MERAKU_MAP, druhyMerakuProSluzbu, type MerakSeStavy } from "./meraky";
+import { DRUH_MERAKU_MAP, merakySluzby, type MerakSeStavy } from "./meraky";
 import type { PolozkaZalohy } from "./zalohy";
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -60,7 +60,7 @@ export async function nactiVstupyVyuctovani(propertyId: string) {
   }));
   const sluzbyNajemce = sluzbyProNajemce(
     sluzby, sluzbyVyuct.flatMap((x) => x.vyuctovani.map((v) => ({ ...v, serviceId: x.id }))), typy, merakySeStavy,
-    druhyMerakuProSluzbu, (d) => DRUH_MERAKU_MAP.get(d)?.jednotka ?? null, (t) => nazevDruhu(typy, t),
+    merakySluzby, (d) => DRUH_MERAKU_MAP.get(d)?.jednotka ?? null, (t) => nazevDruhu(typy, t),
   );
   /** Drive vydana vyuctovani smlouvy — odkud se ktera sluzba pocita. */
   const drivejsiPro = (leaseId: string): DrivejsiVyuctovani[] => vydana.filter((x) => x.leaseId === leaseId).map((x) => ({

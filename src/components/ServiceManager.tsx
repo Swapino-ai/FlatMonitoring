@@ -16,7 +16,7 @@ import { Badge } from "./Stat";
 interface Row {
   id: string; type: string; provider: string; contractNo: string | null; monthlyCost: number;
   annualCost: number | null; contractStart: Date | null; contractEnd: Date | null; activeTo: Date | null; groupName: string | null; noticePeriodMonths: number; isBundleable: boolean;
-  notes: string | null; chargedToTenant: boolean;
+  notes: string | null; chargedToTenant: boolean; merak?: boolean | null;
 }
 
 export interface ZmenaNakladuRadek { id: string; validFrom: Date | string; monthlyCost: number; annualCost: number | null }
@@ -403,6 +403,11 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka, typy, skupi
         <Zaskrtavatko name="chargedToTenant" label="Přeúčtuje se nájemci, kryje ho záloha"
           checked={prect} onChange={(v) => { rucne.current = true; setPrect(v); }}
           hint="Součet takových služeb je to, co má nájemce měsíčně platit. Porovná se se zálohami ve smlouvě." />
+      </div>
+      <div className="sm:col-span-2">
+        <Vyber label="Měří se měřákem v bytě" name="merak" defaultValue={r?.merak == null ? "" : r.merak ? "1" : "0"}
+          options={[["", "Automaticky (společná elektřina a plyn SVJ ne)"], ["1", "Ano — spotřeba podle měřáku v bytě"], ["0", "Ne — měřák v bytě se nepoužívá (např. společná elektřina)"]]} />
+        <p className="mt-1 text-xs text-ink-muted">Podle toho se ve vyúčtování nájemci použijí stavy měřáků. Společná spotřeba domu se rozpočítá podle dnů.</p>
       </div>
       <TextPole label="Poznámka" name="notes" sirka="sm:col-span-2" defaultValue={r?.notes ?? ""}
         placeholder="nepovinné" hint="Číslo odběrného místa, kontakt na technika, co bylo dohodnuto po telefonu" />

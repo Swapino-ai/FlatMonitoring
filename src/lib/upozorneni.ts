@@ -4,7 +4,7 @@
  */
 import { prisma } from "./db";
 import { denISO } from "./format";
-import { druhyMerakuProSluzbu, udalostiNajmu } from "./meraky";
+import { merakySluzby, udalostiNajmu } from "./meraky";
 import { nactiTypySluzeb } from "./typySluzeb";
 import type { NavrzenaPlatba } from "./pravidelnePlatby";
 
@@ -43,7 +43,7 @@ export async function nactiUpozorneni(
       select: {
         id: true,
         meraky: { select: { druh: true, stavy: { select: { leaseId: true, udalost: true, vyuctovani: true } } } },
-        services: { select: { type: true, settlements: { select: { id: true } } } },
+        services: { select: { type: true, provider: true, groupName: true, notes: true, merak: true, settlements: { select: { id: true } } } },
         leases: { select: { id: true, tenantId: true, tenantName: true, startDate: true, endDate: true, isActive: true } },
       },
     }),
@@ -104,7 +104,7 @@ export async function nactiUpozorneni(
     const bezStavu = udalostiNajmu(p.leases, dnes).filter((u) => !u.budouci && u.datum && u.datum <= dnesISO
       && !stavy.some((s) => s.leaseId === u.leaseId && s.udalost === u.udalost));
     const prirazena = new Set(stavy.flatMap((s) => s.vyuctovani));
-    const bezOdectu = p.services.filter((s) => druhyMerakuProSluzbu(typy[s.type]?.icon).some((d) => druhy.has(d)))
+    const bezOdectu = p.services.filter((s) => merakySluzby(typy[s.type]?.icon, s).some((d) => druhy.has(d)))
       .flatMap((s) => s.settlements).filter((v) => !prirazena.has(v.id));
     if (!bezStavu.length && !bezOdectu.length) continue;
     const casti = [

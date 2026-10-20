@@ -21,7 +21,7 @@ import { aktualniPohled } from "@/lib/ownership.server";
 import { prisma } from "@/lib/db";
 import { synchronizujSvjKdyzJeCas } from "@/lib/svj";
 import { sluzbyProNajemce } from "@/lib/vyuctovaniNajemce";
-import { DRUH_MERAKU_MAP, druhyMerakuProSluzbu } from "@/lib/meraky";
+import { DRUH_MERAKU_MAP, merakySluzby } from "@/lib/meraky";
 import { after } from "next/server";
 import { odhadNemovitosti } from "@/lib/market/inzeraty";
 import { OwnerManager } from "@/components/OwnerManager";
@@ -220,7 +220,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   // Pruvodce vyuctovanim pro najemce: sluzby se skupinami, platnosti a meraky
   const sluzbyVyuctovani = sluzbyProNajemce(
     property.services, vyuctovani, typy, merakyVyuctovani,
-    druhyMerakuProSluzbu, (d) => DRUH_MERAKU_MAP.get(d)?.jednotka ?? null, (t) => nazevDruhu(typy, t),
+    merakySluzby, (d) => DRUH_MERAKU_MAP.get(d)?.jednotka ?? null, (t) => nazevDruhu(typy, t),
   );
 
   const sluzbyVstup: SluzbaVstup[] = property.services.map((sl) => ({
@@ -688,7 +688,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             nazev: "Vyúčtování",
             obsah: (<>
             <SbalitelnaKarta klic="vyuctovani-sluzeb" title="Vyúčtování služeb od dodavatelů">
-              <VyuctovaniSluzeb typy={typy} dokumenty={dokumentyVyuctovani} diskPripojen={diskPripojen} services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant, groupName: sl.groupName, notes: sl.notes,
+              <VyuctovaniSluzeb typy={typy} dokumenty={dokumentyVyuctovani} diskPripojen={diskPripojen} services={property.services.map((sl) => ({ id: sl.id, type: sl.type, provider: sl.provider, chargedToTenant: sl.chargedToTenant, groupName: sl.groupName, notes: sl.notes, merak: sl.merak,
                 od: sl.contractStart ? iso(new Date(sl.contractStart)) : null, do: sl.activeTo ? iso(new Date(sl.activeTo)) : null }))}
                 leases={najmyVyuctovani} vyuctovani={vyuctovani} canEdit={user.role === "OWNER"} meraky={merakyVyuctovani} />
             </SbalitelnaKarta>

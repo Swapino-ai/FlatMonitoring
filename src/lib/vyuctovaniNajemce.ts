@@ -393,17 +393,18 @@ export function sluzbyProNajemce(
   services: {
     id: string; type: string; provider: string; groupName: string | null; chargedToTenant: boolean;
     contractStart: Date | string | null; activeTo: Date | string | null; monthlyCost: number; annualCost: number | null;
+    notes?: string | null; merak?: boolean | null;
   }[],
   vyuctovani: (VyuctovaniVstup & { serviceId: string })[],
   typy: Record<string, { name: string; icon: string }>,
   meraky: MerakSeStavy[],
-  druhyProIkonu: (ikona: string | undefined) => string[],
+  druhyProIkonu: (ikona: string | undefined, sluzba: { merak?: boolean | null; provider?: string | null; groupName?: string | null; notes?: string | null }) => string[],
   jednotkaDruhu: (druh: string) => string | null,
   nazev: (type: string) => string,
 ): SluzbaProNajemce[] {
   const den = (d: Date | string | null) => (d ? new Date(d).toISOString().slice(0, 10) : null);
   return services.map((s) => {
-    const druhy = druhyProIkonu(typy[s.type]?.icon);
+    const druhy = druhyProIkonu(typy[s.type]?.icon, s);
     const m = meraky.filter((x) => druhy.includes(x.druh));
     return {
       id: s.id, nazev: nazev(s.type), dodavatel: s.provider, skupina: s.groupName?.trim() || null, prectena: s.chargedToTenant,
