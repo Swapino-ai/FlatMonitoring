@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState, useTransition } from "react";
 import { DRUHY_MERAKU, DRUH_MERAKU_MAP, nulovaniMezi, nulovaniText, nulovaniZTextu, retezceMeraku, spotrebaVObdobi, type MerakSeStavy, type UdalostNajmu } from "@/lib/meraky";
-import { nastavNulovaniRadiatoru, nastavSvjByt, smazOdecet, synchronizujSvjTed, pridejMerak, smazMerak, ulozStav, upravMerak, vymenMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
+import { nastavNulovaniRadiatoru, nastavSvjByt, nastavVyuctovaniOdectu, smazOdecet, synchronizujSvjTed, pridejMerak, smazMerak, ulozStav, upravMerak, vymenMerak, zmenDatumUdalosti } from "@/lib/merakyActions";
 import { denISO } from "@/lib/format";
 import { DatumPole } from "./DatumPole";
 import { Ikona, type NazevIkony } from "./Ikony";
@@ -18,7 +18,12 @@ export interface MerakRadek {
   /** Den vymeny (u vymeneneho meraku) */
   vymenenAt: string | null;
 }
-export interface StavRadek { id: string; merakId: string; leaseId: string | null; udalost: string; datum: string; hodnota: number | null; hodnota2: number | null; zdroj?: string | null; vynulovanoPo?: boolean }
+export interface StavRadek { id: string; merakId: string; leaseId: string | null; udalost: string; datum: string; hodnota: number | null; hodnota2: number | null; zdroj?: string | null; vynulovanoPo?: boolean; vyuctovani?: string[] }
+
+/** Vyuctovani od dodavatele u sluzby s meraky — k nemu patri konecny odecet. */
+export interface VyuctovaniMeraku { id: string; nazev: string; od: string; do: string; druhy: string[]; spolecne: boolean }
+
+const dmy = (iso: string) => iso.split("-").reverse().join("/");
 
 /** Stav napojeni meraku na Evidenci SVJ (z serveru). */
 export interface SvjStav { posledni: { datum: string; t1: number | null; t2: number | null } | null; chyba: string | null; prevzato: number }
@@ -49,7 +54,9 @@ const fmt = (n: number) => n.toLocaleString("cs-CZ", { maximumFractionDigits: 3 
  * Meraky nemovitosti a jejich stavy pri predani a vraceni bytu. Meraky se pridavaji
  * jednim kliknutim, stavy se pisou primo do tabulky a ukladaji se samy po opusteni policka.
  */
-export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy, svj = {}, svjNastaveno = false, svjByt = null, svjSyncAt = null }: {
+export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy, svj = {}, svjNastaveno = false, svjByt = null, svjSyncAt = null, vyuctovani = [] }: {
+  /** Vyuctovani od dodavatelu u sluzeb s meraky (k nim se prirazuje konecny odecet) */
+  vyuctovani?: VyuctovaniMeraku[];
   /** Kdy se naposledy prebiraly stavy ze SVJ (ISO) */
   svjSyncAt?: string | null;
   /** Cislo bytu v Evidenci SVJ (meraky se tam dohledaji podle vyrobniho cisla) */
@@ -74,6 +81,9 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
   const [hodnoty, setHodnoty] = useState<Record<string, number | null>>({});
   const [datumy, setDatumy] = useState<Record<string, string>>({});
   const [noveOdecty, setNoveOdecty] = useState<string[]>([]);
+  // Prirazeni prubezneho odectu k vyuctovanim (lokalne, nez se stranka obnovi)
+  const [vazby, setVazby] = useState<Record<string, string[]>>({});
+  const [vsechnaVyuct, setVsechnaVyuct] = useState(false);
   // Radky otevrene k uprave tuzkou (radky s chybejicimi stavy jsou otevrene samy)
   // Radek otevreny k zapisu (formular nad historii); po otevreni na nej stranka sjede
   const [vybrany, setVybrany] = useState<string | null>(null);
@@ -105,7 +115,8 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
     ...odecty.filter((d) => !noveOdecty.includes(d)).map((d) => ({ klic: `ODECET|${d}`, leaseId: null, udalost: "ODECET" as const, datum: d, popis: "Průběžný odečet", budouci: false })),
     ...vymeny.map((d) => ({ klic: `VYMENA|${d}`, leaseId: null, udalost: "VYMENA" as const, datum: d, popis: "Výměna měřáku", budouci: false })),
   ].sort((a, b) => (b.datum ?? "9999").localeCompare(a.datum ?? "9999"));
-  const nazevRadku = (r: Radek) => ({ ZACATEK: "Předání", KONEC: "Vrácení", ODECET: "Průběžný odečet", VYMENA: "Výměna měřáku" })[r.udalost];
+  const nazevRadku = (r: Radek) => r.udalost === "ODECET" && vazbyRadku(r).length ? "Konečný odečet k vyúčtování"
+    : ({ ZACATEK: "Předání", KONEC: "Vrácení", ODECET: "Průběžný odečet", VYMENA: "Výměna měřáku" })[r.udalost];
   // Sloupce historie: misto = aktualni merak + meraky, ktere nahradil
   const retezce = retezceMeraku(zobrazene);
   const sMerakem = (m: MerakRadek): MerakSeStavy => ({
@@ -135,6 +146,27 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
   const chybiHodnota = (r: Radek, m: MerakRadek) => tarify(m).some((t) => hodnota(r, m.id, t) == null);
   const datumRadku = (r: Radek) => datumy[r.klic] ?? r.datum ?? "";
 
+  // Konecny odecet k vyuctovani od dodavatele: prubezny odecet si pamatuje, ke kterym patri
+  const vazbyRadku = (r: Radek): string[] => r.udalost !== "ODECET" ? []
+    : vazby[r.klic] ?? [...new Set(stavy.filter((x) => x.udalost === "ODECET" && x.leaseId == null && x.datum === r.datum).flatMap((x) => x.vyuctovani ?? []))];
+  /** Odecet, ke kteremu je vyuctovani prirazene (datum), nebo null. */
+  const odecetVyuctovani = (vId: string): string | null => {
+    const r = radky.find((x) => vazbyRadku(x).includes(vId));
+    return r ? datumRadku(r) : null;
+  };
+  const prirad = (r: Radek, vId: string, zapnout: boolean) => {
+    const nove = zapnout ? [...new Set([...vazbyRadku(r), vId])] : vazbyRadku(r).filter((x) => x !== vId);
+    // Vyuctovani ma jeden konecny odecet: u jineho radku se uvolni
+    setVazby((v) => {
+      const n: Record<string, string[]> = { ...v, [r.klic]: nove };
+      if (zapnout) for (const x of radky) if (x.klic !== r.klic && vazbyRadku(x).includes(vId)) n[x.klic] = vazbyRadku(x).filter((y) => y !== vId);
+      return n;
+    });
+    const datum = datumRadku(r);
+    if (!datum || !stavy.some((x) => x.udalost === "ODECET" && x.leaseId == null && x.datum === datum)) return;
+    spust(async () => { const v = await nastavVyuctovaniOdectu(propertyId, { datum, vyuctovani: nove }); setChyba(v.error ?? null); });
+  };
+
   const uloz = (r: Radek, merakId: string, tarif: 1 | 2, text: string) => {
     const k = `${r.klic}|${merakId}|${tarif}`;
     const n = cislo(text);
@@ -145,7 +177,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
     setHodnoty((h) => ({ ...h, [k]: n }));
     setBunky((b) => ({ ...b, [k]: "uklada" }));
     spust(async () => {
-      const v = await ulozStav(propertyId, { merakId, leaseId: r.leaseId, udalost: r.udalost, datum, hodnota: n, tarif });
+      const v = await ulozStav(propertyId, { merakId, leaseId: r.leaseId, udalost: r.udalost, datum, hodnota: n, tarif, vyuctovani: vazbyRadku(r) });
       setBunky((b) => ({ ...b, [k]: v.error ? "chyba" : "ok" }));
       setChyba(v.error ?? null);
     });
@@ -158,6 +190,7 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
     if (r.udalost === "ODECET") {
       // Jiny odecet je dany dnem: radek se presune pod nove datum (i s ulozenymi stavy)
       setNoveOdecty((o) => [datum, ...o.filter((d) => d !== puvodni && d !== datum)]);
+      setVazby((v) => ({ ...v, [`ODECET|${datum}`]: vazbyRadku(r) }));
       otevri(`ODECET|${datum}`);
     } else {
       setDatumy((d) => ({ ...d, [r.klic]: datum }));
@@ -211,6 +244,16 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
     }
     return null;
   };
+  /** Novy konecny odecet k vyuctovani: radek k poslednimu dni vyuctovani, uz prirazeny. */
+  const odecetKVyuctovani = (v: VyuctovaniMeraku) => {
+    const klic = `ODECET|${v.do}`;
+    const r = radky.find((x) => x.klic === klic);
+    if (r) { prirad(r, v.id, true); otevri(klic); return; }
+    setNoveOdecty((o) => [v.do, ...o.filter((d) => d !== v.do)]);
+    setVazby((x) => ({ ...x, [klic]: [v.id] }));
+    otevri(klic);
+  };
+  const bezOdectu = vyuctovani.filter((v) => !odecetVyuctovani(v.id));
   const prubeznyOdecet = () => {
     const dnes = denISO(new Date());
     setNoveOdecty((o) => [dnes, ...o.filter((d) => d !== dnes)]);
@@ -457,6 +500,46 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                   <button type="button" className="btn" onClick={zavri}>Hotovo</button>
                 </div>
               </div>
+              {otevreny.udalost === "ODECET" && vyuctovani.length > 0 && (() => {
+                const r = otevreny;
+                const datum = datumRadku(r);
+                const moje = vazbyRadku(r);
+                const vzdalenost = (v: VyuctovaniMeraku) => Math.abs(Date.parse(v.do) - Date.parse(datum || v.do));
+                const serazena = [...vyuctovani].sort((a, b) => vzdalenost(a) - vzdalenost(b));
+                const ukazat = vsechnaVyuct ? serazena : serazena.filter((v, i) => i < 4 || moje.includes(v.id));
+                return (
+                  <div className="border-b border-line py-3">
+                    <div className="label mb-1.5">Konečný odečet k vyúčtování od dodavatele</div>
+                    <p className="mb-2 text-xs text-ink-muted">Zaškrtni vyúčtování, ke kterému tenhle odečet patří — spotřeba se pak počítá přesně od něj, bez ohledu na datum. Bez zaškrtnutí je to jen průběžný odečet.</p>
+                    <div className="grid gap-1.5 sm:grid-cols-2">
+                      {ukazat.map((v) => {
+                        const zapnuto = moje.includes(v.id);
+                        const jinde = !zapnuto ? odecetVyuctovani(v.id) : null;
+                        return (
+                          <label key={v.id} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-1.5 text-sm ${zapnuto ? "border-accent bg-accent-soft/50" : "border-line"}`}>
+                            <input type="checkbox" className="mt-0.5 h-4 w-4 accent-accent" checked={zapnuto} onChange={(e) => prirad(r, v.id, e.target.checked)} />
+                            <span className="min-w-0 flex-1">
+                              <span className="block">{v.nazev}{v.spolecne ? <span className="text-ink-muted"> · společné</span> : null}</span>
+                              <span className="block text-xs text-ink-muted">
+                                {dmy(v.od)} – {dmy(v.do)}
+                                {jinde ? ` · teď u odečtu ${dmy(jinde)}` : ""}
+                              </span>
+                              {zapnuto && datum && datum !== v.do && (
+                                <button type="button" className="mt-0.5 text-xs text-accent hover:underline" onClick={(e) => { e.preventDefault(); zmenDatum(r, v.do); }}>
+                                  Vyúčtování končí {dmy(v.do)} — použít toto datum odečtu
+                                </button>
+                              )}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {serazena.length > ukazat.length && (
+                      <button type="button" className="mt-2 text-xs text-accent hover:underline" onClick={() => setVsechnaVyuct(true)}>Zobrazit všechna vyúčtování ({serazena.length})</button>
+                    )}
+                  </div>
+                );
+              })()}
               <div className="divide-y divide-line/70">
                 {retezce.flatMap((ret) => merakyRadku(ret, otevreny)).map((m) => {
                   const d = DRUH_MERAKU_MAP.get(m.druh);
@@ -508,6 +591,24 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
               </div>
             </div>
           )}
+          {bezOdectu.length > 0 && (
+            <div className="mb-4 rounded-xl border border-warn/40 bg-warn/10 px-3.5 py-2.5 text-sm">
+              <div className="mb-1 flex items-center gap-2 font-semibold"><Ikona nazev="pozor" trida="h-4 w-4 text-warn" />Vyúčtování bez konečného odečtu ({bezOdectu.length})</div>
+              <p className="mb-2 text-xs text-ink-secondary">Bez něj se spotřeba nájemce počítá z odečtu nejbližšího datu konce vyúčtování.</p>
+              <ul className="space-y-1">
+                {bezOdectu.map((v) => (
+                  <li key={v.id} className="flex flex-wrap items-center justify-between gap-2">
+                    <span>{v.nazev} <span className="text-xs text-ink-muted">· {dmy(v.od)} – {dmy(v.do)}</span></span>
+                    {canEdit && (
+                      <button type="button" className="text-xs font-medium text-accent hover:underline" onClick={() => odecetKVyuctovani(v)}>
+                        {radky.some((x) => x.klic === `ODECET|${v.do}` && x.datum) ? `Přiřadit odečet z ${dmy(v.do)}` : "Zapsat konečný odečet"}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {radky.length === 0 ? (
             <p className="py-3 text-center text-sm text-ink-muted">Nemovitost zatím nemá nájemní smlouvu. Stavy můžeš zapsat jako průběžný odečet.</p>
           ) : (
@@ -541,6 +642,11 @@ export function MerakyNemovitosti({ propertyId, canEdit, meraky, udalosti, stavy
                           {zobrazene.some((m) => stav(r, m.id)?.zdroj === "SVJ") && <span title="Převzato z Evidence SVJ"><Badge>SVJ</Badge></span>}
                         </div>
                         {(r.udalost === "ZACATEK" || r.udalost === "KONEC") && <div className="text-xs text-ink-muted">{r.popis.split(" · ").slice(1).join(" · ")}</div>}
+                        {vazbyRadku(r).length > 0 && (
+                          <div className="text-xs text-accent">
+                            konečný k: {vazbyRadku(r).map((id) => vyuctovani.find((v) => v.id === id)).filter(Boolean).map((v) => `${v!.nazev.split(" · ")[0]} ${dmy(v!.od)} – ${dmy(v!.do)}`).join(", ")}
+                          </div>
+                        )}
                       </td>
                       <td className="whitespace-nowrap tabular-nums">{datumRadku(r) ? datumRadku(r).split("-").reverse().join("/") : "—"}</td>
                       {retezce.map((ret) => (

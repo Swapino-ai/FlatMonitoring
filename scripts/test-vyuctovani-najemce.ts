@@ -87,5 +87,22 @@ over("nájemce celou dobu sám → celá faktura bez měřáků", rm3.sluzby[0].
   over("teplá voda dostane podíl podle nákladů (2000/2100 z 3 000 Kč/měs.)", Math.abs(t.zalohy - 12 * 3000 * 2000 / 2100) < 2, String(kc(t.zalohy)));
 }
 
+// Konecny odecet prirazeny k vyuctovani: plati presne, i kdyz je datem dal nez jiny odecet
+{
+  const n = { id: "N", nazev: "N", od: "2024-07-01", do: null, utilitiesMonthly: 0 };
+  const jiny = { id: "J", nazev: "J", od: "2024-01-01", do: "2024-06-30", utilitiesMonthly: 0 };
+  const m = { id: "m", druh: "ELEKTRINA", nazev: null, aktivni: true, dvoutarif: false, nahrazujeId: null, stavy: [
+    { datum: "2024-01-01", hodnota: 0, hodnota2: null, vyuctovani: ["e0"] },
+    { datum: "2024-06-30", hodnota: 400, hodnota2: null, udalost: "ZACATEK", leaseId: "N" },
+    { datum: "2024-12-20", hodnota: 900, hodnota2: null },
+    { datum: "2025-01-15", hodnota: 1000, hodnota2: null, vyuctovani: ["e1"] },
+  ] };
+  const sl = [sluzba("el", { vyuctovani: [v("e0", "2023-01-01", "2023-12-31", 1000), v("e1", "2024-01-01", "2024-12-31", 10000)], meraky: [m], jednotka: "kWh" })];
+  const r = vyuctujNajemci(n, [n, jiny], sl, "2024-07-01", "2024-12-31", null);
+  const z = r.sluzby[0].zdroje[0];
+  // Najemce: 400 → 1000 = 600 z celkem 1000 → 6 000 Kc; prirazene odecty bez upozorneni
+  over("přiřazený konečný odečet a předání: 600 z 1 000 kWh, bez upozornění", Math.round(r.sluzby[0].castka) === 6000 && !z?.priblizne, `${Math.round(r.sluzby[0].castka)} ${JSON.stringify(z?.priblizne ?? null)}`);
+}
+
 console.log(chyby ? `${chyby} chyb` : "vše v pořádku");
 process.exit(chyby ? 1 : 0);

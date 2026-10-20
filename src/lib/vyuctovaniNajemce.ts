@@ -222,21 +222,39 @@ export function vyuctujNajemci(
     const retezce = retezceMeraku(s.meraky);
     // Spotreba ze stavu meraku k hranicim. Kdyz stav presne k danemu dni (±3 dny) chybi,
     // vezme se nejblizsi zapsany a vrati se, o kolik se lisi — uzivatel ho musi potvrdit
-    const spotrebaMeraku = (z: string, k: string): { celkem: number; priblizne: Odchylka[] } | null => {
+    // Odecty prirazene k udalostem: konecny odecet vyuctovani dodavatele, predani a vraceni bytu.
+    // Kde jsou, plati presne (bez ohledu na datum); jinak se bere nejblizsi zapsany stav.
+    type Hranice = { vyuctovaniKonec?: string; vyuctovaniZacatek?: string; lease?: { id: string; udalost: "ZACATEK" | "KONEC" } };
+    const predchoziVyuctovani = (vId: string) => {
+      const v = s.vyuctovani.find((x) => x.id === vId);
+      return v ? s.vyuctovani.filter((x) => x.do < v.od).sort((a, b) => b.do.localeCompare(a.do))[0] ?? null : null;
+    };
+    const prirazeny = (stavy: MerakSeStavy["stavy"], h: Hranice | undefined, t: 1 | 2): string | null => {
+      if (!h) return null;
+      const ma = (x: MerakSeStavy["stavy"][number]) => (t === 2 ? x.hodnota2 : x.hodnota) != null;
+      const vId = h.vyuctovaniKonec ?? (h.vyuctovaniZacatek ? predchoziVyuctovani(h.vyuctovaniZacatek)?.id : undefined);
+      const x = (vId ? stavy.find((y) => ma(y) && y.vyuctovani?.includes(vId)) : undefined)
+        ?? (h.lease ? stavy.find((y) => ma(y) && y.leaseId === h.lease!.id && y.udalost === h.lease!.udalost) : undefined);
+      return x?.datum ?? null;
+    };
+    const spotrebaMeraku = (z: string, k: string, hz?: Hranice, hk?: Hranice): { celkem: number; priblizne: Odchylka[] } | null => {
       let celkem = 0, nalezeno = false;
       const priblizne: Odchylka[] = [];
       for (const r of retezce) for (const t of (r[0].dvoutarif ? [1, 2] : [1]) as (1 | 2)[]) {
-        const dny = [...new Set(r.flatMap((m) => m.stavy.filter((x) => (t === 2 ? x.hodnota2 : x.hodnota) != null).map((x) => x.datum)))].sort();
+        const stavy = r.flatMap((m) => m.stavy);
+        const dny = [...new Set(stavy.filter((x) => (t === 2 ? x.hodnota2 : x.hodnota) != null).map((x) => x.datum))].sort();
         if (dny.length < 2) continue;
         const nejblizsi = (cil: string, pred?: string) => dny.filter((d) => !pred || d > pred)
           .reduce<string | null>((a, d) => (!a || Math.abs(cas(d) - cas(cil)) < Math.abs(cas(a) - cas(cil)) ? d : a), null);
-        const a = nejblizsi(z);
-        const b = a ? nejblizsi(k, a) : null;
+        const pa = prirazeny(stavy, hz, t);
+        const a = pa ?? nejblizsi(z);
+        const pb = prirazeny(stavy, hk, t);
+        const b = pb && a && pb > a ? pb : a ? nejblizsi(k, a) : null;
         if (!a || !b) continue;
         const x = spotrebaVObdobi(r, a, b, t);
         if (!x) continue;
-        for (const [chtene, pouzite] of [[z, a], [k, b]] as const) {
-          if (Math.abs(cas(pouzite) - cas(chtene)) > 3 * DEN && !priblizne.some((p) => p.chtene === chtene && p.pouzite === pouzite)) priblizne.push({ chtene, pouzite });
+        for (const [chtene, pouzite, presne] of [[z, a, !!pa], [k, b, !!pb && pb === b]] as const) {
+          if (!presne && Math.abs(cas(pouzite) - cas(chtene)) > 3 * DEN && !priblizne.some((p) => p.chtene === chtene && p.pouzite === pouzite)) priblizne.push({ chtene, pouzite });
         }
         celkem += x.spotreba; nalezeno = true;
       }
@@ -256,9 +274,14 @@ export function vyuctujNajemci(
       }
       // 2) Sluzba s meraky: spotreba najemce / celkova spotreba za obdobi dodavatele
       if (retezce.length) {
-        const moje = spotrebaMeraku(Inajem[0], Inajem[1]);
+        // Hranice podilu najemce: zacatek/konec vyuctovani dodavatele, nebo predani/vraceni bytu
+        const hz: Hranice = Inajem[0] === v.od ? { vyuctovaniZacatek: v.id, lease: { id: najem.id, udalost: "ZACATEK" } } : { lease: { id: najem.id, udalost: "ZACATEK" } };
+        const hk: Hranice = Inajem[1] === v.do ? { vyuctovaniKonec: v.id, lease: { id: najem.id, udalost: "KONEC" } } : { lease: { id: najem.id, udalost: "KONEC" } };
+        if (Inajem[0] !== najem.od) delete hz.lease;
+        if (Inajem[1] !== najem.do) delete hk.lease;
+        const moje = spotrebaMeraku(Inajem[0], Inajem[1], hz, hk);
         const odectyCelkem = v.rezim === "READINGS" ? Object.values(v.odecty).reduce((a, x) => a + x, 0) + (v.spotrebaVlastnik ?? 0) : 0;
-        const celkMeraky = spotrebaMeraku(v.od, v.do);
+        const celkMeraky = spotrebaMeraku(v.od, v.do, { vyuctovaniZacatek: v.id }, { vyuctovaniKonec: v.id });
         const celk = celkMeraky?.celkem ?? (odectyCelkem > 0 ? odectyCelkem : null);
         if (moje == null || !celk) {
           // Na merici vubec nejsou aspon dva stavy: spotreba se neda urcit

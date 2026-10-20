@@ -199,7 +199,8 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     if (meraky.length) obnoveno.merak = (await tx.merak.createMany({ data: meraky })).count;
     const stavyMeraku = (t.stavMeraku as any[] ?? []).map((x) => ({
       id: String(x.id), merakId: String(x.merakId), leaseId: s(x.leaseId), udalost: String(x.udalost),
-      datum: dPovinne(x.datum), hodnota: x.hodnota == null ? null : c(x.hodnota), hodnota2: x.hodnota2 == null ? null : c(x.hodnota2), vynulovanoPo: x.vynulovanoPo === true, zdroj: s(x.zdroj), createdAt: dPovinne(x.createdAt ?? new Date()),
+      datum: dPovinne(x.datum), hodnota: x.hodnota == null ? null : c(x.hodnota), hodnota2: x.hodnota2 == null ? null : c(x.hodnota2), vynulovanoPo: x.vynulovanoPo === true, zdroj: s(x.zdroj),
+      vyuctovani: Array.isArray(x.vyuctovani) ? x.vyuctovani.map(String) : [], createdAt: dPovinne(x.createdAt ?? new Date()),
     }));
     if (stavyMeraku.length) obnoveno.stavMeraku = (await tx.stavMeraku.createMany({ data: stavyMeraku })).count;
 

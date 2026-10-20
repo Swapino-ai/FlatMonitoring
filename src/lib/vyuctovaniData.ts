@@ -56,7 +56,7 @@ export async function nactiVstupyVyuctovani(propertyId: string) {
   // Pruvodce: sluzby se skupinami, platnosti a meraky
   const merakySeStavy: MerakSeStavy[] = meraky.map((m) => ({
     id: m.id, druh: m.druh, nazev: m.nazev, aktivni: m.aktivni, dvoutarif: m.dvoutarif, nahrazujeId: m.nahrazujeId, nulovani: m.nulovani,
-    stavy: m.stavy.map((x) => ({ datum: iso(x.datum), hodnota: x.hodnota, hodnota2: x.hodnota2, vynulovanoPo: x.vynulovanoPo })),
+    stavy: m.stavy.map((x) => ({ datum: iso(x.datum), hodnota: x.hodnota, hodnota2: x.hodnota2, vynulovanoPo: x.vynulovanoPo, udalost: x.udalost, leaseId: x.leaseId, vyuctovani: x.vyuctovani })),
   }));
   const sluzbyNajemce = sluzbyProNajemce(
     sluzby, sluzbyVyuct.flatMap((x) => x.vyuctovani.map((v) => ({ ...v, serviceId: x.id }))), typy, merakySeStavy,

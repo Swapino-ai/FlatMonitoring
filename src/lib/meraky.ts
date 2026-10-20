@@ -84,7 +84,13 @@ export interface MerakSeStavy {
   nahrazujeId: string | null;
   /** Kazdorocni vynulovani "MM-DD" (radiatory) */
   nulovani?: string | null;
-  stavy: { datum: string; hodnota: number | null; hodnota2: number | null; vynulovanoPo?: boolean }[];
+  stavy: {
+    datum: string; hodnota: number | null; hodnota2: number | null; vynulovanoPo?: boolean;
+    /** Udalost a smlouva (predani / vraceni) — presne hranice najmu */
+    udalost?: string; leaseId?: string | null;
+    /** Vyuctovani od dodavatele, ke kterym je tohle konecny odecet */
+    vyuctovani?: string[];
+  }[];
 }
 
 /** Lezi den vynulovani (kazdy rok "MM-DD") v intervalu (od, do]? Vraci jeho datum. */

@@ -906,6 +906,8 @@ model StavMeraku {
   vynulovanoPo Boolean  @default(false)
   /// Odkud stav je: null = zapsany rucne, "SVJ" = prevzaty z Evidence SVJ
   zdroj        String?
+  /// Vyuctovani od dodavatelu (ServiceSettlement.id), ke kterym je tohle konecny odecet
+  vyuctovani   String[] @default([])
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

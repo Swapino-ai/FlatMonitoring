@@ -62,6 +62,8 @@ export async function smazMerak(id: string): Promise<{ error?: string }> {
 export async function ulozStav(propertyId: string, v: {
   merakId: string; leaseId: string | null; udalost: "ZACATEK" | "KONEC" | "ODECET" | "VYMENA";
   datum: string; hodnota: number | null; stavId?: string; tarif?: 1 | 2;
+  /** Prubezny odecet: vyuctovani od dodavatele, ke kterym je konecnym odectem */
+  vyuctovani?: string[];
 }): Promise<{ error?: string; id?: string }> {
   const chyba = await smiMenit();
   if (chyba) return { error: chyba };
@@ -92,7 +94,8 @@ export async function ulozStav(propertyId: string, v: {
   }
   const ulozeny = existujici
     ? await prisma.stavMeraku.update({ where: { id: existujici.id }, data: { [pole]: hodnota, datum } })
-    : await prisma.stavMeraku.create({ data: { merakId: v.merakId, leaseId: v.leaseId, udalost: v.udalost, datum, [pole]: hodnota } });
+    : await prisma.stavMeraku.create({ data: { merakId: v.merakId, leaseId: v.leaseId, udalost: v.udalost, datum, [pole]: hodnota,
+      ...(v.udalost === "ODECET" && v.vyuctovani?.length ? { vyuctovani: v.vyuctovani } : {}) } });
 
   // Vraceni a predani dalsimu najemci tyz den: stejny stav
   if (v.udalost === "ZACATEK" || v.udalost === "KONEC") {
@@ -214,4 +217,26 @@ export async function smazOdecet(propertyId: string, v: { leaseId: string | null
   obnov(propertyId);
   revalidatePath(`/properties/${propertyId}`);
   return { smazano: r.count };
+}
+
+/**
+ * Prubezny odecet jako konecny odecet k vyuctovanim od dodavatele. Kazde vyuctovani ma
+ * nejvyse jeden konecny odecet — u jinych odectu se prirazeni zrusi.
+ */
+export async function nastavVyuctovaniOdectu(propertyId: string, v: { datum: string; vyuctovani: string[] }): Promise<{ error?: string }> {
+  const chyba = await smiMenit();
+  if (chyba) return { error: chyba };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v.datum)) return { error: "Neplatné datum." };
+  const platna = (await prisma.serviceSettlement.findMany({ where: { id: { in: v.vyuctovani }, service: { propertyId } }, select: { id: true } })).map((x) => x.id);
+  const datum = new Date(`${v.datum}T00:00:00Z`);
+  const radek = { merak: { propertyId }, udalost: "ODECET", leaseId: null, datum };
+  await prisma.$transaction(async (tx) => {
+    // Stejne vyuctovani u jineho odectu se uvolni
+    const jinde = await tx.stavMeraku.findMany({ where: { merak: { propertyId }, vyuctovani: { hasSome: platna }, NOT: radek }, select: { id: true, vyuctovani: true } });
+    for (const x of jinde) await tx.stavMeraku.update({ where: { id: x.id }, data: { vyuctovani: x.vyuctovani.filter((id) => !platna.includes(id)) } });
+    await tx.stavMeraku.updateMany({ where: radek, data: { vyuctovani: platna } });
+  });
+  obnov(propertyId);
+  revalidatePath(`/properties/${propertyId}`);
+  return {};
 }

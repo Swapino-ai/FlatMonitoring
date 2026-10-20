@@ -5,7 +5,9 @@ import { Verze } from "@/components/Verze";
 import { HlavickaNemovitosti } from "@/components/HlavickaNemovitosti";
 import { MerakyNemovitosti } from "@/components/MerakyNemovitosti";
 import { prisma } from "@/lib/db";
-import { udalostiNajmu } from "@/lib/meraky";
+import { druhyMerakuProSluzbu, udalostiNajmu } from "@/lib/meraky";
+import { nactiTypySluzeb } from "@/lib/typySluzeb";
+import { nazevDruhu } from "@/lib/categories";
 import { svjNastaveno, synchronizujSvjKdyzJeCas, type SvjStavMeraku } from "@/lib/svj";
 import { after } from "next/server";
 import { denISO } from "@/lib/format";
@@ -23,9 +25,19 @@ export default async function MerakyPage({ params }: { params: Promise<{ id: str
     include: {
       leases: { select: { id: true, tenantId: true, tenantName: true, startDate: true, endDate: true, isActive: true } },
       meraky: { orderBy: [{ poradi: "asc" }, { createdAt: "asc" }], include: { stavy: true } },
+      services: { include: { settlements: { select: { id: true, periodFrom: true, periodTo: true, batchId: true } } } },
     },
   });
   if (!property) notFound();
+  // Vyuctovani od dodavatelu u sluzeb s meraky — k nim se prirazuje konecny odecet
+  const typy = await nactiTypySluzeb();
+  const druhyBytu = new Set(property.meraky.map((m) => m.druh));
+  const vyuctovaniMeraku = property.services.flatMap((s) => {
+    const druhy = druhyMerakuProSluzbu(typy[s.type]?.icon).filter((d) => druhyBytu.has(d));
+    return druhy.length ? s.settlements.map((v) => ({
+      id: v.id, nazev: `${nazevDruhu(typy, s.type)} · ${s.provider}`, od: denISO(v.periodFrom), do: denISO(v.periodTo), druhy, spolecne: !!v.batchId,
+    })) : [];
+  }).sort((a, b) => b.do.localeCompare(a.do) || a.nazev.localeCompare(b.nazev));
   const canEdit = user.role === "OWNER";
 
   return (
@@ -43,8 +55,9 @@ export default async function MerakyPage({ params }: { params: Promise<{ id: str
           svjSyncAt={property.svjSyncAt?.toISOString() ?? null}
           svjNastaveno={svjNastaveno()}
           udalosti={udalostiNajmu(property.leases)}
+          vyuctovani={vyuctovaniMeraku}
           stavy={property.meraky.flatMap((m) => m.stavy.map((s) => ({
-            id: s.id, merakId: s.merakId, leaseId: s.leaseId, udalost: s.udalost, datum: denISO(s.datum), hodnota: s.hodnota, hodnota2: s.hodnota2, zdroj: s.zdroj, vynulovanoPo: s.vynulovanoPo,
+            id: s.id, merakId: s.merakId, leaseId: s.leaseId, udalost: s.udalost, datum: denISO(s.datum), hodnota: s.hodnota, hodnota2: s.hodnota2, zdroj: s.zdroj, vynulovanoPo: s.vynulovanoPo, vyuctovani: s.vyuctovani,
           })))}
         />
       </main>
