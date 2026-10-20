@@ -29,10 +29,8 @@ over("elektřina: vyúčtováno do 30. 9.", radek("elektrina").do === "2025-09-3
 over("elektřina: 1. 10. – 31. 12. přeneseno", JSON.stringify(radek("elektrina").preneseno) === JSON.stringify(["2025-10-01", "2025-12-31"]));
 over("internet: v období neplatil", radek("internet").stav === "NEPLATILA");
 over("skupina Voda a teplo se součtem", r.skupiny.some((g) => g.nazev === "Voda a teplo" && g.radky.length === 2));
-// Zalohy: 3 000/mes; vahy voda/teplo/elektrina 1:1:1 (internet neplati) → elektrina za rijen–prosinec se prenese
-const zalohyCele = 6 * 3000;
-const prenesene = 3 * 1000; // tretina zaloh rijen–prosinec
-over("zálohy bez přenesené elektřiny", Math.abs(r.zalohy - (zalohyCele - prenesene)) < 2, `${kc(r.zalohy)} ≈ ${zalohyCele - prenesene}`);
+// Zalohy: cele zalohy za obdobi (3 000/mes × 6), i kdyz se cast elektriny prenasi
+over("zálohy celé za období", Math.abs(r.zalohy - 6 * 3000) < 2, String(kc(r.zalohy)));
 
 // Dalsi vyuctovani za 2026: elektrina navaze od 1. 10. 2025
 const sluzby2 = sluzby.map((s) => s.id === "elektrina" ? { ...s, vyuctovani: [...s.vyuctovani, v("e2", "2025-10-01", "2026-09-30", 36500)] } : s);
@@ -49,7 +47,7 @@ over("další vyúčtování: internet od 1. 1. 2026 bez faktury → přenese se
 // Vynechana sluzba: jeji zalohy se nepocitaji
 const r3 = vyuctujNajemci(najem, [najem], sluzby, "2025-07-01", "2025-12-31", ["voda"]);
 over("vybraná jen voda: náklad jen voda", kc(r3.naklady) === 18400);
-over("vybraná jen voda: zálohy jen její třetina", Math.abs(r3.zalohy - 6000) < 2, String(kc(r3.zalohy)));
+over("vybraná jen voda: zálohy pořád celé", Math.abs(r3.zalohy - 18000) < 2, String(kc(r3.zalohy)));
 
 // Meraky: najemce od 1. 7., faktura za cely rok 2025 (1 000 kWh, 6 000 Kc)
 const merak = (stavy: [string, number][]) => ({ id: "m", druh: "ELEKTRINA", nazev: null, aktivni: true, dvoutarif: false, nahrazujeId: null,
@@ -79,9 +77,11 @@ over("nájemce celou dobu sám → celá faktura bez měřáků", rm3.sluzby[0].
     sluzba("vytah", { skupina: "SVJ", vaha: 100, vyuctovani: [v("y", "2025-03-01", "2026-02-28", 1000)] }),
   ];
   const r = vyuctujNajemci(n, [n], sl, "2025-03-01", "2026-02-28", null);
-  over("zálohy bez vyúčtování dodavatele se započítají službám bez vlastní zálohy", Math.abs(r.zalohy - 12 * 4500) < 2, String(kc(r.zalohy)));
-  const t = r.sluzby.find((x) => x.sluzbaId === "tepla")!;
-  over("teplá voda dostane podíl podle nákladů (2000/2100 z 3 000 Kč/měs.)", Math.abs(t.zalohy - 12 * 3000 * 2000 / 2100) < 2, String(kc(t.zalohy)));
+  over("zálohy = 12 × 4 500 Kč", Math.abs(r.zalohy - 12 * 4500) < 2, String(kc(r.zalohy)));
+  over("jeden úsek 4 500 Kč měsíčně", r.zalohyObdobi.length === 1 && r.zalohyObdobi[0].mesicne === 4500);
+  // Dalsi obdobi: zalohy jen za nove dny, nic dvakrat
+  const r2 = vyuctujNajemci(n, [n], sl, "2025-03-01", "2026-06-30", null, [{ od: r.od, do: r.do, sluzbyDo: r.sluzbyDo }]);
+  over("navazující vyúčtování: zálohy jen za nové dny (4 měsíce)", Math.abs(r2.zalohy - 4 * 4500) < 2, String(kc(r2.zalohy)));
 }
 
 console.log(chyby ? `${chyby} chyb` : "vše v pořádku");

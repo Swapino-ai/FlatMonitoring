@@ -43,7 +43,7 @@ export interface SnapshotVyuctovani {
   platby?: PlatbaZalohy[];
   /** Mesicni zalohy podle smlouvy po obdobich se stejnou vysi a jejich rozpis po sluzbach */
   rozpisZaloh?: ObdobiZaloh[];
-  /** Z ceho se sklada "Zalohy za obdobi": podil zaloh na kazdou vyuctovanou sluzbu */
+  /** Z ceho se sklada "Zalohy za obdobi": useky se stejnou mesicni zalohou */
   zalohySluzeb?: { nazev: string; od: string; do: string; castka: number }[];
 }
 
@@ -251,9 +251,6 @@ export function sestavSnapshot(a: {
     nepokryto: nepokrytoZRadku(radky), aktualniZaloha: a.aktualniZaloha,
     doporucenaZaloha: a.zamerne ? null : upravaZalohy(v.naklady, v.zalohy, v.od, v.do, a.aktualniZaloha),
     skupiny: v.skupiny, preneseno, sluzbyDo: v.sluzbyDo, platby: a.platby ?? [], rozpisZaloh: a.rozpisZaloh ?? [],
-    zalohySluzeb: [
-      ...vyuctovane.filter((r) => r.zalohy > 0.5 && r.od && r.do).map((r) => ({ nazev: r.nazev, od: r.od!, do: r.do!, castka: Math.round(r.zalohy) })),
-      ...(v.zalohyNeprirazene > 0.5 ? [{ nazev: "Ostatní (bez přiřazené služby)", od: v.od, do: v.do, castka: Math.round(v.zalohyNeprirazene) }] : []),
-    ],
+    zalohySluzeb: (v.zalohyObdobi ?? []).map((o) => ({ nazev: `${kc(o.mesicne)} měsíčně`, od: o.od, do: o.do, castka: Math.round(o.castka) })),
   };
 }

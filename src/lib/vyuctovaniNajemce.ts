@@ -8,8 +8,8 @@
  *   vyuctovani (naklady i zalohy) — nic se neodhaduje a nic se neztrati.
  * - Dny, kdy sluzba vubec neplatila (zacala pozdeji, skoncila), se nepocitaji.
  * - Najemce jen cast obdobi dodavatele: podle odectu meraku, kde jsou; jinak podle dnu.
- * - Zalohy se pocitaji za vyuctovane dny; za vynechane a prenesene sluzby se odecte jejich
- *   podil (podle rozpisu zaloh ve smlouve, jinak podle mesicnich nakladu sluzeb).
+ * - Zalohy jsou cele zalohy za dny obdobi (co najemce kazdy mesic platí). Prenesene naklady
+ *   se vyuctuji v dalsim vyuctovani proti jeho zalohám.
  */
 import { dnuVObdobi, pridejDny, prunik, rozuctuj, type NajemVstup, type VyuctovaniVstup } from "./vyuctovani";
 import { platnyKDatu, type PolozkaZalohy, type ZmenaZaloh } from "./zalohy";
@@ -97,7 +97,7 @@ export interface RadekSluzby {
   duvodPrenosu?: string | null;
   zdroje: ZdrojRadku[];
   castka: number;
-  /** Zalohy pripadajici na vyuctovane dny teto sluzby */
+  /** Nepouziva se (zalohy se pocitaji za cele obdobi) */
   zalohy: number;
 }
 
@@ -106,6 +106,8 @@ export interface SkupinaVyuctovani {
   radky: RadekSluzby[];
   castka: number;
 }
+
+export interface ObdobiZalohNajemce { mesicne: number; od: string; do: string; castka: number }
 
 export interface VysledekNajemce {
   od: string;
@@ -118,8 +120,8 @@ export interface VysledekNajemce {
   zalohy: number;
   /** Zalohy minus naklady; kladne = vratka najemci, zaporne = doplatek */
   rozdil: number;
-  /** Zalohy za dny bez prectene sluzby (nelze priradit zadne sluzbe) */
-  zalohyNeprirazene: number;
+  /** Zalohy po usecich se stejnou mesicni castkou */
+  zalohyObdobi: ObdobiZalohNajemce[];
   /** Do kdy je ktera sluzba po tomto vyuctovani vyuctovana */
   sluzbyDo: Record<string, string>;
   chybiOdecet: boolean;
@@ -154,7 +156,7 @@ export function vyuctujNajemci(
   drivejsi: DrivejsiVyuctovani[] = [],
 ): VysledekNajemce {
   const prazdne = (chyba: string): VysledekNajemce => ({
-    od, do: doDne, sluzby: [], skupiny: [], naklady: 0, zalohy: 0, rozdil: 0, zalohyNeprirazene: 0, sluzbyDo: {}, chybiOdecet: false, priblizne: false, chyba,
+    od, do: doDne, sluzby: [], skupiny: [], naklady: 0, zalohy: 0, rozdil: 0, zalohyObdobi: [], sluzbyDo: {}, chybiOdecet: false, priblizne: false, chyba,
   });
   const P = prunik(od, doDne, najem.od, najem.do ?? doDne);
   if (!P) return prazdne("Zvolené období nezasahuje do doby nájmu.");
@@ -288,49 +290,22 @@ export function vyuctujNajemci(
     radky.push({ ...zaklad, od: vyOd, do: vyDo, preneseno, duvodPrenosu: preneseno ? duvod : null, zdroje, castka: zdroje.reduce((a, z) => a + z.podil, 0) });
   }
 
-  // Zalohy: kazdy den najmu v obdobi (i prenesene dny pred nim) se rozdeli mezi prectene sluzby
-  const vyuctovaneDny = new Map(radky.filter((r) => r.stav === "VYUCTOVANO" && r.od && r.do).map((r) => [r.sluzbaId, [r.od!, r.do!] as const]));
-  const zalohySluzby = new Map<string, number>();
-  let neprirazene = 0;
-  const zacatek = [P[0], ...[...vyuctovaneDny.values()].map((x) => x[0])].reduce(min);
-  for (let t = cas(zacatek); t <= cas(P[1]); t += DEN) {
+  // Zalohy: vse, co mel najemce za dny obdobi zaplatit (kazdy mesic cela zaloha), bez dnu,
+  // ktere uz pokrylo drivejsi vyuctovani. Prenesene naklady se vyuctuji pozdeji proti
+  // zalohám tehdejsiho obdobi — za kazdy den se zaloha zapocita prave jednou.
+  let zalohy = 0;
+  const zalohyObdobi: ObdobiZalohNajemce[] = [];
+  for (let t = cas(P[0]); t <= cas(P[1]); t += DEN) {
     const d = naIso(t);
-    if (d < najem.od || (najem.do && d > najem.do)) continue;
+    if (drivePokryto(d)) continue;
     const z = zalohaDne(najem, d);
-    if (z.celkem <= 0) continue;
-    const aktivni = sluzby.filter((s) => s.prectena && aktivniVDen(s, d));
-    let rozdeleno = 0;
-    const pridej = (id: string, castka: number) => {
-      rozdeleno += castka;
-      const r = vyuctovaneDny.get(id);
-      if (r && r[0] <= d && d <= r[1]) zalohySluzby.set(id, (zalohySluzby.get(id) ?? 0) + castka);
-    };
-    if (z.polozky?.length) {
-      // Zaloha na sluzbu, ktera nema zadne vyuctovani od dodavatele (napr. "Teplo" v rozpisu,
-      // ale SVJ uctuje teplou vodu, uklid, vytah), by se nikdy nezapocitala. Takove zalohy jdou
-      // do spolecneho baliku pro sluzby bez vlastni zalohy — podle jejich mesicnich nakladu.
-      let balik = 0;
-      for (const p of z.polozky) {
-        const s = aktivni.find((x) => x.id === p.serviceId);
-        if (!s) continue;
-        const castka = Math.max(0, Math.min(p.amount / z.dnuVMesici, z.celkem - rozdeleno - balik));
-        if (s.vyuctovani.length) pridej(p.serviceId, castka); else balik += castka;
-      }
-      const vlastni = new Set(z.polozky.map((p) => p.serviceId));
-      const prijemci = aktivni.filter((s) => !vlastni.has(s.id) && s.vyuctovani.length > 0);
-      if (balik > 0 && prijemci.length) {
-        const vahy = prijemci.reduce((a, s) => a + Math.max(0, s.vaha), 0);
-        for (const s of prijemci) pridej(s.id, balik * (vahy > 0 ? Math.max(0, s.vaha) / vahy : 1 / prijemci.length));
-      }
-    } else {
-      const vahy = aktivni.reduce((a, s) => a + Math.max(0, s.vaha), 0);
-      if (vahy > 0) for (const s of aktivni) pridej(s.id, (z.celkem * Math.max(0, s.vaha)) / vahy);
-    }
-    // Co nejde priradit zadne sluzbe, patri do obdobi, kde ho jeste nic nevyuctovalo
-    const zbytek = z.celkem - rozdeleno;
-    if (zbytek > 0.0001 && d >= P[0] && !drivePokryto(d)) neprirazene += zbytek;
+    const mesicne = Math.round(z.celkem * z.dnuVMesici * 100) / 100;
+    zalohy += z.celkem;
+    const posledni = zalohyObdobi[zalohyObdobi.length - 1];
+    if (posledni && posledni.mesicne === mesicne && pridejDny(posledni.do, 1) === d) { posledni.do = d; posledni.castka += z.celkem; }
+    else zalohyObdobi.push({ mesicne, od: d, do: d, castka: z.celkem });
   }
-  for (const r of radky) r.zalohy = zalohySluzby.get(r.sluzbaId) ?? 0;
+  for (const o of zalohyObdobi) o.castka = Math.round(o.castka * 100) / 100;
 
   const vyuctovane = radky.filter((r) => r.stav === "VYUCTOVANO");
   const skupiny: SkupinaVyuctovani[] = [];
@@ -339,9 +314,8 @@ export function vyuctujNajemci(
     if (g) { g.radky.push(r); g.castka += r.castka; } else skupiny.push({ nazev: r.skupina ?? null, radky: [r], castka: r.castka });
   }
   const naklady = vyuctovane.reduce((a, r) => a + r.castka, 0);
-  const zalohy = vyuctovane.reduce((a, r) => a + r.zalohy, 0) + neprirazene;
   return {
-    od: P[0], do: P[1], sluzby: radky, skupiny, naklady, zalohy, rozdil: zalohy - naklady, zalohyNeprirazene: neprirazene,
+    od: P[0], do: P[1], sluzby: radky, skupiny, naklady, zalohy, rozdil: zalohy - naklady, zalohyObdobi,
     sluzbyDo, chybiOdecet: vyuctovane.some((r) => r.zdroje.some((z) => z.chybiOdecet)),
     priblizne: vyuctovane.some((r) => r.zdroje.some((z) => z.priblizne?.length)),
   };
@@ -377,6 +351,5 @@ export function sluzbyProNajemce(
   });
 }
 
-/** Od kdy se v tomto vyuctovani pocitaji zalohy (vcetne prenesenych dnu pred obdobim). */
-export const zacatekZaloh = (v: VysledekNajemce) =>
-  v.sluzby.filter((r) => r.stav === "VYUCTOVANO" && r.od).map((r) => r.od!).reduce((a, x) => (x < a ? x : a), v.od);
+/** Od kdy se v tomto vyuctovani pocitaji zalohy (od zacatku obdobi). */
+export const zacatekZaloh = (v: VysledekNajemce) => v.od;
