@@ -123,8 +123,9 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
       firstSeen: denISO(i.firstSeenAt), lastSeen: denISO(i.lastSeenAt), zmizel: i.zmizelAt ? denISO(i.zmizelAt) : null,
       ceny: i.ceny.map((c) => ({ at: denISO(c.at), price: c.price })),
       shody: [
-        ...i.shody.map((s) => ({ id: s.id, stav: s.stav, skore: s.skore, duvod: s.duvod, drivejsi: true, jiny: jiny(s.drivejsi) })),
-        ...i.shodyDrive.map((s) => ({ id: s.id, stav: s.stav, skore: s.skore, duvod: s.duvod, drivejsi: false, jiny: jiny(s.inzerat) })),
+        // Jen stejny typ nabidky (najem s najmem, prodej s prodejem)
+        ...i.shody.filter((s) => s.drivejsi.dealType === i.dealType).map((s) => ({ id: s.id, stav: s.stav, skore: s.skore, duvod: s.duvod, drivejsi: true, jiny: jiny(s.drivejsi) })),
+        ...i.shodyDrive.filter((s) => s.inzerat.dealType === i.dealType).map((s) => ({ id: s.id, stav: s.stav, skore: s.skore, duvod: s.duvod, drivejsi: false, jiny: jiny(s.inzerat) })),
       ],
       snimky: i.snimky.filter((s) => s.druh !== "FOTO").map((s) => ({ id: s.id, createdAt: s.createdAt.toISOString() })),
       fotky: i.snimky.filter((s) => s.druh === "FOTO").map((s) => s.id),

@@ -296,7 +296,11 @@ export async function najdiShody(jen?: string[]): Promise<{ porovnano: number; n
   // Drivejsi = zmizely z trhu (jakykoli, ktery sken videl)
   const drivejsiPodminka = { zmizelAt: { not: null } };
   // Navrhy z drivejsich pravidel, ktere tomu neodpovidaji, zmizi (rozhodnute zustavaji)
-  const odebrano = jen ? 0 : (await prisma.shodaInzeratu.deleteMany({ where: { stav: "NAVRH", NOT: { drivejsi: drivejsiPodminka } } })).count;
+  let odebrano = jen ? 0 : (await prisma.shodaInzeratu.deleteMany({ where: { stav: "NAVRH", NOT: { drivejsi: drivejsiPodminka } } })).count;
+  // Starsi navrhy mezi najmem a prodejem pryc
+  const smisene = (await prisma.shodaInzeratu.findMany({ where: { stav: "NAVRH" }, select: { id: true, inzerat: { select: { dealType: true } }, drivejsi: { select: { dealType: true } } } }))
+    .filter((x) => x.inzerat.dealType !== x.drivejsi.dealType).map((x) => x.id);
+  if (smisene.length) odebrano += (await prisma.shodaInzeratu.deleteMany({ where: { id: { in: smisene } } })).count;
   const sledovane = await prisma.inzerat.findMany({ where: { zmizelAt: null, zarazeni: { some: { stav: { in: ["NAVRH", "ZARAZENO"] } } }, areaM2: { not: null }, ...(jen ? { id: { in: jen } } : {}) } });
   const znamePary = new Set((await prisma.shodaInzeratu.findMany({ select: { inzeratId: true, drivejsiId: true } }))
     .flatMap((s) => [`${s.inzeratId}|${s.drivejsiId}`, `${s.drivejsiId}|${s.inzeratId}`]));
@@ -305,7 +309,8 @@ export async function najdiShody(jen?: string[]): Promise<{ porovnano: number; n
     const plocha = a.areaM2!;
     const kandidati = await prisma.inzerat.findMany({
       where: {
-        id: { not: a.id }, category: a.category, ...drivejsiPodminka,
+        // Jen stejny typ nabidky: najem se s prodejem neporovnava
+        id: { not: a.id }, category: a.category, dealType: a.dealType, ...drivejsiPodminka,
         // Drivejsi inzerat musel zmizet drive, nez se objevil tento
         zmizelAt: { not: null, lte: new Date(a.firstSeenAt.getTime() + 7 * 86400000) },
         ...(a.disposition ? { OR: [{ disposition: a.disposition }, { disposition: null }] } : {}),
