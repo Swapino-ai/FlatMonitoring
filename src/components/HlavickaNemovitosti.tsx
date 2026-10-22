@@ -18,8 +18,9 @@ export function HlavickaNemovitosti({ property, canEdit, aktivni }: {
   canEdit: boolean;
   aktivni: (typeof ZALOZKY_NEMOVITOSTI)[number][0];
 }) {
+  // Fragment: zalozky musi byt primo v obsahu stranky, jinak by se prilepily jen na kratky usek
   return (
-    <div className="space-y-4">
+    <>
       <div>
         <Link href="/properties" className="text-sm text-ink-muted hover:text-ink-primary">← Nemovitosti</Link>
         <div className="mt-2 flex flex-wrap items-center gap-3">
@@ -39,7 +40,7 @@ export function HlavickaNemovitosti({ property, canEdit, aktivni }: {
           {canEdit && <Link href={`/properties/${property.id}/edit`} className="btn no-print shrink-0">Upravit</Link>}
         </div>
       </div>
-      <div className="max-w-full overflow-x-auto pb-1">
+      <div className="no-print sticky top-[var(--vyska-hlavicky,56px)] z-10 -mx-2 max-w-[calc(100%+1rem)] overflow-x-auto bg-surface-base/95 px-2 py-1.5 backdrop-blur">
         <div className="flex w-fit gap-1 rounded-2xl bg-surface-card p-1 shadow-card">
           {ZALOZKY_NEMOVITOSTI.map(([klic, nazev]) => (
             <Link key={klic} href={klic === "trh" || klic === "meraky" ? `/properties/${property.id}/${klic}` : `/properties/${property.id}?list=${klic}`}
@@ -52,6 +53,6 @@ export function HlavickaNemovitosti({ property, canEdit, aktivni }: {
           ))}
         </div>
       </div>
-    </div>
+    </>
   );
 }

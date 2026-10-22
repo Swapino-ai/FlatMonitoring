@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export interface List {
   id: string;
@@ -27,6 +27,7 @@ export interface List {
  */
 export function Listy({ klic, listy }: { klic: string; listy: List[] }) {
   const [aktivni, setAktivni] = useState(listy[0]?.id ?? "");
+  const obal = useRef<HTMLDivElement>(null);
 
   // Posledni otevreny list az po pripojeni — jinak by se serverovy vystup
   // neshodoval s tim, co vykresli prohlizec
@@ -45,16 +46,21 @@ export function Listy({ klic, listy }: { klic: string; listy: List[] }) {
 
   function prepni(id: string) {
     setAktivni(id);
+    // Prepnuti v prilepenych zalozkach: novy list zacne od zacatku, ne uprostred
+    const el = obal.current;
+    const hlavicka = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--vyska-hlavicky")) || 56;
+    if (el && el.getBoundingClientRect().top < hlavicka) window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top - hlavicka - 8 });
     try {
       localStorage.setItem(`list:${klic}`, id);
     } catch { /* neulozi se, prepnuti presto plati */ }
   }
 
   return (
-    <div>
+    <div ref={obal}>
       {/* Zalozky jako segmentovany prepinac: aktivni je vyplneny, ostatni jen text.
           Na telefonu se posouvaji do strany, ne lamou na druhy radek. */}
-      <div className="max-w-full overflow-x-auto pb-1">
+      {/* Zalozky zustavaji pri skrolovani nahore pod listou aplikace */}
+      <div className="no-print sticky top-[var(--vyska-hlavicky,56px)] z-10 -mx-2 max-w-[calc(100%+1rem)] overflow-x-auto bg-surface-base/95 px-2 py-1.5 backdrop-blur">
         <div role="tablist" className="flex w-fit gap-1 rounded-2xl bg-surface-card p-1 shadow-card">
           {listy.map((l) => {
             const je = l.id === aktivni;

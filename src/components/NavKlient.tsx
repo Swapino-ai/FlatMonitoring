@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PohledPrepinac } from "./PohledPrepinac";
 import type { Pohled } from "@/lib/ownership";
-import { useEffect, useState, type ReactNode, Suspense } from "react";
+import { useEffect, useRef, useState, type ReactNode, Suspense } from "react";
 
 /** Jednoduche linkove ikony. Bez knihovny — je jich jen par a nemaji zvetsovat balicek. */
 const IKONY: Record<string, string> = {
@@ -52,6 +52,17 @@ export function NavKlient({ user, verze, pohled }: { user: { name: string; role:
 
   // Po prechodu na jinou stranku se nabidka zavre
   useEffect(() => setVice(false), [pathname]);
+  // Vyska horni listy jako CSS promenna: pod ni se prilepi zalozky nemovitosti
+  const hlavicka = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = hlavicka.current;
+    if (!el) return;
+    const nastav = () => document.documentElement.style.setProperty("--vyska-hlavicky", `${el.offsetHeight}px`);
+    nastav();
+    const ro = new ResizeObserver(nastav);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const vsechny = [...LINKS, ...(user.role === "OWNER" ? OWNER_LINKS : [])];
   const jeAktivni = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
@@ -61,7 +72,7 @@ export function NavKlient({ user, verze, pohled }: { user: { name: string; role:
 
   return (
     <>
-      <header className="no-print sticky top-0 z-20 bg-surface-card/90 shadow-[0_1px_0_rgb(var(--border)),0_6px_20px_rgba(15,27,51,0.05)] backdrop-blur">
+      <header ref={hlavicka} className="no-print sticky top-0 z-20 bg-surface-card/90 shadow-[0_1px_0_rgb(var(--border)),0_6px_20px_rgba(15,27,51,0.05)] backdrop-blur">
         <div className="mx-auto flex max-w-[1400px] items-center gap-4 px-4 py-2.5 sm:px-6 lg:gap-6">
           <Link href="/" className="flex items-center gap-2.5 font-bold tracking-tight">
             <span className="flex h-8 w-8 items-center justify-center rounded-[10px] bg-accent text-white">
