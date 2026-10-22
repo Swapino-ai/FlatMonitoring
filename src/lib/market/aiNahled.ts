@@ -2,7 +2,7 @@
  * Co z AI parametru inzeratu ukazat v aplikaci: hodnoty vlastnosti profilu se zduvodnenim,
  * drobne udaje a jednovetne shrnuti. Ciste funkce, bez SDK.
  */
-import { platneHodnoty, type Profil } from "./profily";
+import { platneHodnoty, vytahZTextu, type Profil } from "./profily";
 import type { PodminkyNajmu } from "./aiParametry";
 
 export interface AiNahled {
@@ -22,8 +22,14 @@ export function nahledAi(parametry: unknown, profil: Profil): AiNahled | null {
   const p = parametry as Record<string, unknown>;
   // Novy tvar (profily): { hodnoty, duvody, info, shrnuti }
   if (p.hodnoty && typeof p.hodnoty === "object") {
+    const hodnoty = platneHodnoty(profil, p.hodnoty);
+    // Vytah z drobnych udaju, dokud AI inzerat neprecte znovu
+    if (profil.vlastnosti.some((v) => v.klic === "vytah") && !hodnoty.vytah && Array.isArray(p.info)) {
+      const v = vytahZTextu((p.info as unknown[]).filter((x): x is string => typeof x === "string").join(" · "));
+      if (v) hodnoty.vytah = v;
+    }
     return {
-      hodnoty: platneHodnoty(profil, p.hodnoty),
+      hodnoty,
       duvody: (p.duvody && typeof p.duvody === "object" ? p.duvody : {}) as Record<string, string>,
       stitky: Array.isArray(p.info) ? (p.info as unknown[]).filter((x): x is string => typeof x === "string") : [],
       shrnuti: typeof p.shrnuti === "string" ? p.shrnuti : "",

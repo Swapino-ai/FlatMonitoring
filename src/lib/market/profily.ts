@@ -50,8 +50,9 @@ export const PROFILY: Record<Profil["klic"], Profil> = {
         ai: "PRIZEMI (prizemi, zvysene prizemi, suteren), POSLEDNI (nejvyssi podlazi domu), jinak PATRO." },
       { klic: "venkovni", nazev: "Balkon / terasa", hlavni: false, moznosti: ANO_NE, ai: "ANO, kdyz ma balkon, lodzii nebo terasu, jinak NE." },
       { klic: "parkovani", nazev: "Parkování", hlavni: false, moznosti: ANO_NE, ai: "ANO, kdyz k bytu patri garaz nebo vlastni parkovaci stani." },
+      { klic: "vytah", nazev: "Výtah", hlavni: false, moznosti: ANO_NE, ai: "ANO, kdyz ma dum vytah; NE, kdyz inzerat pise, ze vytah neni (bez vytahu); jinak null." },
     ],
-    aiInfo: "vytah, sklep / komora, energeticka trida, zatepleni domu, rok rekonstrukce, podlazi (napr. '3. patro z 5')",
+    aiInfo: "sklep / komora, energeticka trida, zatepleni domu, rok rekonstrukce, podlazi (napr. '3. patro z 5')",
   },
   DUM: {
     klic: "DUM", nazev: "dům", tolerancePlochy: 0.3, stejnaDispozice: false, zaKus: false,
@@ -153,11 +154,25 @@ export function hodnotyZaznamu(profil: Profil, z: { vlastnosti?: unknown; typDom
   return { ...platneHodnoty(profil, stare), ...platneHodnoty(profil, z.vlastnosti) };
 }
 
+/** Vytah z drobnych udaju AI ("Bez výtahu" → NE, "Výtah" → ANO), jinak null. */
+export function vytahZTextu(text: string): "ANO" | "NE" | null {
+  if (/bez\s+v[ýy]tahu|v[ýy]tah\s*:?\s*ne\b/i.test(text)) return "NE";
+  if (/v[ýy]tah/i.test(text)) return "ANO";
+  return null;
+}
+
 /** Ucinne hodnoty nabidky: tvoje volba, jinak co vycetla AI. Vraci i to, ktere jsou od AI. */
 export function hodnotyNabidky(profil: Profil, rucne: Record<string, string>, parametryAi: unknown) {
   // Novejsi parametry maji hodnoty v "hodnoty", starsi (pred profily) primo v koreni
   const zdroj = parametryAi && typeof parametryAi === "object" && "hodnoty" in parametryAi ? (parametryAi as { hodnoty: unknown }).hodnoty : parametryAi;
   const ai = platneHodnoty(profil, zdroj);
+  // Vytah z drobnych udaju, dokud AI inzerat neprecte znovu ("Bez výtahu", "výtah")
+  if (profil.vlastnosti.some((v) => v.klic === "vytah") && !ai.vytah && parametryAi && typeof parametryAi === "object") {
+    const p = parametryAi as { info?: unknown; vytah?: unknown };
+    const info = Array.isArray(p.info) ? p.info.filter((x): x is string => typeof x === "string").join(" · ") : "";
+    const v = p.vytah === true ? "ANO" : p.vytah === false ? "NE" : vytahZTextu(info);
+    if (v) ai.vytah = v;
+  }
   const hodnoty: Record<string, string> = { ...ai, ...rucne };
   const odAi = Object.keys(ai).filter((k) => !(k in rucne));
   return { hodnoty, ai, odAi };
