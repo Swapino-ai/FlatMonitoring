@@ -112,6 +112,8 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
   const [stav, setStav] = useState<TrhState>({});
   const [bezi, spust] = useTransition();
   const [typ, setTyp] = useState<"SALE" | "RENT">(pocatecniTyp);
+  // Vlastnosti nabidky (selecty) jsou na telefonu sbalene; rozbali se klepnutim
+  const [vlastnostiOtevrene, setVlastnostiOtevrene] = useState<Set<string>>(new Set());
   const [vybrane, setVybrane] = useState<Set<string>>(() => new Set(radky.filter((r) => r.stav === "NAVRH" && r.doporuceno).map((r) => r.id)));
   const [vyrazeneOtevrene, setVyrazeneOtevrene] = useState(false);
   const [polohaPro, setPolohaPro] = useState<RadekTrhu | null>(null);
@@ -204,10 +206,10 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
 
   const vzdalenost = (r: RadekTrhu) => (poloha && r.lat != null && r.lon != null ? km(poloha, { lat: r.lat, lon: r.lon }) : null);
 
-  const zakladRadku = (r: RadekTrhu) => {
+  const zakladRadku = (r: RadekTrhu, trida = "") => {
     const d = vzdalenost(r);
     return (
-      <div className="min-w-0 flex-1">
+      <div className={`min-w-0 flex-1 ${trida}`}>
         <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
           <span className="font-semibold tabular-nums">{cena(r.price)}</span>
           {r.pricePerM2 != null && <span className="text-xs text-ink-muted tabular-nums">{czk(r.pricePerM2)}/m²</span>}
@@ -223,6 +225,20 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
         <div className="mt-1"><CenyAShody ceny={r.ceny} najem={r.dealType === "RENT"} shody={r.shody} canEdit={canEdit} onRozhodni={rozhodniShodu_} /></div>
         {r.ai && <div className="mt-1"><AiInfo ai={r.ai} profil={profil} kompaktni={r.stav !== "NAVRH"} /></div>}
       </div>
+    );
+  };
+
+  /** Nahled: prvni fotka (jinak snimek stranky), klik otevre galerii. */
+  const nahled = (r: RadekTrhu, trida: string) => {
+    const fotky = fotkyRadku(r);
+    if (!fotky.length && !r.snimky[0]) return null;
+    return (
+      <button type="button" onClick={() => otevriGalerii(r)} className={`relative shrink-0 overflow-hidden rounded-lg bg-surface-sunken ${trida}`} title="Fotky inzerátu">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={fotky[0] ?? `/api/snimek/${r.snimky[0]!.id}`} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover object-top" />
+        <DatumSkenu datum={r.firstSeen} />
+        <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[10px] text-white">{polozkyGalerie(r).length}</span>
+      </button>
     );
   };
 
@@ -249,21 +265,24 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
         {(["SALE", "RENT"] as const).map((t) => {
           const o = odhady[t];
           const proNajem = t === "RENT";
-          const cenaT = (n: number) => (proNajem ? `${czk(n)}/měs.` : czkCompact(n));
+          // Cislo nezalomit; jednotka mensi, at se na mobilu vejde vedle sebe
+          const cenaT = (n: number) => proNajem
+            ? <><span className="whitespace-nowrap">{czk(n)}</span><span className="text-sm font-medium text-ink-secondary sm:text-base">/měs.</span></>
+            : <span className="whitespace-nowrap">{czkCompact(n)}</span>;
           return (
-            <div key={t} className={`card hero-card flex flex-col ${proNajem ? "hero-card-najem" : ""}`}>
+            <div key={t} className={`card hero-card flex min-w-0 flex-col ${proNajem ? "hero-card-najem" : ""}`}>
               <div className="label">{proNajem ? "Odhad tržního nájmu" : "Odhad tržní hodnoty"}</div>
               {o ? (
                 <>
-                  <div className="mt-2 grid grid-cols-2 gap-4">
-                    <div>
+                  <div className="mt-2 grid grid-cols-2 gap-3 sm:gap-4">
+                    <div className="min-w-0">
                       <div className="text-xs text-ink-secondary">Vážený průměr</div>
-                      <div className="text-4xl font-semibold leading-tight tracking-tight tabular-nums">{cenaT(o.hodnota)}</div>
+                      <div className="text-2xl font-semibold leading-tight tracking-tight tabular-nums sm:text-3xl xl:text-4xl">{cenaT(o.hodnota)}</div>
                       <div className="text-xs tabular-nums text-ink-secondary">{czk(o.perM2)}/m²</div>
                     </div>
-                    <div title="Vážený medián: polovina nabídek (podle váhy) je levnější, polovina dražší — méně ho ovlivní jedna extrémní nabídka">
+                    <div className="min-w-0" title="Vážený medián: polovina nabídek (podle váhy) je levnější, polovina dražší — méně ho ovlivní jedna extrémní nabídka">
                       <div className="text-xs text-ink-secondary">Vážený medián</div>
-                      <div className="text-4xl font-semibold leading-tight tracking-tight tabular-nums opacity-80">{cenaT(o.median.hodnota)}</div>
+                      <div className="text-2xl font-semibold leading-tight tracking-tight tabular-nums opacity-80 sm:text-3xl xl:text-4xl">{cenaT(o.median.hodnota)}</div>
                       <div className="text-xs tabular-nums text-ink-secondary">{czk(o.median.perM2)}/m²</div>
                     </div>
                   </div>
@@ -447,7 +466,9 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
                 {canEdit && <input type="checkbox" checked={vybrane.has(r.id)} onChange={() => prepni(r.id)} className="h-4 w-4 accent-accent" aria-label="Vybrat" />}
                 <span className={`w-10 shrink-0 rounded-md px-1 py-0.5 text-center text-xs font-semibold tabular-nums ${r.doporuceno ? "bg-good/15 text-good" : "bg-surface-sunken text-ink-muted"}`}
                   title={r.doporuceno ? "Doporučeno zařadit" : "Méně podobné"}>{r.skore ?? "–"}</span>
-                {zakladRadku(r)}
+                {/* Na telefonu fotka pres celou sirku a popis pod ni */}
+                {nahled(r, "h-44 w-full sm:h-16 sm:w-24")}
+                {zakladRadku(r, "basis-full sm:basis-0")}
                 {odkazy(r)}
                 {canEdit && (
                   <span className="flex gap-1">
@@ -469,19 +490,9 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
         ) : (
           <ul className="divide-y divide-line/70 rounded-xl border border-line">
             {zarazene.map((puvodni) => { const r = { ...puvodni, ...upravy[puvodni.id] }; const k = r.firstSeen > hraniceOkna ? 0 : 99; return (
-              <li key={r.id} className={`flex gap-3 px-3 py-3 ${r.zmizel ? "opacity-70" : ""}`}>
-                {/* Nahled: prvni fotka, klik otevre galerii */}
-                {(() => {
-                  const fotky = fotkyRadku(r);
-                  return fotky.length > 0 || r.snimky[0] ? (
-                    <button type="button" onClick={() => otevriGalerii(r)} className="relative hidden h-20 w-28 shrink-0 overflow-hidden rounded-lg bg-surface-sunken sm:block" title="Fotky inzerátu">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={fotky[0] ?? `/api/snimek/${r.snimky[0]!.id}`} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover object-top" />
-                      <DatumSkenu datum={r.firstSeen} />
-                      <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[10px] text-white">{polozkyGalerie(r).length}</span>
-                    </button>
-                  ) : <div className="hidden h-20 w-28 shrink-0 rounded-lg bg-surface-sunken sm:block" />;
-                })()}
+              <li key={r.id} className={`flex flex-col gap-3 px-3 py-3 sm:flex-row ${r.zmizel ? "opacity-70" : ""}`}>
+                {/* Nahled: na telefonu velka fotka nahore, jinak mala vlevo */}
+                {nahled(r, "h-48 w-full sm:h-20 sm:w-28") ?? <div className="hidden h-20 w-28 shrink-0 rounded-lg bg-surface-sunken sm:block" />}
 
                 <div className="min-w-0 flex-1 space-y-1.5">
                   {(() => {
@@ -504,8 +515,15 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
                   })()}
 
                   <CenyAShody ceny={r.ceny} najem={r.dealType === "RENT"} shody={r.shody} canEdit={canEdit} onRozhodni={rozhodniShodu_} />
-                  {/* Vlastnosti podle profilu typu: tvoje volba, jinak AI */}
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                  {/* Vlastnosti podle profilu typu: tvoje volba, jinak AI. Na telefonu sbalene do jednoho radku */}
+                  {!vlastnostiOtevrene.has(r.id) && (
+                    <button type="button" className="block w-full text-left text-xs text-ink-secondary sm:hidden"
+                      onClick={() => setVlastnostiOtevrene((x) => new Set(x).add(r.id))}>
+                      {profil.vlastnosti.map((vl) => { const h = r.rucne?.[vl.klic] ?? r.ai?.hodnoty[vl.klic]; return h ? vl.moznosti[h] : null; }).filter(Boolean).join(" · ") || "Vlastnosti neurčeny"}
+                      {canEdit && <span className="ml-1.5 text-accent">upravit</span>}
+                    </button>
+                  )}
+                  <div className={`${vlastnostiOtevrene.has(r.id) ? "flex" : "hidden"} flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:flex`}>
                     {profil.vlastnosti.map((vl) => {
                       const ai = r.ai?.hodnoty[vl.klic] ?? null;
                       const aiNazev = ai ? vl.moznosti[ai] ?? null : null;
@@ -530,8 +548,8 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
                   {r.ai?.shrnuti && <p className="line-clamp-1 text-xs italic text-ink-muted" title={r.ai.shrnuti}>{r.ai.shrnuti}</p>}
                 </div>
 
-                {/* Vaha a akce */}
-                <div className="flex shrink-0 flex-col items-end justify-between gap-1.5 text-xs">
+                {/* Vaha a akce: na telefonu radek pod nabidkou */}
+                <div className="flex shrink-0 flex-row flex-wrap items-center justify-between gap-2 border-t border-line/60 pt-2 text-xs sm:flex-col sm:items-end sm:border-0 sm:pt-0">
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold tabular-nums text-ink-secondary" title="Jak moc nabídka určuje odhad (podobnost plochy, typu domu, stavu a polohy)">váha {String(r.vaha ?? 1).replace(".", ",")}×</span>
                     {canEdit && (
