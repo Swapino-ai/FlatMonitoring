@@ -51,7 +51,49 @@ export function ValuationManager({ propertyId, valuations, areaM2, canEdit, vyra
           Zatím žádné ocenění — počítá se s pořizovací cenou.
         </p>
       ) : (
-        <table className="table-base">
+        <>
+        {/* Telefon: karticky misto siroke tabulky */}
+        <ul className="divide-y divide-line/70 rounded-xl border border-line sm:hidden">
+          {valuations.map((v, i) => {
+            const nabidky = (Array.isArray(v.comparables) ? v.comparables : []) as Nabidka[];
+            const rozbaleno = otevrene === v.id;
+            return (
+              <li key={v.id} className={`px-3 py-2.5 ${i === 0 ? "bg-accent/5" : ""}`}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-lg font-semibold tabular-nums">{czk(v.value)}</span>
+                  <span className="text-xs tabular-nums text-ink-muted">
+                    {dateCz(v.date)}{i === 0 && <span className="ml-1 text-accent">platné</span>}
+                  </span>
+                </div>
+                <div className="text-xs text-ink-secondary">
+                  {[v.pricePerM2 ? `${czk(v.pricePerM2)}/m²` : null, SOURCE_LABELS[v.source] ?? v.source, v.sampleSize ? `${v.sampleSize} nabídek` : null,
+                    v.confidence === "RUCNI" ? "ručně upraveno" : v.confidence === "KVALIFIKOVANY" ? "kvalifikovaný" : null].filter(Boolean).join(" · ")}
+                </div>
+                {v.notes && <div className="text-xs text-ink-muted">{v.notes}</div>}
+                <div className="mt-1 flex items-center justify-between gap-3">
+                  {nabidky.length > 0 ? (
+                    <button onClick={() => setOtevrene(rozbaleno ? null : v.id)} className="text-xs text-accent hover:underline">
+                      {rozbaleno ? "Skrýt nabídky" : `Podle čeho se počítalo (${nabidky.length}) →`}
+                    </button>
+                  ) : <span />}
+                  {canEdit && (
+                    <form action={delAction}>
+                      <input type="hidden" name="id" value={v.id} />
+                      <button type="submit" className="text-xs text-bad hover:underline">Smazat</button>
+                    </form>
+                  )}
+                </div>
+                {rozbaleno && (
+                  <div className="mt-2 -mx-1">
+                    <Comparables nabidky={nabidky} tvojeKcM2={v.pricePerM2 ?? (areaM2 ? v.value / areaM2 : 0)} plochaM2={areaM2}
+                      datumOceneni={v.date} poznamka={v.notes} propertyId={propertyId} vyrazene={vyrazene} canEdit={canEdit} inzeraty={inzeraty} />
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <table className="table-base hidden sm:table">
           <thead>
             <tr><th>Datum</th><th className="num">Hodnota</th><th className="num">Kč/m²</th><th>Zdroj</th>{canEdit && <th />}</tr>
           </thead>
@@ -123,6 +165,7 @@ export function ValuationManager({ propertyId, valuations, areaM2, canEdit, vyra
             })}
           </tbody>
         </table>
+        </>
       )}
 
       {canEdit && (

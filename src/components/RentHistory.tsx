@@ -107,8 +107,8 @@ export function RentHistory({ odhady, smluvniNajem, areaM2, propertyId, vyrazene
         <table className="table-base">
           <thead>
             <tr>
-              <th>Datum</th><th className="num">Nájem</th><th className="num">Kč/m²</th>
-              <th className="num">Rozpětí</th><th>Vzorek</th>
+              <th>Datum</th><th className="num">Nájem</th><th className="num hidden sm:table-cell">Kč/m²</th>
+              <th className="num hidden sm:table-cell">Rozpětí</th><th>Vzorek</th>
             </tr>
           </thead>
           <tbody>
@@ -135,8 +135,8 @@ export function RentHistory({ odhady, smluvniNajem, areaM2, propertyId, vyrazene
                       </span>
                     )}
                   </td>
-                  <td className="num text-ink-secondary">{o.rentPerM2 ? czk(o.rentPerM2) : "—"}</td>
-                  <td className="num text-ink-secondary">
+                  <td className="num hidden text-ink-secondary sm:table-cell">{o.rentPerM2 ? czk(o.rentPerM2) : "—"}</td>
+                  <td className="num hidden text-ink-secondary sm:table-cell">
                     {o.p25 && o.p75 ? `${Math.round(o.p25)}–${Math.round(o.p75)}` : "—"}
                   </td>
                   <td>
