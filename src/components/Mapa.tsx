@@ -17,13 +17,17 @@ export interface BodOkoli {
   /** Radky popisu v okne po klepnuti. */
   popis: string[];
   url?: string | null;
+  /** Kdyz je (a mapa ma onVyber), klepnuti na bod ukaze nabidku v seznamu */
+  id?: string;
 }
 
 const ZADNE_OKOLI: BodOkoli[] = [];
 const BARVY_OKOLI = { PRODEJ: "#7c3aed", NAJEM: "#0d9488", NAVRH: "#9ca3af", VYRAZENO: "#dc2626" } as const;
 const NAZVY_OKOLI = { PRODEJ: "Prodej", NAJEM: "Nájem", NAVRH: "Návrhy", VYRAZENO: "Vyřazené" } as const;
 
-export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72", zoom = 17, okoli = ZADNE_OKOLI }: {
+export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72", zoom = 17, okoli = ZADNE_OKOLI, onVyber }: {
+  /** Klepnuti na bod okoli (s id) — napr. sjet na nabidku v seznamu */
+  onVyber?: (id: string) => void;
   latitude: number | null;
   longitude: number | null;
   /** Kdyz je zadana, jde do mapy klepnout a posunout znacku. */
@@ -48,6 +52,8 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
 
   // Handler drzime v ref, at prekresleni mapy nezavisi na identite funkce
   useEffect(() => { zmenaRef.current = onZmena; }, [onZmena]);
+  const vyberRef = useRef(onVyber);
+  useEffect(() => { vyberRef.current = onVyber; }, [onVyber]);
 
   const ikona = useRef<DivIcon | null>(null);
   const vrstvaOkoli = useRef<LayerGroup | null>(null);
@@ -176,7 +182,13 @@ export function Mapa({ latitude, longitude, onZmena, vyskaTrida = "h-56 sm:h-72"
           a.style.display = "block"; a.style.marginTop = "4px";
           uzel.appendChild(a);
         }
-        kolo.bindPopup(uzel).addTo(skupina);
+        if (b.id && vyberRef.current) {
+          // Klepnuti rovnou ukaze nabidku v seznamu; popis jako bublina pri najeti mysi
+          const id = b.id;
+          kolo.bindTooltip(uzel, { direction: "top", offset: [0, -6] });
+          kolo.on("click", () => { setCelaObrazovka(false); vyberRef.current?.(id); });
+          kolo.addTo(skupina);
+        } else kolo.bindPopup(uzel).addTo(skupina);
       }
       skupina.addTo(mapa.current);
       vrstvaOkoli.current = skupina;

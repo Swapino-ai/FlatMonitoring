@@ -116,6 +116,16 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
   const [vlastnostiOtevrene, setVlastnostiOtevrene] = useState<Set<string>>(new Set());
   const [vybrane, setVybrane] = useState<Set<string>>(() => new Set(radky.filter((r) => r.stav === "NAVRH" && r.doporuceno).map((r) => r.id)));
   const [vyrazeneOtevrene, setVyrazeneOtevrene] = useState(false);
+  // Nabidka vybrana v mape: sjede se na ni a chvili je zvyraznena
+  const [zvyraznena, setZvyraznena] = useState<string | null>(null);
+  const ukazNabidku = (id: string) => {
+    const r = radky.find((x) => x.id === id);
+    if (r?.stav === "VYRAZENO") setVyrazeneOtevrene(true);
+    setZvyraznena(id);
+    setTimeout(() => document.getElementById(`nabidka-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+    setTimeout(() => setZvyraznena((z) => (z === id ? null : z)), 4000);
+  };
+  const zvyrazneni = (id: string) => (zvyraznena === id ? "ring-2 ring-inset ring-accent bg-accent-soft/60 transition-colors" : "transition-colors");
   const [polohaPro, setPolohaPro] = useState<RadekTrhu | null>(null);
   const [sken, setSken] = useState("");
   const [swipe, setSwipe] = useState(false);
@@ -195,7 +205,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
 
   // Body do mapy: zarazene barevne, navrhy sede, vyrazene cervene (zapinaji se v legende)
   const body = useMemo<BodOkoli[]>(() => [...zarazene, ...navrhy, ...vyrazene].filter((r) => r.lat != null && r.lon != null).map((r) => ({
-    lat: r.lat!, lon: r.lon!, url: r.url,
+    lat: r.lat!, lon: r.lon!, url: r.url, id: r.id,
     druh: r.stav === "ZARAZENO" ? (r.dealType === "SALE" ? "PRODEJ" : "NAJEM") : r.stav === "VYRAZENO" ? "VYRAZENO" : "NAVRH",
     popis: [
       `${r.stav === "ZARAZENO" ? "Zařazeno" : r.stav === "VYRAZENO" ? "Vyřazeno" : "Návrh"}${r.disposition ? ` · ${r.disposition}` : ""}${r.areaM2 ? ` · ${r.areaM2} m²` : ""}`,
@@ -423,7 +433,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
       {/* Mapa */}
       {poloha && body.length > 0 && (
         <div className="card">
-          <Mapa latitude={poloha.lat} longitude={poloha.lon} zoom={13} vyskaTrida="h-72" okoli={body} />
+          <Mapa latitude={poloha.lat} longitude={poloha.lon} zoom={13} vyskaTrida="h-72" okoli={body} onVyber={ukazNabidku} />
         </div>
       )}
 
@@ -462,7 +472,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
         ) : (
           <ul className="divide-y divide-line/70 rounded-xl border border-line">
             {navrhy.map((r) => (
-              <li key={r.id} className={`flex flex-wrap items-center gap-3 px-3 py-2.5 ${vybrane.has(r.id) ? "bg-accent-soft/40" : ""}`}>
+              <li key={r.id} id={`nabidka-${r.id}`} className={`flex flex-wrap items-center gap-3 px-3 py-2.5 ${vybrane.has(r.id) ? "bg-accent-soft/40" : ""} ${zvyrazneni(r.id)}`}>
                 {canEdit && <input type="checkbox" checked={vybrane.has(r.id)} onChange={() => prepni(r.id)} className="h-4 w-4 accent-accent" aria-label="Vybrat" />}
                 <span className={`w-10 shrink-0 rounded-md px-1 py-0.5 text-center text-xs font-semibold tabular-nums ${r.doporuceno ? "bg-good/15 text-good" : "bg-surface-sunken text-ink-muted"}`}
                   title={r.doporuceno ? "Doporučeno zařadit" : "Méně podobné"}>{r.skore ?? "–"}</span>
@@ -490,7 +500,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
         ) : (
           <ul className="divide-y divide-line/70 rounded-xl border border-line">
             {zarazene.map((puvodni) => { const r = { ...puvodni, ...upravy[puvodni.id] }; const k = r.firstSeen > hraniceOkna ? 0 : 99; return (
-              <li key={r.id} className={`flex flex-col gap-3 px-3 py-3 sm:flex-row ${r.zmizel ? "opacity-70" : ""}`}>
+              <li key={r.id} id={`nabidka-${r.id}`} className={`flex flex-col gap-3 px-3 py-3 sm:flex-row ${r.zmizel ? "opacity-70" : ""} ${zvyrazneni(r.id)}`}>
                 {/* Nahled: na telefonu velka fotka nahore, jinak mala vlevo */}
                 {nahled(r, "h-48 w-full sm:h-20 sm:w-28") ?? <div className="hidden h-20 w-28 shrink-0 rounded-lg bg-surface-sunken sm:block" />}
 
@@ -591,7 +601,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
           {vyrazeneOtevrene && (
             <ul className="mt-3 divide-y divide-line/60 rounded-lg border border-dashed border-line text-ink-muted">
               {vyrazene.map((r) => (
-                <li key={r.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
+                <li key={r.id} id={`nabidka-${r.id}`} className={`flex flex-wrap items-center gap-3 px-3 py-2 ${zvyrazneni(r.id)}`}>
                   {zakladRadku(r)}
                   {odkazy(r)}
                   {canEdit && <button type="button" className="btn px-2 py-0.5 text-xs" disabled={bezi} onClick={() => rozhodni([r.id], "NAVRH")}>Vrátit do návrhů</button>}
