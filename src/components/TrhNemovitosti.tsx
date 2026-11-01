@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { nastavOceneniPodle, prepniVyloucenouObec, nastavVlastnostBytu, nastavVlastnostNabidky, nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, rozhodniShodu, type TrhState } from "@/lib/trhActions";
+import { nastavOceneniPodle, prepniVyloucenouObec, nastavVlastnostBytu, nastavVlastnostNabidky, nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, rozhodniShodu, slucInzeraty, type TrhState } from "@/lib/trhActions";
 import type { StatistikaNavrhu } from "@/lib/market/inzeraty";
 import { czk, czkCompact, dateCz } from "@/lib/format";
 import { Hlaska } from "./form";
@@ -42,6 +42,8 @@ export interface RadekTrhu {
   ceny: { at: string; price: number }[];
   /** Stejny byt v jinych inzeratech (navrhy a potvrzene) */
   shody?: ShodaRadku[];
+  /** Drive zamitnute shody — jdou znovu sloucit */
+  zamitnute?: { inzeratId: string; popis: string }[];
   /** Rucne nastavene vlastnosti nabidky (podle profilu typu) */
   rucne?: Record<string, string>;
   vahaRucne?: number | null;
@@ -247,6 +249,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
         </div>
         {r.stav === "NAVRH" && r.duvod && <div className="text-xs text-ink-muted">{r.duvod}</div>}
         <div className="mt-1"><CenyAShody ceny={r.ceny} najem={r.dealType === "RENT"} shody={r.shody} canEdit={canEdit} onRozhodni={rozhodniShodu_} /></div>
+        <div className="mt-1">{slouceni(r)}</div>
         {r.ai && <div className="mt-1"><AiInfo ai={r.ai} profil={profil} kompaktni={r.stav !== "NAVRH"} /></div>}
       </div>
     );
@@ -260,9 +263,38 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
       <button type="button" onClick={() => otevriGalerii(r)} className={`relative shrink-0 overflow-hidden rounded-lg bg-surface-sunken ${trida}`} title="Fotky inzerátu">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={fotky[0] ?? `/api/snimek/${r.snimky[0]!.id}`} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover object-top" />
-        <DatumSkenu datum={r.firstSeen} />
+        <DatumSkenu datum={r.firstSeen} konec={r.zmizel ? (r.dealType === "RENT" ? "Pronajato" : "Prodáno") : null} />
         <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[10px] text-white">{polozkyGalerie(r).length}</span>
       </button>
+    );
+  };
+
+  // Rucni slouceni se stejnym bytem v jinem inzeratu (i po omylem zrusene shode)
+  const [slucovani, setSlucovani] = useState<{ id: string; s: string } | null>(null);
+  const slouceni = (r: RadekTrhu) => {
+    if (!canEdit) return null;
+    if (slucovani?.id !== r.id) {
+      return <button type="button" className="text-xs text-accent hover:underline" onClick={() => setSlucovani({ id: r.id, s: "" })}>Sloučit s jiným inzerátem</button>;
+    }
+    const spojene = new Set((r.shody ?? []).map((x) => x.jiny.url));
+    const popisR = (x: RadekTrhu) => `${cena(x.price)} · ${[x.disposition, x.areaM2 ? `${x.areaM2} m²` : null, x.city].filter(Boolean).join(" · ")} · od ${dateCz(x.firstSeen)}${x.zmizel ? " · smazaný" : ""}`;
+    const moznosti = [
+      ...(r.zamitnute ?? []).map((z) => ({ id: z.inzeratId, popis: `${z.popis} (dříve zrušené)` })),
+      ...radky.filter((x) => x.id !== r.id && x.inzeratId !== r.inzeratId && x.dealType === r.dealType && !spojene.has(x.url)
+        && !(r.zamitnute ?? []).some((z) => z.inzeratId === x.inzeratId))
+        .sort((a, b) => Math.abs((a.areaM2 ?? 0) - (r.areaM2 ?? 0)) - Math.abs((b.areaM2 ?? 0) - (r.areaM2 ?? 0)))
+        .map((x) => ({ id: x.inzeratId, popis: popisR(x) })),
+    ];
+    return (
+      <span className="flex flex-wrap items-center gap-1.5 text-xs">
+        <select className="input max-w-full py-1 text-xs sm:w-96" value={slucovani.s} onChange={(e) => setSlucovani({ id: r.id, s: e.target.value })}>
+          <option value="">Vyber inzerát téhož bytu…</option>
+          {moznosti.map((m) => <option key={m.id} value={m.id}>{m.popis}</option>)}
+        </select>
+        <button type="button" className="btn btn-primary px-2 py-0.5 text-xs" disabled={!slucovani.s || bezi}
+          onClick={() => { const jiny = slucovani.s; setSlucovani(null); akce(() => slucInzeraty(propertyId, r.inzeratId, jiny)); }}>Sloučit</button>
+        <button type="button" className="btn px-2 py-0.5 text-xs" onClick={() => setSlucovani(null)}>Zrušit</button>
+      </span>
     );
   };
 
@@ -540,6 +572,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
                   })()}
 
                   <CenyAShody ceny={r.ceny} najem={r.dealType === "RENT"} shody={r.shody} canEdit={canEdit} onRozhodni={rozhodniShodu_} />
+                  {slouceni(r)}
                   {/* Vlastnosti podle profilu typu: tvoje volba, jinak AI. Na telefonu sbalene do jednoho radku */}
                   {!vlastnostiOtevrene.has(r.id) && (
                     <button type="button" className="block w-full text-left text-xs text-ink-secondary sm:hidden"

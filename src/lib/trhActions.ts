@@ -152,6 +152,29 @@ export async function nastavOceneniPodle(propertyId: string, cilId: string | nul
 }
 
 /** Potvrdi nebo zamitne navrzenou shodu (stejny byt v jinem inzeratu). */
+/**
+ * Rucni slouceni: dva inzeraty jsou stejny byt (i kdyz je sken nenavrhl, nebo byla shoda omylem
+ * zrusena). Starsi inzerat je "drivejsi"; existujici par (v kteremkoli smeru) se jen potvrdi.
+ */
+export async function slucInzeraty(propertyId: string, inzeratId: string, jinyId: string): Promise<TrhState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+  if (inzeratId === jinyId) return { error: "Inzerát nejde sloučit sám se sebou." };
+  const [a, b] = await Promise.all([
+    prisma.inzerat.findUnique({ where: { id: inzeratId }, select: { id: true, firstSeenAt: true } }),
+    prisma.inzerat.findUnique({ where: { id: jinyId }, select: { id: true, firstSeenAt: true } }),
+  ]);
+  if (!a || !b) return { error: "Inzerát nenalezen." };
+  const [novy, drivejsi] = a.firstSeenAt >= b.firstSeenAt ? [a, b] : [b, a];
+  const existujici = await prisma.shodaInzeratu.findFirst({
+    where: { OR: [{ inzeratId: novy.id, drivejsiId: drivejsi.id }, { inzeratId: drivejsi.id, drivejsiId: novy.id }] },
+  });
+  if (existujici) await prisma.shodaInzeratu.update({ where: { id: existujici.id }, data: { stav: "POTVRZENO", rozhodnutoAt: new Date() } });
+  else await prisma.shodaInzeratu.create({ data: { inzeratId: novy.id, drivejsiId: drivejsi.id, skore: 100, duvod: "sloučeno ručně", stav: "POTVRZENO", rozhodnutoAt: new Date() } });
+  obnov(propertyId);
+  return { success: "Inzeráty sloučeny jako stejný byt." };
+}
+
 export async function rozhodniShodu(propertyId: string, shodaId: string, stejny: boolean): Promise<TrhState> {
   const auth = await majitel();
   if ("error" in auth) return auth;

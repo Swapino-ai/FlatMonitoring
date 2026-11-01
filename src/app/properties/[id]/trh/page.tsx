@@ -62,8 +62,8 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
           ceny: { orderBy: { at: "asc" } },
           snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true } },
           // Stejny byt v jinem inzeratu (navrhy i potvrzene, zamitnute ne)
-          shody: { where: { stav: { not: "ZAMITNUTO" } }, include: { drivejsi: { include: { ceny: { orderBy: { at: "asc" } }, snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true } } } } } },
-          shodyDrive: { where: { stav: { not: "ZAMITNUTO" } }, include: { inzerat: { include: { ceny: { orderBy: { at: "asc" } }, snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true } } } } } },
+          shody: { include: { drivejsi: { include: { ceny: { orderBy: { at: "asc" } }, snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true } } } } } },
+          shodyDrive: { include: { inzerat: { include: { ceny: { orderBy: { at: "asc" } }, snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true } } } } } },
         },
       },
     },
@@ -131,9 +131,17 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
       ceny: i.ceny.map((c) => ({ at: denISO(c.at), price: c.price })),
       shody: [
         // Jen stejny typ nabidky (najem s najmem, prodej s prodejem)
-        ...i.shody.filter((s) => s.drivejsi.dealType === i.dealType).map((s) => ({ id: s.id, stav: s.stav, skore: s.skore, duvod: s.duvod, drivejsi: true, jiny: jiny(s.drivejsi) })),
-        ...i.shodyDrive.filter((s) => s.inzerat.dealType === i.dealType).map((s) => ({ id: s.id, stav: s.stav, skore: s.skore, duvod: s.duvod, drivejsi: false, jiny: jiny(s.inzerat) })),
+        ...i.shody.filter((s) => s.stav !== "ZAMITNUTO" && s.drivejsi.dealType === i.dealType).map((s) => ({ id: s.id, stav: s.stav, skore: s.skore, duvod: s.duvod, drivejsi: true, jiny: jiny(s.drivejsi) })),
+        ...i.shodyDrive.filter((s) => s.stav !== "ZAMITNUTO" && s.inzerat.dealType === i.dealType).map((s) => ({ id: s.id, stav: s.stav, skore: s.skore, duvod: s.duvod, drivejsi: false, jiny: jiny(s.inzerat) })),
       ],
+      // Zamitnute shody: jdou znovu sloucit tlacitkem
+      zamitnute: [
+        ...i.shody.filter((s) => s.stav === "ZAMITNUTO").map((s) => ({ inzeratId: s.drivejsiId, j: s.drivejsi })),
+        ...i.shodyDrive.filter((s) => s.stav === "ZAMITNUTO").map((s) => ({ inzeratId: s.inzeratId, j: s.inzerat })),
+      ].filter((x) => x.j.dealType === i.dealType).map((x) => ({
+        inzeratId: x.inzeratId,
+        popis: `${x.j.dealType === "RENT" ? `${x.j.price.toLocaleString("cs-CZ")} Kč/měs.` : `${x.j.price.toLocaleString("cs-CZ")} Kč`} · ${[x.j.disposition, x.j.areaM2 ? `${x.j.areaM2} m²` : null, x.j.city].filter(Boolean).join(" · ")} · ${denISO(x.j.firstSeenAt).split("-").reverse().join(". ")}${x.j.zmizelAt ? " · smazaný" : ""}`,
+      })),
       snimky: i.snimky.filter((s) => s.druh !== "FOTO").map((s) => ({ id: s.id, createdAt: s.createdAt.toISOString() })),
       fotky: i.snimky.filter((s) => s.druh === "FOTO").map((s) => s.id),
     };
