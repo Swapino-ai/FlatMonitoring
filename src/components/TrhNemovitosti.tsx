@@ -601,14 +601,18 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
           {vyrazeneOtevrene && (
             <ul className="mt-3 divide-y divide-line/60 rounded-lg border border-dashed border-line text-ink-muted">
               {vyrazene.map((r) => (
-                <li key={r.id} id={`nabidka-${r.id}`} className={`flex flex-wrap items-center gap-3 px-3 py-2 ${zvyrazneni(r.id)}`}>
-                  {zakladRadku(r)}
-                  {odkazy(r)}
-                  {canEdit && <button type="button" className="btn px-2 py-0.5 text-xs" disabled={bezi} onClick={() => rozhodni([r.id], "NAVRH")}>Vrátit do návrhů</button>}
+                <li key={r.id} id={`nabidka-${r.id}`} className={`flex flex-wrap items-center gap-3 px-3 py-2.5 ${zvyrazneni(r.id)}`}>
+                  {/* Stejne jako navrhy: na telefonu fotka pres celou sirku, popis pod ni */}
+                  {nahled(r, "h-44 w-full opacity-80 sm:h-16 sm:w-24")}
+                  {zakladRadku(r, "basis-full sm:basis-0")}
+                  <span className="flex w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-end">
+                    {odkazy(r)}
+                    {canEdit && <button type="button" className="btn px-2 py-0.5 text-xs" disabled={bezi} onClick={() => rozhodni([r.id], "NAVRH")}>Vrátit do návrhů</button>}
+                  </span>
                 </li>
               ))}
               {stareVyrazene.map((v) => (
-                <li key={v.id} className="px-3 py-2 text-sm">
+                <li key={v.id} className="break-words px-3 py-2 text-sm">
                   <span>{v.popis}</span>
                   <span className="block text-xs">vyřazeno {dateCz(v.kdy)}{v.duvod ? ` · ${v.duvod}` : ""} · starší záznam, údaje o nabídce se už nedochovaly</span>
                 </li>
