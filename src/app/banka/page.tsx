@@ -13,21 +13,25 @@ export const dynamic = "force-dynamic";
 export default async function BankaPage() {
   const user = await page();
   if (user.role !== "OWNER") redirect("/");
-  const [keKontrole, sparovane, smlouvy, pocty] = await Promise.all([
+  const [keKontrole, sparovane, smlouvy, pocty, kratkodobe] = await Promise.all([
     prisma.bankovniPohyb.findMany({ where: { stav: "KE_KONTROLE" }, orderBy: { datum: "desc" } }),
     prisma.bankovniPohyb.findMany({ where: { stav: "SPAROVANO" }, orderBy: { datum: "desc" }, take: 50 }),
     prisma.lease.findMany({ include: { property: { select: { name: true } } }, orderBy: [{ isActive: "desc" }, { startDate: "desc" }] }),
     prisma.bankovniPohyb.groupBy({ by: ["stav"], _count: true }),
+    // Byty s krátkodobým pronájmem: výplaty z Airbnb / Booking jdou přiřadit jako jejich příjem
+    prisma.property.findMany({ where: { kratkodobe: { some: {} } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
   const posledni = await prisma.bankovniPohyb.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } });
   const nazevSmlouvy = (id: string | null) => {
     const s = smlouvy.find((x) => x.id === id);
     return s ? `${s.tenantName} · ${s.property.name}` : null;
   };
+  const nazevBytu = (p: { leaseId: string | null; propertyId: string | null; parovani: unknown }) =>
+    (p.parovani as { kratkodoby?: string } | null)?.kratkodoby ? `Krátkodobý pronájem · ${kratkodobe.find((x) => x.id === p.propertyId)?.name ?? ""}` : nazevSmlouvy(p.leaseId);
   const radek = (p: (typeof keKontrole)[number]) => ({
     id: p.id, datum: denISO(p.datum), castka: p.castka, protiucet: p.protiucet, nazevProtiuctu: p.nazevProtiuctu,
     vs: p.vs, zprava: p.zprava, poznamka: p.poznamka, navrhLeaseId: p.navrhLeaseId, propertyId: p.propertyId,
-    smlouva: nazevSmlouvy(p.leaseId), parovani: p.parovani as { klic: string; castka: number }[] | { vyuctovani: string; cislo: string } | null,
+    smlouva: nazevBytu(p), parovani: p.parovani as { klic: string; castka: number }[] | { vyuctovani: string; cislo: string } | { kratkodoby: string } | null,
   });
 
   return (
@@ -42,6 +46,7 @@ export default async function BankaPage() {
           keKontrole={keKontrole.map(radek)}
           sparovane={sparovane.map(radek)}
           smlouvy={smlouvy.map((s) => ({ id: s.id, nazev: `${s.tenantName} · ${s.property.name}${s.isActive ? "" : " (skončená)"}` }))}
+          kratkodobe={kratkodobe.map((p) => ({ id: p.id, nazev: `Krátkodobý pronájem · ${p.name}` }))}
         />
       </main>
     </>

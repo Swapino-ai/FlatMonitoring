@@ -146,6 +146,10 @@ model Property {
   cadastre         CadastreRecord?
   zarazeniInzeratu ZarazeniInzeratu[]
   meraky           Merak[]
+  /// Obdobi kratkodobeho pronajmu (Airbnb, Booking...); mimo ne je byt dlouhodobe pronajimany
+  kratkodobe       KratkodobeObdobi[]
+  /// Ucty, ze kterych chodi vyplaty kratkodobeho pronajmu (banka je sparuje sama)
+  kratkodobeUcty   String[] @default([])
   /// Cislo bytu v Evidenci SVJ: meraky se tam dohledaji podle vyrobniho cisla
   svjByt           String?
   /// Posledni prevzeti stavu ze SVJ (automaticky jednou za mesic, jinak tlacitkem)
@@ -646,6 +650,20 @@ model DriveFolder {
 }
 
 /// Dokument nahrany na Google Disk. Vazby jsou volne (retezce), at smazani zaznamu nesmaze soubor.
+/// Obdobi, kdy se byt pronajima kratkodobe (bez smluv; prijmy jako platby, naklady s uctenkami)
+model KratkodobeObdobi {
+  id         String    @id @default(cuid())
+  propertyId String
+  property   Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  od         DateTime
+  /// null = dosud
+  do         DateTime?
+  poznamka   String?
+  createdAt  DateTime  @default(now())
+
+  @@index([propertyId])
+}
+
 model Dokument {
   id           String   @id @default(cuid())
   driveId      String   @unique
@@ -659,6 +677,8 @@ model Dokument {
   serviceId    String?
   settlementId String?
   statementId  String?
+  /// Uctenka / doklad k pohybu (kratkodoby pronajem)
+  transactionId String?
   rok          Int?
   note         String?
   uploadedById String?

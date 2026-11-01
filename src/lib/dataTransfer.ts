@@ -20,6 +20,7 @@ export async function exportujVse(): Promise<Zaloha> {
       loan: await prisma.loan.findMany(),
       loanOwner: await prisma.loanOwner.findMany(),
       merak: await prisma.merak.findMany(),
+      kratkodobeObdobi: await prisma.kratkodobeObdobi.findMany(),
       stavMeraku: await prisma.stavMeraku.findMany(),
       lease: await prisma.lease.findMany(),
       leaseAdvanceChange: await prisma.leaseAdvanceChange.findMany(),
@@ -99,6 +100,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     await tx.tenant.deleteMany();
     await tx.stavMeraku.deleteMany();
     await tx.merak.deleteMany();
+    await tx.kratkodobeObdobi.deleteMany();
     await tx.loanOwner.deleteMany();
     await tx.loan.deleteMany();
     await tx.property.deleteMany();
@@ -133,7 +135,8 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       scanRadiusKm: x.scanRadiusKm == null ? null : c(x.scanRadiusKm),
       excludedCities: s(x.excludedCities),
       sledovatTrh: x.sledovatTrh === true,
-      oceneniPodle: s(x.oceneniPodle), svjByt: s(x.svjByt), typDomu: s(x.typDomu), stavBytu: s(x.stavBytu), ...(x.vlastnosti != null ? { vlastnosti: x.vlastnosti } : {}),
+      oceneniPodle: s(x.oceneniPodle), svjByt: s(x.svjByt),
+      kratkodobeUcty: Array.isArray(x.kratkodobeUcty) ? x.kratkodobeUcty.map(String) : [], typDomu: s(x.typDomu), stavBytu: s(x.stavBytu), ...(x.vlastnosti != null ? { vlastnosti: x.vlastnosti } : {}),
       disposition: s(x.disposition), areaM2: c(x.areaM2),
       floor: x.floor == null ? null : Math.round(c(x.floor)),
       hasBalcony: !!x.hasBalcony, hasCellar: !!x.hasCellar, hasParking: !!x.hasParking,
@@ -197,6 +200,10 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
       poradi: Math.round(c(x.poradi)), aktivni: x.aktivni !== false, dvoutarif: x.dvoutarif === true, nulovani: s(x.nulovani), svjVynechane: Array.isArray(x.svjVynechane) ? x.svjVynechane.map(String) : [], nahrazujeId: s(x.nahrazujeId), vymenenAt: d(x.vymenenAt), createdAt: dPovinne(x.createdAt ?? new Date()),
     }));
     if (meraky.length) obnoveno.merak = (await tx.merak.createMany({ data: meraky })).count;
+    const kratkodobe = (t.kratkodobeObdobi as any[] ?? []).map((x) => ({
+      id: String(x.id), propertyId: String(x.propertyId), od: dPovinne(x.od), do: d(x.do), poznamka: s(x.poznamka), createdAt: dPovinne(x.createdAt ?? new Date()),
+    }));
+    if (kratkodobe.length) obnoveno.kratkodobeObdobi = (await tx.kratkodobeObdobi.createMany({ data: kratkodobe })).count;
     const stavyMeraku = (t.stavMeraku as any[] ?? []).map((x) => ({
       id: String(x.id), merakId: String(x.merakId), leaseId: s(x.leaseId), udalost: String(x.udalost),
       datum: dPovinne(x.datum), hodnota: x.hodnota == null ? null : c(x.hodnota), hodnota2: x.hodnota2 == null ? null : c(x.hodnota2), vynulovanoPo: x.vynulovanoPo === true, zdroj: s(x.zdroj),
@@ -263,7 +270,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     const dokumenty = (t.dokument as any[] ?? []).map((x) => ({
       id: String(x.id), driveId: String(x.driveId), name: String(x.name), mime: String(x.mime), size: c(x.size),
       kategorie: String(x.kategorie), propertyId: s(x.propertyId), tenantId: s(x.tenantId), leaseId: s(x.leaseId),
-      serviceId: s(x.serviceId), settlementId: s(x.settlementId), statementId: s(x.statementId), rok: x.rok == null ? null : c(x.rok),
+      serviceId: s(x.serviceId), settlementId: s(x.settlementId), statementId: s(x.statementId), transactionId: s(x.transactionId), rok: x.rok == null ? null : c(x.rok),
       note: s(x.note), uploadedById: s(x.uploadedById), createdAt: dPovinne(x.createdAt ?? new Date()),
     }));
     if (dokumenty.length) obnoveno.dokument = (await tx.dokument.createMany({ data: dokumenty })).count;

@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { getSession } from "./auth";
 import { prisma } from "./db";
 import { synchronizujFio } from "./fioSync";
-import { sparujSeSmlouvou } from "./parovani";
+import { sparujKratkodoby, sparujSeSmlouvou } from "./parovani";
+import { normalizujUcet } from "./fio";
 
 async function majitel(): Promise<string | null> {
   const user = await getSession();
@@ -40,6 +41,16 @@ export async function priraditPohyb(pohybId: string, leaseId: string): Promise<{
   return r.ok ? { success: r.zprava } : { error: r.zprava };
 }
 
+/** Platba je prijem z kratkodobeho pronajmu daneho bytu (ucet si byt zapamatuje). */
+export async function priraditKratkodoby(pohybId: string, propertyId: string): Promise<{ error?: string; success?: string }> {
+  const chyba = await majitel();
+  if (chyba) return { error: chyba };
+  const r = await sparujKratkodoby(pohybId, propertyId);
+  obnov(propertyId);
+  revalidatePath(`/properties/${propertyId}/kratkodoby`);
+  return r.ok ? { success: r.zprava } : { error: r.zprava };
+}
+
 export async function ignorovatPohyb(pohybId: string): Promise<{ error?: string }> {
   const chyba = await majitel();
   if (chyba) return { error: chyba };
@@ -55,11 +66,19 @@ export async function zrusitParovani(pohybId: string): Promise<{ error?: string 
   const p = await prisma.bankovniPohyb.findUnique({ where: { id: pohybId } });
   if (!p) return {};
   const vyuct = (p.parovani as { vyuctovani?: string } | null)?.vyuctovani;
+  const kratkodoby = (p.parovani as { kratkodoby?: string } | null)?.kratkodoby;
   await prisma.$transaction([
     prisma.pravidelnaPlatba.deleteMany({ where: { pohybId } }),
     ...(vyuct ? [prisma.tenantStatement.update({ where: { id: vyuct }, data: { status: "ODESLANO", settledAt: null, settledNote: null } })] : []),
+    ...(kratkodoby ? [prisma.transaction.deleteMany({ where: { id: kratkodoby } })] : []),
     prisma.bankovniPohyb.update({ where: { id: pohybId }, data: { stav: "KE_KONTROLE", parovani: Prisma.DbNull, leaseId: null, poznamka: "Párování zrušeno." } }),
   ]);
+  // Omylem prirazena vyplata: ucet uz se k bytu priste sam neparuje
+  if (kratkodoby && p.propertyId && p.protiucet) {
+    const byt = await prisma.property.findUnique({ where: { id: p.propertyId }, select: { kratkodobeUcty: true } });
+    const ucet = normalizujUcet(p.protiucet);
+    if (byt && ucet) await prisma.property.update({ where: { id: p.propertyId }, data: { kratkodobeUcty: byt.kratkodobeUcty.filter((u) => u !== ucet) } });
+  }
   obnov(p.propertyId);
   revalidatePath("/properties", "layout");
   return {};

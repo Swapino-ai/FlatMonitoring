@@ -17,7 +17,8 @@
  *   │     │  └─ <rok>/<Druh sluzby>/        vyuctovani od dodavatelu
  *   │     ├─ 05 Uvery/
  *   │     ├─ 06 Dane/<rok>/
- *   │     └─ 07 Fotky a ostatni/
+ *   │     ├─ 07 Fotky a ostatni/
+ *   │     └─ 08 Kratkodoby pronajem/<rok>/  uctenky a doklady (Airbnb, Booking...)
  *   ├─ Najemnici/
  *   │  └─ <N-0001 Jmeno najemce>/            doklady totožnosti apod., nezavisle na bytu
  *   └─ Ostatni/                              vse, co nepatri k nemovitosti
@@ -29,7 +30,7 @@
 export type KategorieKlic =
   | "KUPNI_SMLOUVA" | "KATASTR" | "NAJEMNI_SMLOUVA" | "PREDAVACI_PROTOKOL"
   | "SLUZBA_SMLOUVA" | "SLUZBA_VYUCTOVANI" | "VYUCTOVANI_NAJEMCE" | "UVER" | "DANE" | "FOTKY"
-  | "NAJEMCE_DOKLAD" | "OSTATNI";
+  | "NAJEMCE_DOKLAD" | "OSTATNI" | "UCTENKA";
 
 type Vyzaduje = "nemovitost" | "najemce" | "sluzba" | "rok";
 
@@ -54,6 +55,7 @@ export const KATEGORIE: Record<KategorieKlic, Kategorie> = {
   UVER:               { nazev: "Úvěr a hypotéka",         slozka: "05 Úvěry",             klic: "C:UVER",    vyzaduje: ["nemovitost"], podslozky: [] },
   DANE:               { nazev: "Daně",                    slozka: "06 Daně",              klic: "C:DANE",    vyzaduje: ["nemovitost", "rok"], podslozky: ["rok"] },
   FOTKY:              { nazev: "Fotky a ostatní",         slozka: "07 Fotky a ostatní",   klic: "C:FOTKY",   vyzaduje: ["nemovitost"], podslozky: [] },
+  UCTENKA:            { nazev: "Účtenka",                 slozka: "08 Krátkodobý pronájem", klic: "C:KRATKODOBY", vyzaduje: ["nemovitost", "rok"], podslozky: ["rok"] },
   NAJEMCE_DOKLAD:     { nazev: "Doklad nájemce",          slozka: null,                   klic: "NAJEMNICI", vyzaduje: ["najemce"], podslozky: [] },
   OSTATNI:            { nazev: "Ostatní",                 slozka: null,                   klic: "OSTATNI",   vyzaduje: [], podslozky: [] },
 };

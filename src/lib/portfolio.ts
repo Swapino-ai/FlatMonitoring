@@ -130,14 +130,15 @@ export function analyzeProperty(
   twelveMonthsAgo.setFullYear(asOf.getFullYear() - 1);
   const recent = p.transactions.filter((t) => new Date(t.date) >= twelveMonthsAgo && new Date(t.date) <= asOf);
 
-  const bookedRent = sum(recent.filter((t) => t.taxTreatment === "INCOME_RENT").map((t) => t.amount));
+  // Prijmy z kratkodobeho pronajmu se pocitaji do vynosu stejne jako najem
+  const bookedRent = sum(recent.filter((t) => t.taxTreatment === "INCOME_RENT" || t.taxTreatment === "INCOME_SHORT_TERM").map((t) => t.amount));
   const annualGrossRent = bookedRent > 0 ? bookedRent : monthlyRent * 12;
 
   // Provozni naklady: uznatelne vydaje bez uroku (uroky patri do dluhove sluzby)
   const annualOperatingExpenses = Math.abs(
     sum(
       recent
-        .filter((t) => t.taxTreatment === "EXPENSE_DEDUCTIBLE" && t.category !== "LOAN_INTEREST" && t.amount < 0)
+        .filter((t) => (t.taxTreatment === "EXPENSE_DEDUCTIBLE" || t.taxTreatment === "EXPENSE_SHORT_TERM") && t.category !== "LOAN_INTEREST" && t.amount < 0)
         .map((t) => t.amount),
     ),
   );

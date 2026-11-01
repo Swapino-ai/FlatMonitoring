@@ -18,6 +18,9 @@ export interface PropertyTaxLine {
   depreciationOrdinal: number | null;
   result: number;
   passThrough: number;
+  /** Kratkodobe ubytovani (§7, mimo §9): prijmy a vydaje za rok */
+  kratkodobePrijmy: number;
+  kratkodobeVydaje: number;
   saleNote?: string;
 }
 
@@ -32,6 +35,8 @@ export interface TaxReport {
     loanInterest: number;
     depreciation: number;
     passThrough: number;
+    kratkodobePrijmy: number;
+    kratkodobeVydaje: number;
   };
   computation: TaxComputationResult;
 }
@@ -55,6 +60,8 @@ export function buildTaxReport(
 
     const rentalIncome = sum(inYear.filter((t) => t.taxTreatment === "INCOME_RENT").map((t) => t.amount));
     const passThrough = sum(inYear.filter((t) => t.taxTreatment === "PASS_THROUGH").map((t) => t.amount));
+    const kratkodobePrijmy = sum(inYear.filter((t) => t.taxTreatment === "INCOME_SHORT_TERM").map((t) => t.amount));
+    const kratkodobeVydaje = Math.abs(sum(inYear.filter((t) => t.taxTreatment === "EXPENSE_SHORT_TERM" && t.amount < 0).map((t) => t.amount)));
 
     // Uznatelne vydaje krome uroku — uroky vedeme zvlast kvuli prehledu
     const deductibleExpenses = Math.abs(
@@ -84,7 +91,7 @@ export function buildTaxReport(
       saleNote = saleExemption(new Date(p.purchaseDate), new Date(p.saleDate)).note;
     }
 
-    if (rentalIncome === 0 && deductibleExpenses === 0 && loanInterest === 0 && !depRow) continue;
+    if (rentalIncome === 0 && deductibleExpenses === 0 && loanInterest === 0 && !depRow && kratkodobePrijmy === 0 && kratkodobeVydaje === 0) continue;
 
     const k = (x: number) => x * podil;
     const odpis = k(depRow?.amount ?? 0);
@@ -100,6 +107,8 @@ export function buildTaxReport(
       depreciationOrdinal: depRow?.ordinal ?? null,
       result: k(rentalIncome) - k(deductibleExpenses) - k(loanInterest) - odpis,
       passThrough: k(passThrough),
+      kratkodobePrijmy: k(kratkodobePrijmy),
+      kratkodobeVydaje: k(kratkodobeVydaje),
       saleNote,
     });
   }
@@ -110,6 +119,8 @@ export function buildTaxReport(
     loanInterest: sum(lines.map((l) => l.loanInterest)),
     depreciation: sum(lines.map((l) => l.depreciation)),
     passThrough: sum(lines.map((l) => l.passThrough)),
+    kratkodobePrijmy: sum(lines.map((l) => l.kratkodobePrijmy)),
+    kratkodobeVydaje: sum(lines.map((l) => l.kratkodobeVydaje)),
   };
 
   const computation = computeRentalTax({

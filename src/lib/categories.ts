@@ -6,7 +6,9 @@ export type TaxTreatment =
   | "EXPENSE_NON_DEDUCTIBLE"
   | "PASS_THROUGH"
   | "CAPITAL"
-  | "LOAN_PRINCIPAL";
+  | "LOAN_PRINCIPAL"
+  | "INCOME_SHORT_TERM"
+  | "EXPENSE_SHORT_TERM";
 
 export const TAX_TREATMENT_LABELS: Record<TaxTreatment, string> = {
   INCOME_RENT: "Zdanitelný příjem z nájmu",
@@ -15,6 +17,8 @@ export const TAX_TREATMENT_LABELS: Record<TaxTreatment, string> = {
   PASS_THROUGH: "Průchozí položka (zálohy na služby)",
   CAPITAL: "Technické zhodnocení (odpisuje se)",
   LOAN_PRINCIPAL: "Splátka jistiny (nedaňový výdaj)",
+  INCOME_SHORT_TERM: "Příjem z krátkodobého ubytování (§7, ne nájem)",
+  EXPENSE_SHORT_TERM: "Výdaj na krátkodobé ubytování (§7)",
 };
 
 export interface CategoryDef {
@@ -23,6 +27,8 @@ export interface CategoryDef {
   kind: "INCOME" | "EXPENSE";
   defaultTaxTreatment: TaxTreatment;
   hint?: string;
+  /** Kategorie krátkodobého pronájmu (zapisují se na záložce Krátkodobý) */
+  kratkodoby?: true;
 }
 
 export const CATEGORIES: CategoryDef[] = [
@@ -50,7 +56,20 @@ export const CATEGORIES: CategoryDef[] = [
   { key: "BROKERAGE", label: "Provize za zprostředkování nájmu", kind: "EXPENSE", defaultTaxTreatment: "EXPENSE_DEDUCTIBLE" },
   { key: "VACANCY_COST", label: "Náklady při neobsazenosti", kind: "EXPENSE", defaultTaxTreatment: "EXPENSE_DEDUCTIBLE" },
   { key: "OTHER_EXPENSE", label: "Ostatní výdaj", kind: "EXPENSE", defaultTaxTreatment: "EXPENSE_DEDUCTIBLE" },
+
+  // Kratkodoby pronajem (Airbnb, Booking...): ubytovani se dani podle §7, ne jako najem podle §9
+  { key: "KT_PRIJEM", label: "Příjem z krátkodobého pronájmu", kind: "INCOME", defaultTaxTreatment: "INCOME_SHORT_TERM", kratkodoby: true },
+  { key: "KT_UKLID", label: "Úklid a praní prádla", kind: "EXPENSE", defaultTaxTreatment: "EXPENSE_SHORT_TERM", kratkodoby: true },
+  { key: "KT_SPOTREBNI", label: "Spotřební materiál", kind: "EXPENSE", defaultTaxTreatment: "EXPENSE_SHORT_TERM", kratkodoby: true, hint: "Drogerie, káva, toaletní papír…" },
+  { key: "KT_ENERGIE", label: "Energie a internet", kind: "EXPENSE", defaultTaxTreatment: "EXPENSE_SHORT_TERM", kratkodoby: true },
+  { key: "KT_PLATFORMA", label: "Poplatky platformám", kind: "EXPENSE", defaultTaxTreatment: "EXPENSE_SHORT_TERM", kratkodoby: true, hint: "Airbnb, Booking…" },
+  { key: "KT_VYBAVENI", label: "Vybavení", kind: "EXPENSE", defaultTaxTreatment: "EXPENSE_SHORT_TERM", kratkodoby: true },
+  { key: "KT_OPRAVY", label: "Opravy a údržba", kind: "EXPENSE", defaultTaxTreatment: "EXPENSE_SHORT_TERM", kratkodoby: true },
+  { key: "KT_POPLATEK_POBYT", label: "Poplatek z pobytu", kind: "EXPENSE", defaultTaxTreatment: "EXPENSE_SHORT_TERM", kratkodoby: true },
+  { key: "KT_OSTATNI", label: "Ostatní náklad", kind: "EXPENSE", defaultTaxTreatment: "EXPENSE_SHORT_TERM", kratkodoby: true },
 ];
+
+export const KATEGORIE_KRATKODOBE = CATEGORIES.filter((c) => c.kratkodoby);
 
 export const CATEGORY_MAP = new Map(CATEGORIES.map((c) => [c.key, c]));
 

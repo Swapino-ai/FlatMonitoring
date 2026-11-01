@@ -88,14 +88,43 @@ export async function sparujSeSmlouvou(pohybId: string, leaseId: string, k: Kont
   return { ok: true, zprava: `Uhrazeno ${uhrazeno.length} předpisů.` };
 }
 
+/**
+ * Prijem z kratkodobeho pronajmu (vyplata Airbnb, Booking...): zapise se jako prijem bytu
+ * a ucet platce si byt zapamatuje — dalsi vyplaty z nej se sparuji samy.
+ */
+export async function sparujKratkodoby(pohybId: string, propertyId: string): Promise<{ ok: boolean; zprava: string }> {
+  const pohyb = await prisma.bankovniPohyb.findUnique({ where: { id: pohybId } });
+  const byt = await prisma.property.findUnique({ where: { id: propertyId }, select: { id: true, kratkodobeUcty: true } });
+  if (!pohyb || !byt) return { ok: false, zprava: "Pohyb nebo nemovitost neexistuje." };
+  if (pohyb.castka <= 0) return { ok: false, zprava: "Jako příjem jde přiřadit jen příchozí platba." };
+  const ucet = normalizujUcet(pohyb.protiucet);
+  await prisma.$transaction(async (tx) => {
+    const t = await tx.transaction.upsert({
+      where: { sourceKey: `banka:${pohyb.id}` },
+      update: { propertyId, amount: pohyb.castka, date: pohyb.datum },
+      create: {
+        propertyId, date: pohyb.datum, amount: pohyb.castka, category: "KT_PRIJEM", taxTreatment: "INCOME_SHORT_TERM",
+        description: [pohyb.nazevProtiuctu, pohyb.zprava].filter(Boolean).join(" · ") || "Výplata z banky", sourceKey: `banka:${pohyb.id}`,
+      },
+    });
+    await tx.bankovniPohyb.update({
+      where: { id: pohybId },
+      data: { stav: "SPAROVANO", propertyId, leaseId: null, navrhLeaseId: null, poznamka: null, parovani: { kratkodoby: t.id } as Prisma.InputJsonValue },
+    });
+    if (ucet && !byt.kratkodobeUcty.includes(ucet)) await tx.property.update({ where: { id: propertyId }, data: { kratkodobeUcty: { push: ucet } } });
+  });
+  return { ok: true, zprava: "Zapsáno jako příjem z krátkodobého pronájmu." };
+}
+
 /** Zpracuje nove pohyby: vydaje odlozi, prichozi platby se pokusi sparovat. */
 export async function zpracujPohyby(): Promise<{ sparovano: number; keKontrole: number }> {
   const k: Kontext = { navrhy: new Map() };
   const nove = await prisma.bankovniPohyb.findMany({ where: { stav: "NOVY" }, orderBy: { datum: "asc" } });
   if (!nove.length) return { sparovano: 0, keKontrole: 0 };
-  const [smlouvy, vyuctovani] = await Promise.all([
+  const [smlouvy, vyuctovani, kratkodobe] = await Promise.all([
     prisma.lease.findMany({ include: { tenant: { select: { account: true } } } }),
     prisma.tenantStatement.findMany({ where: { status: { in: ["VYDANO", "ODESLANO"] }, result: { lt: 0 } } }),
+    prisma.property.findMany({ where: { kratkodobeUcty: { isEmpty: false } }, select: { id: true, kratkodobeUcty: true } }),
   ]);
   let sparovano = 0, keKontrole = 0;
 
@@ -116,6 +145,13 @@ export async function zpracujPohyby(): Promise<{ sparovano: number; keKontrole: 
 
     // 2) Ucet platce patri smlouve
     const ucet = normalizujUcet(p.protiucet);
+    // 2b) Vyplata kratkodobeho pronajmu (ucet zname platformy u bytu)
+    const kt = ucet ? kratkodobe.find((x) => x.kratkodobeUcty.includes(ucet)) : null;
+    if (kt) {
+      const r = await sparujKratkodoby(p.id, kt.id);
+      if (r.ok) sparovano++; else keKontrole++;
+      continue;
+    }
     const podleUctu = ucet ? smlouvy.filter((s) => s.uctyPlatce.includes(ucet) || normalizujUcet(s.tenant?.account ?? s.tenantAccount) === ucet) : [];
     // Vic smluv tehoz najemce: prednost ma platna
     const smlouva = podleUctu.find((s) => s.isActive) ?? podleUctu[0];

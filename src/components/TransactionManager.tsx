@@ -26,8 +26,8 @@ export function TransactionManager({ propertyId, transactions, canEdit }: {
   const upravovany = transactions.find((t) => t.id === upravaId) ?? null;
 
   // Prijmy a vydaje zvlast, at je jasne, co znamena kladna castka
-  const prijmy = CATEGORIES.filter((c) => c.kind === "INCOME").map((c) => [c.key, c.label] as [string, string]);
-  const vydaje = CATEGORIES.filter((c) => c.kind === "EXPENSE").map((c) => [c.key, c.label] as [string, string]);
+  const prijmy = CATEGORIES.filter((c) => c.kind === "INCOME" && !c.kratkodoby).map((c) => [c.key, c.label] as [string, string]);
+  const vydaje = CATEGORIES.filter((c) => c.kind === "EXPENSE" && !c.kratkodoby).map((c) => [c.key, c.label] as [string, string]);
 
   // Pohyby po letech: nejnovejsi rok je rozbaleny, starsi sbalene
   const roky = (() => {

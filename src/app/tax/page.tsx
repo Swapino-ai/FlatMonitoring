@@ -171,6 +171,14 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
                   Zálohy na služby ve výši {czk(report.totals.passThrough)} jsou průchozí položkou a do přiznání nevstupují,
                   pokud jsou řádně vyúčtovány.
                 </li>
+                {(report.totals.kratkodobePrijmy > 0 || report.totals.kratkodobeVydaje > 0) && (
+                  <li>
+                    Krátkodobé ubytování (Airbnb, Booking…) se nedaní jako nájem podle § 9, ale jako podnikání podle § 7:
+                    příjmy <strong className="text-ink-primary">{czk(report.totals.kratkodobePrijmy)}</strong>, výdaje{" "}
+                    <strong className="text-ink-primary">{czk(report.totals.kratkodobeVydaje)}</strong>
+                    {" "}({report.lines.filter((l) => l.kratkodobePrijmy || l.kratkodobeVydaje).map((l) => l.name).join(", ")}). V čísle výše nejsou.
+                  </li>
+                )}
               </ol>
               <p className="mt-4 rounded-lg border border-line bg-surface-sunken px-3 py-2.5 text-xs text-ink-secondary">
                 Aplikace počítá s progresivní sazbou {num(params.baseRate)} % do základu {czk(params.higherRateThreshold)} a{" "}

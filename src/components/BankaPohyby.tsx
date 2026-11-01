@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { ignorovatPohyb, priraditPohyb, stahnoutZBanky, zrusitParovani } from "@/lib/bankaActions";
+import { ignorovatPohyb, priraditKratkodoby, priraditPohyb, stahnoutZBanky, zrusitParovani } from "@/lib/bankaActions";
 import { czk, dateCz } from "@/lib/format";
 import { Badge, Card } from "./Stat";
 import { Ikona } from "./Ikony";
@@ -19,12 +19,13 @@ export interface PohybRadek {
   navrhLeaseId: string | null;
   propertyId: string | null;
   smlouva: string | null;
-  parovani: { klic: string; castka: number }[] | { vyuctovani: string; cislo: string } | null;
+  parovani: { klic: string; castka: number }[] | { vyuctovani: string; cislo: string } | { kratkodoby: string } | null;
 }
 
 /** Popis, co platba uhradila: "nájem 3/2026, zálohy 3/2026" nebo "vyúčtování VN-2026-0001". */
 function coUhradila(p: PohybRadek["parovani"]): string {
   if (!p) return "";
+  if ("kratkodoby" in p) return "příjem z krátkodobého pronájmu";
   if (!Array.isArray(p)) return `nedoplatek z vyúčtování ${p.cislo}`;
   return p.map((x) => {
     const [druh, , mesic] = x.klic.split(":");
@@ -33,7 +34,9 @@ function coUhradila(p: PohybRadek["parovani"]): string {
 }
 
 /** Pohyby z banky: stazeni, kontrola nesparovanych a prehled sparovanych. */
-export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, sparovane, smlouvy }: {
+export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, sparovane, smlouvy, kratkodobe = [] }: {
+  /** Byty s krátkodobým pronájmem — výplatu jde přiřadit jako jejich příjem */
+  kratkodobe?: { id: string; nazev: string }[];
   napojeno: boolean;
   posledniStazeni: string | null;
   pocty: Record<string, number>;
@@ -101,8 +104,13 @@ export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, spar
                     <select className="input w-64 py-1.5 text-sm" value={vybrana} onChange={(e) => setVolba((v) => ({ ...v, [p.id]: e.target.value }))}>
                       <option value="">Vyber nájemce…</option>
                       {smlouvy.map((s) => <option key={s.id} value={s.id}>{s.nazev}{s.id === p.navrhLeaseId ? " (návrh)" : ""}</option>)}
+                      {kratkodobe.length > 0 && (
+                        <optgroup label="Krátkodobý pronájem (výplata Airbnb, Booking…)">
+                          {kratkodobe.map((k) => <option key={k.id} value={`kt:${k.id}`}>{k.nazev}</option>)}
+                        </optgroup>
+                      )}
                     </select>
-                    <button type="button" className="btn btn-primary py-1.5" disabled={!vybrana || bezi} onClick={() => akce(() => priraditPohyb(p.id, vybrana))}>Spárovat</button>
+                    <button type="button" className="btn btn-primary py-1.5" disabled={!vybrana || bezi} onClick={() => akce(() => vybrana.startsWith("kt:") ? priraditKratkodoby(p.id, vybrana.slice(3)) : priraditPohyb(p.id, vybrana))}>Spárovat</button>
                     <button type="button" className="btn py-1.5" disabled={bezi} onClick={() => akce(async () => { await ignorovatPohyb(p.id); return {}; })}>Ignorovat</button>
                   </div>
                 </li>
