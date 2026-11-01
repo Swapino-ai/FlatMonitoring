@@ -34,7 +34,7 @@ export async function nactiUpozorneni(
   const out: Upozorneni[] = [];
   if (!ids.length) return out;
 
-  const [navrhyTrhu, keKontrole, vydana, sMeraky] = await Promise.all([
+  const [navrhyTrhu, keKontrole, vydana, sMeraky, shody] = await Promise.all([
     prisma.zarazeniInzeratu.findMany({ where: { propertyId: { in: ids }, stav: "NAVRH" }, select: { propertyId: true, inzerat: { select: { dealType: true } } } }),
     prisma.bankovniPohyb.count({ where: { stav: "KE_KONTROLE" } }).catch(() => 0),
     prisma.tenantStatement.findMany({ where: { propertyId: { in: ids }, status: { in: ["VYDANO", "ODESLANO"] }, dueDate: { lt: dnes } }, select: { propertyId: true, cislo: true, result: true } }),
@@ -45,6 +45,14 @@ export async function nactiUpozorneni(
         meraky: { select: { druh: true, stavy: { select: { leaseId: true, udalost: true, vyuctovani: true } } } },
         services: { select: { type: true, provider: true, groupName: true, notes: true, merak: true, settlements: { select: { id: true } } } },
         leases: { select: { id: true, tenantId: true, tenantName: true, startDate: true, endDate: true, isActive: true } },
+      },
+    }),
+    // "Mozna stejny byt": navrzene shody u nabidek, ktere jsou u nemovitosti v navrzich nebo zarazene
+    prisma.shodaInzeratu.findMany({
+      where: { stav: "NAVRH", inzerat: { zmizelAt: null, zarazeni: { some: { propertyId: { in: ids }, stav: { in: ["NAVRH", "ZARAZENO"] } } } } },
+      select: {
+        drivejsi: { select: { dealType: true } },
+        inzerat: { select: { dealType: true, zarazeni: { where: { propertyId: { in: ids }, stav: { in: ["NAVRH", "ZARAZENO"] } }, select: { propertyId: true } } } },
       },
     }),
   ]);
@@ -61,6 +69,25 @@ export async function nactiUpozorneni(
     out.push({
       klic: `trh:${id}`, uroven: "info", ikona: "trend", text: `${nazev.get(id)}: projít nové nabídky z trhu`,
       detail: `Ke zařazení ${casti.join(" a ")}.`, href: `/properties/${id}/trh?typ=${t.SALE ? "SALE" : "RENT"}`, akce: "Zařadit",
+    });
+  }
+
+  // 1b) Mozna stejny byt jako drivejsi inzerat — ceka na potvrzeni (jen stejny typ nabidky)
+  const stejne = new Map<string, { SALE: number; RENT: number }>();
+  for (const x of shody) {
+    if (x.inzerat.dealType !== x.drivejsi.dealType) continue;
+    for (const z of new Set(x.inzerat.zarazeni.map((y) => y.propertyId))) {
+      const t = stejne.get(z) ?? { SALE: 0, RENT: 0 };
+      if (x.inzerat.dealType === "RENT") t.RENT++; else t.SALE++;
+      stejne.set(z, t);
+    }
+  }
+  for (const [id, t] of stejne) {
+    const pocet = t.SALE + t.RENT;
+    out.push({
+      klic: `shody:${id}`, uroven: "warn", ikona: "trend", text: `${nazev.get(id)}: zkontrolovat ${pocet} ${tvar(pocet, "možná stejný byt", "možná stejné byty", "možná stejných bytů")}`,
+      detail: "Sken našel nabídku, která vypadá jako dřívější inzerát téhož bytu — potvrď, nebo zamítni.",
+      href: `/properties/${id}/trh?typ=${t.SALE ? "SALE" : "RENT"}`, akce: "Zkontrolovat",
     });
   }
 
