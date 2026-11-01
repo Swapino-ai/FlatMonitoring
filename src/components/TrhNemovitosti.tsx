@@ -23,6 +23,29 @@ const kratkeDatum = (iso: string) => {
   return `${Number(d)}. ${Number(m)}.${r === String(new Date().getFullYear()) ? "" : ` ${r}`}`;
 };
 
+/** Kolik dni po zmizeni se inzerat bere jako prodany (do te doby muze byt jen smazany a vlozeny znovu) */
+const DNI_DO_PRODEJE = 14;
+
+/**
+ * Proc nabidka zmizela. Smazany a znovu vlozeny inzerat neni prodany: kdyz k nemu existuje
+ * novejsi inzerat tehoz bytu, je "vloženo znovu"; prvnich 14 dni po zmizeni jen "staženo"
+ * (prodejce ho muze vlozit znovu); az potom "prodáno" / "pronajato".
+ */
+function stavKonce(r: { zmizel: string | null; dealType: string; shody?: ShodaRadku[] }): { text: string; ton: "bad" | "warn" | "info"; popis: string } | null {
+  if (!r.zmizel) return null;
+  const novejsi = (r.shody ?? []).filter((s) => !s.drivejsi).sort((a, b) => b.jiny.od.localeCompare(a.jiny.od))[0];
+  if (novejsi) {
+    return { text: `Vloženo znovu ${kratkeDatum(novejsi.jiny.od)}`, ton: "info",
+      popis: novejsi.stav === "POTVRZENO" ? "Stejný byt je v novějším inzerátu — není prodaný" : "Možná stejný byt v novějším inzerátu — potvrď shodu" };
+  }
+  const dni = (Date.now() - Date.parse(`${r.zmizel}T00:00:00Z`)) / 86400000;
+  if (dni < DNI_DO_PRODEJE) {
+    return { text: `Staženo ${kratkeDatum(r.zmizel)}`, ton: "warn", popis: `Inzerát zmizel před ${Math.floor(dni)} dny — může jít jen o smazání a nové vložení. Za prodaný se bere po ${DNI_DO_PRODEJE} dnech bez nového inzerátu.` };
+  }
+  return { text: `${r.dealType === "RENT" ? "Pronajato" : "Prodáno"} ${kratkeDatum(r.zmizel)}`, ton: "bad",
+    popis: `Inzerát zmizel ${kratkeDatum(r.zmizel)} a ${DNI_DO_PRODEJE}+ dní se nevrátil (ani jako nový inzerát téhož bytu)` };
+}
+
 export interface RadekTrhu {
   id: string; // id zarazeni
   stav: "NAVRH" | "ZARAZENO" | "VYRAZENO";
@@ -269,7 +292,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
       <button type="button" onClick={() => otevriGalerii(r)} className={`relative shrink-0 overflow-hidden rounded-lg bg-surface-sunken ${trida}`} title="Fotky inzerátu">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={fotky[0] ?? `/api/snimek/${r.snimky[0]!.id}`} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover object-top" />
-        <DatumSkenu datum={r.firstSeen} konec={r.zmizel ? `${r.dealType === "RENT" ? "Pronajato" : "Prodáno"} ${kratkeDatum(r.zmizel)}` : null} />
+        <DatumSkenu datum={r.firstSeen} konec={stavKonce(r)} />
         <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[10px] text-white">{polozkyGalerie(r).length}</span>
       </button>
     );

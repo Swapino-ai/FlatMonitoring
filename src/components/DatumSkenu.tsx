@@ -12,8 +12,8 @@ function barva(datum: string | Date): string {
  */
 export function DatumSkenu({ datum, velky = false, konec }: {
   datum: string | Date | null | undefined; velky?: boolean;
-  /** Cerveny stitek vedle data (napr. "PRODÁNO", kdyz inzerat zmizel z nabidky) */
-  konec?: string | null;
+  /** Stitek vedle data, kdyz inzerat zmizel z nabidky (prodano / stazeno / vlozeno znovu) */
+  konec?: { text: string; ton: "bad" | "warn" | "info"; popis?: string } | null;
 }) {
   if (!datum) return null;
   if (!velky) {
@@ -23,7 +23,10 @@ export function DatumSkenu({ datum, velky = false, konec }: {
           title={`Naskenováno ${dateCz(datum)} (${stariCz(datum)})`}>
           {dateCz(datum)}
         </span>
-        {konec && <span className="rounded bg-red-600 px-1 py-px text-[10px] font-bold uppercase leading-tight text-white shadow">{konec}</span>}
+        {konec && (
+          <span className={`pointer-events-auto rounded px-1 py-px text-[10px] font-bold uppercase leading-tight text-white shadow ${konec.ton === "bad" ? "bg-red-600" : konec.ton === "warn" ? "bg-amber-600" : "bg-blue-600"}`}
+            title={konec.popis}>{konec.text}</span>
+        )}
       </span>
     );
   }
