@@ -15,7 +15,7 @@ import { NEMOVITOST_MAP, nazevNemovitosti } from "@/lib/catalogs";
 import { denISO } from "@/lib/format";
 import { nahledAi } from "@/lib/market/aiNahled";
 import { odhadZeZarazenych } from "@/lib/market/zarazeni";
-import { OKNO_ODHADU, najdiShody, navrhniProNemovitost, korenOceneni, okruhNemovitosti } from "@/lib/market/inzeraty";
+import { OKNO_ODHADU, dorovnejSlouceni, najdiShody, navrhniProNemovitost, korenOceneni, okruhNemovitosti } from "@/lib/market/inzeraty";
 import { cenaVJednotce, jednotkaOdhadu, odhadNaM2, polohaNabidky, vahaZarazeni, vzdalenost } from "@/lib/market/zarazeni";
 import { hodnotyZaznamu, profilTypu } from "@/lib/market/profily";
 
@@ -53,6 +53,8 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
     where: { propertyId: koren, stav: "ZARAZENO", inzerat: { zmizelAt: null, firstSeenAt: { gte: new Date(Date.now() - 31 * 86400000) } } }, select: { inzeratId: true },
   });
   if (cerstve.length) await najdiShody(cerstve.map((z) => z.inzeratId)).catch(() => null);
+  // Drive potvrzene stejne byty: novejsi verze prevezme zarazeni starsi (jeden byt = jeden radek)
+  await dorovnejSlouceni(koren).catch(() => 0);
 
   const zaznamy = await prisma.zarazeniInzeratu.findMany({
     where: { propertyId: koren },
@@ -117,7 +119,12 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
     ...vyloucene.map((nazev) => ({ nazev, pocet: 0, km: null, vyloucena: true })),
   ].sort((a, b) => Number(a.vyloucena) - Number(b.vyloucena) || (a.km ?? 99) - (b.km ?? 99));
 
-  const radky: RadekTrhu[] = zaznamy.map((z) => {
+  // Znovu vlozeny inzerat je tentyz byt: starsi verze se schova za novejsi (potvrzena shoda),
+  // kdyz je novejsi v seznamu — u ni zustane porovnani se starsi verzi
+  const stavVSeznamu = new Map(zaznamy.map((z) => [z.inzeratId, z.stav]));
+  const nahrazeny = (z: (typeof zaznamy)[number]) => z.inzerat.shodyDrive.some((s) => s.stav === "POTVRZENO"
+    && stavVSeznamu.has(s.inzeratId) && (stavVSeznamu.get(s.inzeratId) === "ZARAZENO" || z.stav !== "ZARAZENO"));
+  const radky: RadekTrhu[] = zaznamy.filter((z) => !nahrazeny(z)).map((z) => {
     const i = z.inzerat;
     return {
       rucne: hodnotyZaznamu(profil, z), vahaRucne: z.vahaRucne,

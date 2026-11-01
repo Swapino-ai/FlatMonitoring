@@ -4,6 +4,7 @@
  * Sken jen sbira a navrhuje. Do odhadu vstupuji jen inzeraty, ktere uzivatel
  * zaradil; odhad je median ceny za m² ze zarazenych za posledni 2 mesice krat plocha.
  */
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { okruhyProTyp } from "../geo";
 import { denISO } from "../format";
@@ -194,9 +195,13 @@ async function bodyOdhadu(propertyId: string, dealType: "SALE" | "RENT") {
   const { zaKus, plocha } = jednotkaOdhadu(p.type, p.areaM2);
   // Propojene oceneni: nabidky se berou od korene, plocha je vlastni
   const zdroj = await korenOceneni(propertyId);
-  const zarazene = await prisma.zarazeniInzeratu.findMany({
-    where: { propertyId: zdroj, stav: "ZARAZENO", inzerat: { dealType } }, include: { inzerat: true },
+  const vsechny = await prisma.zarazeniInzeratu.findMany({
+    where: { propertyId: zdroj, stav: "ZARAZENO", inzerat: { dealType } },
+    include: { inzerat: { include: { shodyDrive: { where: { stav: "POTVRZENO" }, select: { inzeratId: true } } } } },
   });
+  // Znovu vlozeny inzerat je tentyz byt: pocita se jen nejnovejsi verze (starsi, kdyz je novejsi taky zarazena, se vynecha)
+  const zarazeneIds = new Set(vsechny.map((z) => z.inzeratId));
+  const zarazene = vsechny.filter((z) => !z.inzerat.shodyDrive.some((s) => zarazeneIds.has(s.inzeratId)));
   const body = zarazene.map((z) => ({
     datum: denISO(z.inzerat.firstSeenAt), pricePerM2: cenaVJednotce(z.inzerat, zaKus), i: z.inzerat,
     vaha: vahaZarazeni(p, z, z.inzerat),
@@ -336,4 +341,31 @@ export async function najdiShody(jen?: string[]): Promise<{ porovnano: number; n
     }
   }
   return { porovnano, novych, odebrano };
+}
+
+/**
+ * Potvrzeny stejny byt: novejsi inzerat prevezme rozhodnuti starsiho u kazde nemovitosti
+ * (zarazeny zustane zarazeny i s vlastnostmi a vahou). Starsi verze se pak v seznamu i odhadu
+ * schova za novejsi — porad je to jeden byt.
+ */
+export async function prevezmiRozhodnuti(novyId: string, drivejsiId: string) {
+  const stare = await prisma.zarazeniInzeratu.findMany({ where: { inzeratId: drivejsiId, stav: "ZARAZENO" } });
+  for (const z of stare) {
+    const nove = await prisma.zarazeniInzeratu.findUnique({ where: { propertyId_inzeratId: { propertyId: z.propertyId, inzeratId: novyId } } });
+    const data = { stav: "ZARAZENO", rozhodnutoAt: new Date(), typDomu: z.typDomu, stavBytu: z.stavBytu, vahaRucne: z.vahaRucne,
+      ...(z.vlastnosti != null ? { vlastnosti: z.vlastnosti as Prisma.InputJsonValue } : {}) };
+    if (!nove) await prisma.zarazeniInzeratu.create({ data: { propertyId: z.propertyId, inzeratId: novyId, skore: z.skore, doporuceno: z.doporuceno, duvod: z.duvod, ...data } });
+    else if (nove.stav === "NAVRH") await prisma.zarazeniInzeratu.update({ where: { id: nove.id }, data });
+    await aktualizujSkupinu(z.propertyId);
+  }
+}
+
+/** Potvrzene pary, kde novejsi verze je jeste v navrzich a starsi zarazena: dorovna rozhodnuti. */
+export async function dorovnejSlouceni(propertyId: string): Promise<number> {
+  const pary = await prisma.shodaInzeratu.findMany({
+    where: { stav: "POTVRZENO", drivejsi: { zarazeni: { some: { propertyId, stav: "ZARAZENO" } } }, inzerat: { zarazeni: { some: { propertyId, stav: "NAVRH" } } } },
+    select: { inzeratId: true, drivejsiId: true },
+  });
+  for (const x of pary) await prevezmiRozhodnuti(x.inzeratId, x.drivejsiId);
+  return pary.length;
 }

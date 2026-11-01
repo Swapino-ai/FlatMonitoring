@@ -5,7 +5,7 @@ import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 import { getSession } from "./auth";
-import { aktualizujSkupinu, clenoveOceneni, korenOceneni, najdiShody, navrhniProNemovitost } from "./market/inzeraty";
+import { aktualizujSkupinu, clenoveOceneni, korenOceneni, najdiShody, navrhniProNemovitost, prevezmiRozhodnuti } from "./market/inzeraty";
 
 export interface TrhState { error?: string; success?: string }
 
@@ -171,6 +171,7 @@ export async function slucInzeraty(propertyId: string, inzeratId: string, jinyId
   });
   if (existujici) await prisma.shodaInzeratu.update({ where: { id: existujici.id }, data: { stav: "POTVRZENO", rozhodnutoAt: new Date() } });
   else await prisma.shodaInzeratu.create({ data: { inzeratId: novy.id, drivejsiId: drivejsi.id, skore: 100, duvod: "sloučeno ručně", stav: "POTVRZENO", rozhodnutoAt: new Date() } });
+  await prevezmiRozhodnuti(novy.id, drivejsi.id);
   obnov(propertyId);
   return { success: "Inzeráty sloučeny jako stejný byt." };
 }
@@ -178,7 +179,9 @@ export async function slucInzeraty(propertyId: string, inzeratId: string, jinyId
 export async function rozhodniShodu(propertyId: string, shodaId: string, stejny: boolean): Promise<TrhState> {
   const auth = await majitel();
   if ("error" in auth) return auth;
-  await prisma.shodaInzeratu.update({ where: { id: shodaId }, data: { stav: stejny ? "POTVRZENO" : "ZAMITNUTO", rozhodnutoAt: new Date() } });
+  const shoda = await prisma.shodaInzeratu.update({ where: { id: shodaId }, data: { stav: stejny ? "POTVRZENO" : "ZAMITNUTO", rozhodnutoAt: new Date() } });
+  if (stejny) await prevezmiRozhodnuti(shoda.inzeratId, shoda.drivejsiId);
+  else for (const z of await prisma.zarazeniInzeratu.findMany({ where: { inzeratId: { in: [shoda.inzeratId, shoda.drivejsiId] }, stav: "ZARAZENO" }, select: { propertyId: true } })) await aktualizujSkupinu(z.propertyId);
   obnov(propertyId);
   return { success: stejny ? "Propojeno jako stejný byt." : "Označeno jako jiný byt." };
 }
