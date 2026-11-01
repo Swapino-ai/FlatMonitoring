@@ -216,6 +216,19 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
 
   const vzdalenost = (r: RadekTrhu) => (poloha && r.lat != null && r.lon != null ? km(poloha, { lat: r.lat, lon: r.lon }) : null);
 
+  /** Stejny byt je ve vic inzeratech (smazany a znovu vlozeny): stitek vedle data */
+  const vicekrat = (r: RadekTrhu) => {
+    const s = r.shody ?? [];
+    if (!s.length) return null;
+    const potvrzeno = s.some((x) => x.stav === "POTVRZENO");
+    return (
+      <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${potvrzeno ? "bg-accent-soft text-accent" : "bg-warn/15 text-warn"}`}
+        title="Stejný byt se objevil i v jiném inzerátu — porovnání níže">
+        {potvrzeno ? "vloženo vícekrát" : "možná vloženo vícekrát"}
+      </span>
+    );
+  };
+
   const zakladRadku = (r: RadekTrhu, trida = "") => {
     const d = vzdalenost(r);
     return (
@@ -230,6 +243,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
             r.stejnaObec ? "stejná obec" : null,
             d != null ? `${d.toFixed(1).replace(".", ",")} km` : r.lat == null ? "bez polohy" : null].filter(Boolean).join(" · ")}
           {" · "}na trhu od {dateCz(r.firstSeen)}
+          {vicekrat(r)}
         </div>
         {r.stav === "NAVRH" && r.duvod && <div className="text-xs text-ink-muted">{r.duvod}</div>}
         <div className="mt-1"><CenyAShody ceny={r.ceny} najem={r.dealType === "RENT"} shody={r.shody} canEdit={canEdit} onRozhodni={rozhodniShodu_} /></div>
@@ -254,7 +268,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
 
   const odkazy = (r: RadekTrhu) => (
     <span className="flex shrink-0 items-center gap-2 text-xs">
-      {r.url && !r.url.includes("/x/x/") && <a href={r.url} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">Inzerát ↗</a>}
+      {!r.zmizel && r.url && !r.url.includes("/x/x/") && <a href={r.url} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">Inzerát ↗</a>}
       {fotkyRadku(r).length > 0 && (
         <button type="button" onClick={() => otevriGalerii(r)} className="text-accent hover:underline">Fotky ({fotkyRadku(r).length})</button>
       )}
@@ -519,6 +533,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
                         <div className="text-xs text-ink-secondary">
                           {[r.disposition, r.areaM2 ? `${r.areaM2} m²` : null, r.district && r.district !== r.city ? `${r.city}, ${r.district}` : r.city,
                             r.stejnaObec ? "stejná obec" : null, d != null ? `${d.toFixed(1).replace(".", ",")} km` : null, `od ${dateCz(r.firstSeen)}`].filter(Boolean).join(" · ")}
+                          {vicekrat(r)}
                         </div>
                       </div>
                     );
@@ -571,7 +586,8 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
                     )}
                   </div>
                   <span className="flex flex-wrap justify-end gap-2">
-                    {r.url && !r.url.includes("/x/x/") && <a href={r.url} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">Inzerát ↗</a>}
+                    {!r.zmizel && r.url && !r.url.includes("/x/x/") && <a href={r.url} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">Inzerát ↗</a>}
+                    {fotkyRadku(r).length > 0 && <button type="button" onClick={() => otevriGalerii(r)} className="text-accent hover:underline">Fotky ({fotkyRadku(r).length})</button>}
                     {r.snimky[0] && <a href={`/api/snimek/${r.snimky[0].id}`} target="_blank" rel="noreferrer" className="text-accent hover:underline" title={`Screenshot z ${dateCz(r.snimky[0].createdAt)}`}>Snímek</a>}
                   </span>
                   {canEdit && (

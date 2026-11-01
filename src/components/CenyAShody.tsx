@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { czk, dateCz } from "@/lib/format";
+import { Galerie, type PolozkaGalerie } from "./Galerie";
 
 export interface ShodaRadku {
   id: string;
@@ -11,7 +12,13 @@ export interface ShodaRadku {
   duvod: string;
   /** Jiny inzerat je starsi (true), nebo novejsi (false) */
   drivejsi: boolean;
-  jiny: { url: string | null; najem: boolean; price: number; od: string; do: string; zmizel: boolean; ceny: { at: string; price: number }[] };
+  jiny: {
+    url: string | null; najem: boolean; price: number; od: string; do: string; zmizel: boolean; ceny: { at: string; price: number }[];
+    /** Ulozene snimky stranky a fotky (i u smazaneho inzeratu) */
+    snimky?: { id: string; createdAt: string }[];
+    fotky?: string[];
+    naskenovano?: string;
+  };
 }
 
 const platnyOdkaz = (u: string | null) => !!u && !u.includes("/x/x/");
@@ -28,6 +35,23 @@ export function CenyAShody({ ceny, najem, shody = [], canEdit, onRozhodni }: {
   onRozhodni: (shodaId: string, stejny: boolean) => void;
 }) {
   const [historie, setHistorie] = useState(false);
+  const [galerie, setGalerie] = useState<{ polozky: PolozkaGalerie[]; naskenovano?: string } | null>(null);
+  /** Odkazy na druhou verzi inzeratu: zivy inzerat, jinak ulozeny snimek a fotky, kdyz v systemu jsou */
+  const odkazyJineho = (j: ShodaRadku["jiny"]) => {
+    const snimek = [...(j.snimky ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+    const polozky: PolozkaGalerie[] = [
+      ...(snimek ? [{ src: `/api/snimek/${snimek.id}`, popis: `Screenshot stránky ${dateCz(snimek.createdAt)}`, posouvat: true }] : []),
+      ...(j.fotky ?? []).map((src) => ({ src })),
+    ];
+    return (
+      <>
+        {!j.zmizel && platnyOdkaz(j.url) && <> · <a href={j.url!} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">inzerát ↗</a></>}
+        {snimek && <> · <button type="button" className="text-accent hover:underline" onClick={() => setGalerie({ polozky, naskenovano: j.naskenovano })}>snímek {dateCz(snimek.createdAt)}</button></>}
+        {(j.fotky?.length ?? 0) > 0 && <> · <button type="button" className="text-accent hover:underline" onClick={() => setGalerie({ polozky: polozky.slice(snimek ? 1 : 0), naskenovano: j.naskenovano })}>fotky ({j.fotky!.length})</button></>}
+        {j.zmizel && !snimek && !(j.fotky?.length) && <span className="text-ink-muted"> · inzerát smazán, snímek ani fotky se neuložily</span>}
+      </>
+    );
+  };
   // Rozhodnuti se ukaze hned (server pak stranku obnovi)
   const [rozhodnute, setRozhodnute] = useState<Record<string, boolean>>({});
   const rozhodni = (id: string, stejny: boolean) => { setRozhodnute((r) => ({ ...r, [id]: stejny })); onRozhodni(id, stejny); };
@@ -84,7 +108,7 @@ export function CenyAShody({ ceny, najem, shody = [], canEdit, onRozhodni }: {
           <div key={s.id} className="rounded-lg border border-warn/40 bg-warn/10 px-2.5 py-1.5 text-xs">
             <div>
               <strong>Možná stejný byt</strong> — {popis}
-              {platnyOdkaz(j.url) && <> · <a href={j.url!} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">inzerát ↗</a></>}
+              {odkazyJineho(j)}
             </div>
             <div className="mt-0.5 text-ink-muted">Shoda {s.skore} %: {s.duvod}</div>
             {canEdit && (
@@ -97,11 +121,12 @@ export function CenyAShody({ ceny, najem, shody = [], canEdit, onRozhodni }: {
         ) : (
           <div key={s.id} className="rounded-lg bg-surface-sunken px-2.5 py-1.5 text-xs">
             <strong>Stejný byt</strong> — {popis}
-            {platnyOdkaz(j.url) && <> · <a href={j.url!} target="_blank" rel="noreferrer noopener" className="text-accent hover:underline">inzerát ↗</a></>}
+            {odkazyJineho(j)}
             {canEdit && <button type="button" className="ml-2 text-ink-muted hover:text-bad" onClick={() => rozhodni(s.id, false)} title="Zrušit propojení">zrušit</button>}
           </div>
         );
       })}
+      {galerie && <Galerie polozky={galerie.polozky} naskenovano={galerie.naskenovano} onZavrit={() => setGalerie(null)} />}
     </div>
   );
 }

@@ -62,16 +62,23 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
           ceny: { orderBy: { at: "asc" } },
           snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true } },
           // Stejny byt v jinem inzeratu (navrhy i potvrzene, zamitnute ne)
-          shody: { where: { stav: { not: "ZAMITNUTO" } }, include: { drivejsi: { include: { ceny: { orderBy: { at: "asc" } } } } } },
-          shodyDrive: { where: { stav: { not: "ZAMITNUTO" } }, include: { inzerat: { include: { ceny: { orderBy: { at: "asc" } } } } } },
+          shody: { where: { stav: { not: "ZAMITNUTO" } }, include: { drivejsi: { include: { ceny: { orderBy: { at: "asc" } }, snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true } } } } } },
+          shodyDrive: { where: { stav: { not: "ZAMITNUTO" } }, include: { inzerat: { include: { ceny: { orderBy: { at: "asc" } }, snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true } } } } } },
         },
       },
     },
   });
-  type JinyInzerat = { url: string | null; dealType: string; price: number; firstSeenAt: Date; lastSeenAt: Date; zmizelAt: Date | null; ceny: { at: Date; price: number }[] };
+  type JinyInzerat = {
+    url: string | null; dealType: string; price: number; firstSeenAt: Date; lastSeenAt: Date; zmizelAt: Date | null; ceny: { at: Date; price: number }[];
+    fotkyUrl: string[]; snimky: { id: string; createdAt: Date; druh: string }[];
+  };
+  // Druha verze inzeratu: i smazany jde porovnat podle ulozeneho snimku stranky a fotek
   const jiny = (j: JinyInzerat) => ({
     url: j.url, najem: j.dealType === "RENT", price: j.price, od: denISO(j.firstSeenAt), do: denISO(j.zmizelAt ?? j.lastSeenAt), zmizel: !!j.zmizelAt,
     ceny: j.ceny.map((c) => ({ at: denISO(c.at), price: c.price })),
+    snimky: j.snimky.filter((s) => s.druh !== "FOTO").map((s) => ({ id: s.id, createdAt: s.createdAt.toISOString() })),
+    fotky: j.snimky.some((s) => s.druh === "FOTO") ? j.snimky.filter((s) => s.druh === "FOTO").map((s) => `/api/snimek/${s.id}`) : j.zmizelAt ? [] : j.fotkyUrl,
+    naskenovano: j.firstSeenAt.toISOString(),
   });
 
   // Klic: jak se hleda, popsane vetou
