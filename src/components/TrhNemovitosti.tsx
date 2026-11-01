@@ -17,6 +17,12 @@ import { DatumSkenu } from "./DatumSkenu";
 import type { AiNahled } from "@/lib/market/aiNahled";
 import { profilTypu } from "@/lib/market/profily";
 
+/** "28. 10." (letos), jinak "28. 10. 2025" */
+const kratkeDatum = (iso: string) => {
+  const [r, m, d] = iso.slice(0, 10).split("-");
+  return `${Number(d)}. ${Number(m)}.${r === String(new Date().getFullYear()) ? "" : ` ${r}`}`;
+};
+
 export interface RadekTrhu {
   id: string; // id zarazeni
   stav: "NAVRH" | "ZARAZENO" | "VYRAZENO";
@@ -263,7 +269,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
       <button type="button" onClick={() => otevriGalerii(r)} className={`relative shrink-0 overflow-hidden rounded-lg bg-surface-sunken ${trida}`} title="Fotky inzerátu">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={fotky[0] ?? `/api/snimek/${r.snimky[0]!.id}`} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover object-top" />
-        <DatumSkenu datum={r.firstSeen} konec={r.zmizel ? (r.dealType === "RENT" ? "Pronajato" : "Prodáno") : null} />
+        <DatumSkenu datum={r.firstSeen} konec={r.zmizel ? `${r.dealType === "RENT" ? "Pronajato" : "Prodáno"} ${kratkeDatum(r.zmizel)}` : null} />
         <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-[10px] text-white">{polozkyGalerie(r).length}</span>
       </button>
     );
