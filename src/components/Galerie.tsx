@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DatumSkenu } from "./DatumSkenu";
 
+/** Odlozene odebrani zaznamu galerie z historie (zrusi se, kdyz se galerie hned znovu pripoji) */
+let odebraniZaznamu: ReturnType<typeof setTimeout> | null = null;
+
 export interface PolozkaGalerie {
   src: string;
   /** Napr. "Screenshot stránky 17. 10. 2026" */
@@ -40,6 +43,27 @@ export function Galerie({ polozky, onZavrit, rovnou = 0, naskenovano }: {
       posun(dx < 0 ? 1 : -1);
     }
   };
+
+  // Tlacitko Zpet (hlavne na telefonu) zavre galerii, ne stranku: galerie si prida
+  // vlastni zaznam do historie; zavreni jinak (✕, Esc) ho zase odebere
+  const zavritRef = useRef(onZavrit);
+  useEffect(() => { zavritRef.current = onZavrit; }, [onZavrit]);
+  useEffect(() => {
+    let zpet = false;
+    // Znovu pripojeni hned po odpojeni (React v rezimu StrictMode): zaznam uz v historii je
+    if (odebraniZaznamu) { clearTimeout(odebraniZaznamu); odebraniZaznamu = null; }
+    else window.history.pushState({ ...(window.history.state ?? {}), galerie: true }, "");
+    const pop = () => { zpet = true; zavritRef.current(); };
+    window.addEventListener("popstate", pop);
+    return () => {
+      window.removeEventListener("popstate", pop);
+      if (zpet) return;
+      odebraniZaznamu = setTimeout(() => {
+        odebraniZaznamu = null;
+        if (window.history.state?.galerie) window.history.back();
+      }, 0);
+    };
+  }, []);
 
   const posun = useCallback((o: number) => {
     setIndex((i) => (i + o + polozky.length) % polozky.length);
