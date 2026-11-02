@@ -44,6 +44,16 @@ export function median(cisla: number[]): number {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
+/**
+ * Velikost bytu podle dispozice: pocet mistnosti vcetne samostatne kuchyne.
+ * 1+kk = 1, 1+1 a 2+kk = 2, 2+1 a 3+kk = 3, 3+1 a 4+kk = 4 ... Atypicky / pokoj = null.
+ */
+export function tridaDispozice(d: string | null | undefined): number | null {
+  const m = /^(\d+)\s*\+\s*(kk|1)$/i.exec((d ?? "").trim());
+  if (!m) return null;
+  return Number(m[1]) + (m[2].toLowerCase() === "kk" ? 0 : 1);
+}
+
 export interface Hodnoceni {
   /** 0-100, vic = podobnejsi */
   skore: number;
@@ -65,10 +75,18 @@ export function ohodnot(n: NemovitostProSrovnani, i: InzeratProSrovnani, medianZ
   let skore = 100;
   const mimo = (duvod: string, km: number | null = null): Hodnoceni => ({ skore: 0, doporuceno: false, duvod, mimo: true, vzdalenostKm: km });
 
-  // Dispozice musi byt stejna (pravidlo uzivatele); neznama dispozice jen snizi skore
-  if (n.stejnaDispozice !== false) {
-    if (n.disposition && i.disposition && n.disposition !== i.disposition) return mimo(`dispozice ${i.disposition}`);
-    if (n.disposition && !i.disposition) { skore -= 10; duvody.push("dispozice neuvedena"); }
+  // Dispozice stejna, nebo srovnatelna (2+1 ≈ 3+kk, 1+1 ≈ 2+kk — stejny pocet mistnosti
+  // vcetne kuchyne); jina velikost bytu se nenavrhuje, neznama dispozice jen snizi skore
+  // Srovnatelna (ne stejna) dispozice musi i metrove sedet: plocha nejvys ±15 %
+  let jenPodobna = false;
+  if (n.stejnaDispozice !== false && n.disposition) {
+    if (i.disposition && n.disposition !== i.disposition) {
+      jenPodobna = true;
+      const a = tridaDispozice(n.disposition), b = tridaDispozice(i.disposition);
+      if (a == null || b == null || a !== b) return mimo(`dispozice ${i.disposition}`);
+      skore -= 5; duvody.push(`srovnatelná dispozice ${i.disposition}`);
+    }
+    if (!i.disposition) { skore -= 10; duvody.push("dispozice neuvedena"); }
   }
 
   // Vzdalenost: okruh je tvrda hranice; bez polohy jen stejna obec
@@ -83,7 +101,7 @@ export function ohodnot(n: NemovitostProSrovnani, i: InzeratProSrovnani, medianZ
   }
 
   // Plocha nejvys ± tolerance profilu (byt 25 %, dum 30 %, garaz 40 %...)
-  const tolerance = n.tolerancePlochy ?? 0.25;
+  const tolerance = jenPodobna ? Math.min(n.tolerancePlochy ?? 0.25, 0.15) : n.tolerancePlochy ?? 0.25;
   if (i.areaM2 && n.areaM2) {
     const odchylka = Math.abs(i.areaM2 - n.areaM2) / n.areaM2;
     if (odchylka > tolerance) return mimo(`plocha ${Math.round(i.areaM2)} m²`, km);

@@ -15,7 +15,7 @@ const daleko = ohodnot(n, { areaM2: 60, disposition: "2+kk", latitude: 50.05, lo
 over("daleko mimo", daleko.mimo, daleko);
 const velky = ohodnot(n, { areaM2: 80, disposition: "2+kk", latitude: 50.0, longitude: 14.0, city: "Praha", pricePerM2: 1 }, null);
 over("velky mimo", velky.mimo, velky);
-const jinaDisp = ohodnot(n, { areaM2: 60, disposition: "1+1", latitude: 50.0, longitude: 14.0, city: "Praha", pricePerM2: 1 }, null);
+const jinaDisp = ohodnot(n, { areaM2: 60, disposition: "3+1", latitude: 50.0, longitude: 14.0, city: "Praha", pricePerM2: 1 }, null);
 over("jina dispozice mimo", jinaDisp.mimo && jinaDisp.duvod.startsWith("dispozice"), jinaDisp);
 const bezPolohy = ohodnot(n, { areaM2: 60, disposition: "2+kk", latitude: null, longitude: null, city: "Jinde", pricePerM2: 1 }, null);
 over("jina obec bez polohy mimo", bezPolohy.mimo, bezPolohy);
@@ -67,6 +67,17 @@ over("jine patro neni shoda", podobnostBytu({ ...byt1, podlazi: 2 }, { ...byt1, 
 over("daleko neni shoda", podobnostBytu(byt1, { ...byt1, latitude: 50.77 }) === null);
 over("jina plocha neni shoda", podobnostBytu(byt1, { ...byt1, areaM2: 80 }) === null);
 over("podlazi z udaju", podlaziZUdaju(["výtah", "3. patro z 5"]) === 3 && podlaziZUdaju(["přízemí"]) === 0);
+
+// Srovnatelna dispozice: 2+1 ≈ 3+kk, 1+1 ≈ 2+kk; jina velikost ne; plocha u srovnatelne ±15 %
+{
+  const byt = { areaM2: 60, disposition: "2+1", latitude: 50.0, longitude: 14.0, city: "Praha", okruhKm: 5 };
+  const nab = (disposition: string, areaM2: number) => ohodnot(byt, { areaM2, disposition, latitude: 50.0, longitude: 14.0, city: "Praha", pricePerM2: 80000 }, null);
+  over("2+1 ≈ 3+kk se stejnou plochou", !nab("3+kk", 62).mimo && /srovnatelná dispozice/.test(nab("3+kk", 62).duvod));
+  over("2+1 ≠ 2+kk", nab("2+kk", 60).mimo);
+  over("3+kk o 20 % větší už ne (srovnatelná ±15 %)", nab("3+kk", 72).mimo);
+  over("2+1 o 20 % větší ano (stejná dispozice ±25 %)", !nab("2+1", 72).mimo);
+  over("1+1 ≈ 2+kk", !ohodnot({ ...byt, disposition: "1+1", areaM2: 40 }, { areaM2: 42, disposition: "2+kk", latitude: 50.0, longitude: 14.0, city: "Praha", pricePerM2: 1 }, null).mimo);
+}
 
 console.log(chyb ? `${chyb} chyb` : "vše v pořádku");
 process.exit(chyb ? 1 : 0);
