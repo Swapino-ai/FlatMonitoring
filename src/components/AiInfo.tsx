@@ -37,7 +37,7 @@ const kc = (x: number) => `${x.toLocaleString("cs-CZ")} Kč`;
  * Jak se u pronajmu plati: najem, pod nim sluzby (soucet). Najetim mysi (na mobilu
  * klepnutim) se rozbali bublina s rozpisem sluzeb, energiemi, kauci a provizi.
  */
-function PlatbyNajmu({ n }: { n: PodminkyNajmu }) {
+export function PlatbyNajmu({ n }: { n: PodminkyNajmu }) {
   const [otevreno, setOtevreno] = useState(false);
   const polozky = n.polozky ?? [];
   const soucetPolozek = polozky.reduce((a, x) => a + (x.castka ?? 0), 0);

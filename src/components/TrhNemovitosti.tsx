@@ -10,7 +10,7 @@ import { Badge } from "./Stat";
 import { Mapa, type BodOkoli } from "./Mapa";
 import { VyvojChart } from "./charts";
 import { SwipeNavrhy } from "./SwipeNavrhy";
-import { AiInfo } from "./AiInfo";
+import { AiInfo, PlatbyNajmu } from "./AiInfo";
 import { CenyAShody, type ShodaRadku } from "./CenyAShody";
 import { Galerie, type PolozkaGalerie } from "./Galerie";
 import { DatumSkenu } from "./DatumSkenu";
@@ -633,6 +633,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
                     {r.ai?.stitky.length ? <span className="text-ink-muted">{r.ai.stitky.join(" · ")}</span> : null}
                   </div>
                   {r.ai?.shrnuti && <p className="line-clamp-1 text-xs italic text-ink-muted" title={r.ai.shrnuti}>{r.ai.shrnuti}</p>}
+                  {r.ai?.najem && <div className="text-xs"><PlatbyNajmu n={r.ai.najem} /></div>}
                 </div>
 
                 {/* Vaha a akce: na telefonu radek pod nabidkou */}
