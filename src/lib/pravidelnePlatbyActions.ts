@@ -75,3 +75,40 @@ export async function smazPlatby(propertyId: string, _prev: PlatbyState, formDat
   for (const cesta of [`/properties/${propertyId}`, "/properties", "/", "/cashflow"]) revalidatePath(cesta);
   return { success: `Smazáno ${vysledek.count} plateb. V návrhu se objeví znovu.` };
 }
+
+/**
+ * Prepocet stavu uctu podle aktualnich smluv a sluzeb: zaplacene pravidelne platby dostanou
+ * castku podle soucasneho predpisu (datum zaplaceni zustane), drive zauctovane pohyby se
+ * prepisou na novou castku a co uz v predpisu neni (zmenene datum smlouvy), se smaze.
+ * Platby sparovane z banky zustanou se skutecnou castkou. Jen majitel.
+ */
+export async function prepocitejStavUctu(propertyId: string): Promise<PlatbyState> {
+  const user = await getSession();
+  if (!user) return { error: "Nejsi přihlášen." };
+  if (user.role !== "OWNER") return { error: "Přepočet může spustit jen majitel." };
+
+  const navrh = new Map((await nactiNavrhPlatby(propertyId)).map((p) => [p.klic, p]));
+  const [zaplacene, pohyby] = await Promise.all([
+    prisma.pravidelnaPlatba.findMany({ where: { propertyId } }),
+    prisma.transaction.findMany({ where: { propertyId, sourceKey: { not: null }, NOT: { sourceKey: { startsWith: "banka:" } } } }),
+  ]);
+  let upraveno = 0, smazano = 0, zBanky = 0;
+  const operace = [];
+  for (const z of zaplacene) {
+    if (z.pohybId) { zBanky++; continue; }
+    const p = navrh.get(z.klic);
+    if (!p) { operace.push(prisma.pravidelnaPlatba.delete({ where: { id: z.id } })); smazano++; continue; }
+    const castka = Math.round(Math.abs(p.castka) * 100) / 100;
+    if (Math.abs(castka - (z.amount ?? 0)) >= 0.01) { operace.push(prisma.pravidelnaPlatba.update({ where: { id: z.id }, data: { amount: castka } })); upraveno++; }
+  }
+  for (const t of pohyby) {
+    const p = navrh.get(t.sourceKey!);
+    if (!p) { operace.push(prisma.transaction.delete({ where: { id: t.id } })); smazano++; continue; }
+    const castka = Math.round(p.castka * 100) / 100;
+    if (Math.abs(castka - t.amount) >= 0.01) { operace.push(prisma.transaction.update({ where: { id: t.id }, data: { amount: castka } })); upraveno++; }
+  }
+  if (operace.length) await prisma.$transaction(operace);
+  for (const cesta of [`/properties/${propertyId}`, "/properties", "/", "/cashflow"]) revalidatePath(cesta);
+  const casti = [upraveno ? `přepočítáno ${upraveno}` : null, smazano ? `smazáno ${smazano} (už nejsou v předpisu)` : null].filter(Boolean);
+  return { success: `${casti.length ? `Hotovo: ${casti.join(", ")}.` : "Vše už odpovídá smlouvám."}${zBanky ? ` ${zBanky} plateb spárovaných z banky zůstalo beze změny.` : ""}` };
+}

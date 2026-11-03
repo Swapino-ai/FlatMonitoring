@@ -34,6 +34,7 @@ import { casovaOsa, porovnejProNemovitost, type NajemVstup, type PolozkaZalohy, 
 import { VyuctovaniSluzeb, type NajemRadek, type VyuctovaniRadek } from "@/components/Vyuctovani";
 import { VyuctovaniNajemceKarta, type NajemceNajem, type VydanoRadek } from "@/components/VyuctovaniNajemceKarta";
 import { cisloNajemce } from "@/lib/najemci";
+import { PrepocetStavuUctu } from "@/components/PrepocetStavuUctu";
 import { PravidelnePlatby } from "@/components/PravidelnePlatby";
 import { nactiNavrhPlatby, nactiZauctovanePlatby } from "@/lib/pravidelnePlatbyData";
 import { prehledPlateb } from "@/lib/pravidelnePlatby";
@@ -789,6 +790,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             )}
           </div>
           <SbalitelnaKarta klic="pravidelne-platby" title="Pravidelné platby"
+            action={user.role === "OWNER" ? <PrepocetStavuUctu propertyId={property.id} /> : undefined}
             shrnuti={navrhPlateb.filter((p) => p.stav === "nezaplaceno").length
               ? `${navrhPlateb.filter((p) => p.stav === "nezaplaceno").length} nezaplaceno`
               : navrhPlateb.length ? "vše zaplaceno" : undefined}>
