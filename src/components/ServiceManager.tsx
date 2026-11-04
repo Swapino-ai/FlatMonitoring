@@ -276,7 +276,9 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                         {vSeznamu.map((z) => {
                           // Vyse platila do dne pred nastupem nasledujici zmeny
                           const j = zmeny.indexOf(z);
-                          const odText = j === zmeny.length - 1 ? "od začátku" : `od ${dateCz(new Date(z.validFrom))}`;
+                          // Nejstarsi vyse plati od zacatku sluzby (kdyz je zmena zapsana s drivejsim datem)
+                          const od = new Date(z.validFrom);
+                          const odText = `od ${dateCz(j === zmeny.length - 1 && s.contractStart && new Date(s.contractStart).getTime() > od.getTime() ? new Date(s.contractStart) : od)}`;
                           const doText = j === 0 ? "dále"
                             : `do ${dateCz(new Date(new Date(zmeny[j - 1].validFrom).getTime() - 24 * 3600 * 1000))}`;
                           return (
