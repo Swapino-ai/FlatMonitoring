@@ -12,6 +12,8 @@ interface Row {
   description: string | null; documentRef: string | null;
   /** Poznamka ze sparovane platby v bance */
   poznamkaBanky?: string | null;
+  /** "banka:<id>" = importovano z Fio (datum, castka a popis nejdou menit) */
+  sourceKey?: string | null;
 }
 
 export function TransactionManager({ propertyId, transactions, canEdit }: {
@@ -124,7 +126,8 @@ export function TransactionManager({ propertyId, transactions, canEdit }: {
 
       {canEdit && upravovany && (
         <UpravaPanel nadpis={`Upravit pohyb z ${dateCz(upravovany.date)}`} onZavrit={() => setUpravaId(null)}>
-          <Formular key={upravovany.id} propertyId={propertyId} r={upravovany} kategorie={[...prijmy, ...vydaje]}
+          <Formular key={upravovany.id} propertyId={propertyId} r={upravovany}
+            kategorie={upravovany.sourceKey?.startsWith("banka:") ? (upravovany.amount >= 0 ? prijmy : vydaje) : [...prijmy, ...vydaje]}
             action={upravaAction} pending={upravuji} popisekTlacitka="Uložit změny" />
         </UpravaPanel>
       )}
@@ -143,6 +146,36 @@ function Formular({ propertyId, r, kategorie, action, pending, popisekTlacitka }
   propertyId: string; r: Row | null; kategorie: [string, string][];
   action: (payload: FormData) => void; pending: boolean; popisekTlacitka: string;
 }) {
+  // Pohyb z Fio: datum, castka a popis jsou z banky a nemeni se; jde zmenit kategorie a poznamka
+  if (r?.sourceKey?.startsWith("banka:")) {
+    const pevne = (label: string, hodnota: string) => (
+      <div>
+        <div className="label mb-1.5">{label}</div>
+        <div className="input cursor-not-allowed bg-surface-sunken text-ink-secondary">{hodnota || "—"}</div>
+      </div>
+    );
+    return (
+      <form action={action} className="grid gap-3 sm:grid-cols-2">
+        <input type="hidden" name="propertyId" value={propertyId} />
+        <input type="hidden" name="date" value={isoDatum(r.date) ?? ""} />
+        <input type="hidden" name="amount" value={Math.abs(r.amount)} />
+        <input type="hidden" name="description" value={r.description ?? ""} />
+        <p className="flex items-center gap-2 rounded-lg bg-surface-sunken px-3 py-2 text-xs text-ink-secondary sm:col-span-2">
+          <Ikona nazev="penize" trida="h-4 w-4" /> Importováno z Fio — datum, částka a popis nejdou změnit.
+        </p>
+        {pevne("Datum", dateCz(r.date))}
+        <Vyber label="Kategorie" name="category" defaultValue={r.category} options={kategorie} hint="Daňové zařazení se doplní podle kategorie" />
+        {pevne("Částka (Kč)", czk(Math.abs(r.amount)))}
+        <Pole label="Doklad" name="documentRef" placeholder="např. FA-2026-0312" defaultValue={r.documentRef ?? ""} />
+        <div className="sm:col-span-2">{pevne("Popis", r.description ?? "")}</div>
+        <Pole label="Poznámka" name="poznamkaBanky" sirka="sm:col-span-2" placeholder="nepovinné — stejná poznámka je u platby v Bance"
+          defaultValue={r.poznamkaBanky ?? ""} />
+        <div className="sm:col-span-2">
+          <button type="submit" disabled={pending} className="btn btn-primary">{pending ? "Ukládám…" : popisekTlacitka}</button>
+        </div>
+      </form>
+    );
+  }
   return (
     <form action={action} className="grid gap-3 sm:grid-cols-2">
       <input type="hidden" name="propertyId" value={propertyId} />

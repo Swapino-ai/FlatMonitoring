@@ -613,6 +613,28 @@ export async function saveTransaction(id: string | null, _prev: EntityFormState,
     documentRef: d.documentRef,
   };
 
+  // Pohyb z Fio: datum, castka a popis zustavaji z banky; meni se kategorie, doklad a poznamka (u platby v bance)
+  const stary = id ? await prisma.transaction.findUnique({ where: { id } }) : null;
+  if (stary?.sourceKey?.startsWith("banka:")) {
+    if ((kategorie.kind === "EXPENSE") !== (stary.amount < 0)) return { error: stary.amount < 0 ? "Odchozí platba může mít jen kategorii výdaje." : "Příchozí platba může mít jen kategorii příjmu." };
+    const pohybId = stary.sourceKey.slice(6);
+    const pohyb = await prisma.bankovniPohyb.findUnique({ where: { id: pohybId }, select: { parovani: true } });
+    const par = pohyb?.parovani as { vydaj?: string } | null;
+    await prisma.$transaction([
+      prisma.transaction.update({ where: { id: stary.id }, data: { category: d.category, taxTreatment: kategorie.defaultTaxTreatment, documentRef: d.documentRef } }),
+      prisma.bankovniPohyb.updateMany({
+        where: { id: pohybId },
+        data: {
+          mojePoznamka: String(formData.get("poznamkaBanky") ?? "").trim().slice(0, 500) || null,
+          ...(par?.vydaj?.startsWith("vydaj:") ? { parovani: { ...par, vydaj: `vydaj:${stary.propertyId}:${d.category}` } } : {}),
+        },
+      }),
+    ]);
+    revalidatePath("/banka");
+    obnov(stary.propertyId);
+    return { success: "Pohyb upraven." };
+  }
+
   // Stejny formular slouzi k zalozeni i k uprave — id rozhoduje
   if (id) await prisma.transaction.update({ where: { id }, data });
   else await prisma.transaction.create({ data });

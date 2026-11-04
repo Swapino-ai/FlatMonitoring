@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
-import { BankaPohyby, type PohybRadek } from "@/components/BankaPohyby";
+import { BankaPohyby, type CileNemovitosti, type PohybRadek } from "@/components/BankaPohyby";
 import { prisma } from "@/lib/db";
 import { fioNastaveno } from "@/lib/fio";
 import { denISO } from "@/lib/format";
@@ -23,23 +23,25 @@ export default async function BankaPage() {
     // Byty s krátkodobým pronájmem: výplaty z Airbnb / Booking jdou přiřadit jako jejich příjem
     prisma.property.findMany({ where: { kratkodobe: { some: {} } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
   ]);
-  // Cile odchozich plateb: nezaplacene predpisy (sluzby, splatky, nedoplatky dodavatelum),
-  // vratky preplatku najemcum a jiny vydaj nemovitosti
-  const maOdchozi = keKontrole.some((p) => p.castka < 0);
-  const nemovitosti = maOdchozi ? await prisma.property.findMany({ where: { status: { not: "SOLD" } }, select: { id: true, name: true }, orderBy: { name: "asc" } }) : [];
-  const navrhy = maOdchozi ? await nactiNavrhyPortfolia(nemovitosti) : new Map();
+  // Cile parovani po nemovitostech: najemci (prichozi), nezaplacene predpisy a vratky (odchozi),
+  // jiny prijem / vydaj podle kategorie (stejne kategorie jako na strance Pohyby)
+  const nemovitosti = keKontrole.length ? await prisma.property.findMany({
+    where: { status: { not: "SOLD" } }, select: { id: true, name: true, street: true, city: true, kratkodobe: { select: { id: true } } }, orderBy: { name: "asc" },
+  }) : [];
+  const navrhy = keKontrole.some((p) => p.castka < 0) ? await nactiNavrhyPortfolia(nemovitosti) : new Map();
   const odDne = denISO(new Date(Date.now() - 400 * 86400000)).slice(0, 7);
-  const predpisy = nemovitosti.flatMap((n) => (navrhy.get(n.id) ?? [])
-    .filter((x: { castka: number; stav: string; mesic: string }) => x.castka < 0 && x.stav === "nezaplaceno" && x.mesic >= odDne)
-    .map((x: { klic: string; popis: string; mesic: string; castka: number }) => ({
-      cil: `predpis:${n.id}:${x.klic}`, nazev: `${x.popis} · ${Number(x.mesic.slice(5))}/${x.mesic.slice(0, 4)} · ${Math.round(-x.castka).toLocaleString("cs-CZ")} Kč`, skupina: n.name,
-    })));
-  const vratky = maOdchozi ? await prisma.tenantStatement.findMany({ where: { status: { in: ["VYDANO", "ODESLANO"] }, result: { gt: 0 } }, select: { id: true, cislo: true, result: true, snapshot: true } }) : [];
-  const cileVydaju = {
-    predpisy,
-    vratky: vratky.map((v) => ({ cil: `vratka:${v.id}`, nazev: `Vrácení přeplatku ${v.cislo} · ${(v.snapshot as { najemce?: { name?: string } })?.najemce?.name ?? ""} · ${Math.round(v.result).toLocaleString("cs-CZ")} Kč` })),
-    nemovitosti: nemovitosti.map((n) => ({ id: n.id, nazev: n.name })),
-    kategorie: CATEGORIES.filter((c) => c.kind === "EXPENSE").map((c) => ({ key: c.key, label: c.label })),
+  const vratky = keKontrole.some((p) => p.castka < 0) ? await prisma.tenantStatement.findMany({ where: { status: { in: ["VYDANO", "ODESLANO"] }, result: { gt: 0 } }, select: { id: true, cislo: true, result: true, snapshot: true, propertyId: true } }) : [];
+  const cile: CileNemovitosti[] = nemovitosti.map((n) => ({
+    id: n.id, nazev: n.name, adresa: [n.street, n.city].filter(Boolean).join(", "), kratkodoby: n.kratkodobe.length > 0,
+    smlouvy: smlouvy.filter((s) => s.propertyId === n.id).map((s) => ({ id: s.id, nazev: `${s.tenantName}${s.isActive ? "" : " (skončená)"}` })),
+    predpisy: (navrhy.get(n.id) ?? [])
+      .filter((x: { castka: number; stav: string; mesic: string }) => x.castka < 0 && x.stav === "nezaplaceno" && x.mesic >= odDne)
+      .map((x: { klic: string; popis: string; mesic: string; castka: number }) => ({ cil: `predpis:${n.id}:${x.klic}`, nazev: `${x.popis} · ${Number(x.mesic.slice(5))}/${x.mesic.slice(0, 4)} · ${Math.round(-x.castka).toLocaleString("cs-CZ")} Kč` })),
+    vratky: vratky.filter((v) => v.propertyId === n.id).map((v) => ({ cil: `vratka:${v.id}`, nazev: `Vrácení přeplatku ${v.cislo} · ${(v.snapshot as { najemce?: { name?: string } })?.najemce?.name ?? ""} · ${Math.round(v.result).toLocaleString("cs-CZ")} Kč` })),
+  }));
+  const kategorie = {
+    prijmy: CATEGORIES.filter((c) => c.kind === "INCOME" && c.key !== "KT_PRIJEM").map((c) => ({ key: c.key, label: c.label })),
+    vydaje: CATEGORIES.filter((c) => c.kind === "EXPENSE").map((c) => ({ key: c.key, label: c.label })),
   };
   const posledni = await prisma.bankovniPohyb.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } });
   const nazevSmlouvy = (id: string | null) => {
@@ -72,7 +74,7 @@ export default async function BankaPage() {
           keKontrole={keKontrole.map(radek)}
           sparovane={sparovane.map(radek)}
           smlouvy={smlouvy.map((s) => ({ id: s.id, nazev: `${s.tenantName} · ${s.property.name}${s.isActive ? "" : " (skončená)"}` }))}
-          cileVydaju={cileVydaju}
+          cile={cile} kategorie={kategorie}
           kategorieNazvy={Object.fromEntries(CATEGORIES.map((c) => [c.key, c.label]))}
           kratkodobe={kratkodobe.map((p) => ({ id: p.id, nazev: `Krátkodobý pronájem · ${p.name}` }))}
         />

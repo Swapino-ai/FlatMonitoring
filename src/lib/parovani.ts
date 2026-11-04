@@ -138,8 +138,10 @@ export const cilNaText = (c: CilVydaje) => c.typ === "predpis" ? `predpis:${c.pr
 export async function sparujVydaj(pohybId: string, cil: CilVydaje): Promise<{ ok: boolean; zprava: string }> {
   const pohyb = await prisma.bankovniPohyb.findUnique({ where: { id: pohybId } });
   if (!pohyb) return { ok: false, zprava: "Pohyb neexistuje." };
-  if (pohyb.castka >= 0) return { ok: false, zprava: "Tohle je příchozí platba." };
+  // Prichozi platba jde jen jako jiny prijem nemovitosti (kategorie prijmu)
+  if (pohyb.castka >= 0 && cil.typ !== "vydaj") return { ok: false, zprava: "Tohle je příchozí platba." };
   const castka = Math.abs(pohyb.castka);
+  const znamenko = pohyb.castka >= 0 ? 1 : -1;
   if (cil.typ === "predpis") {
     await prisma.$transaction([
       prisma.pravidelnaPlatba.upsert({
@@ -161,19 +163,19 @@ export async function sparujVydaj(pohybId: string, cil: CilVydaje): Promise<{ ok
     return { ok: true, zprava: `Vrácení přeplatku z vyúčtování ${v.cislo} zapsáno.` };
   }
   const kat = CATEGORY_MAP.get(cil.kategorie);
-  if (!kat || kat.kind !== "EXPENSE") return { ok: false, zprava: "Vyber kategorii výdaje." };
+  if (!kat || kat.kind !== (znamenko > 0 ? "INCOME" : "EXPENSE")) return { ok: false, zprava: znamenko > 0 ? "Vyber kategorii příjmu." : "Vyber kategorii výdaje." };
   await prisma.$transaction(async (tx) => {
     const t = await tx.transaction.upsert({
       where: { sourceKey: `banka:${pohyb.id}` },
-      update: { propertyId: cil.propertyId, amount: -castka, date: pohyb.datum, category: kat.key, taxTreatment: kat.defaultTaxTreatment },
+      update: { propertyId: cil.propertyId, amount: znamenko * castka, date: pohyb.datum, category: kat.key, taxTreatment: kat.defaultTaxTreatment },
       create: {
-        propertyId: cil.propertyId, date: pohyb.datum, amount: -castka, category: kat.key, taxTreatment: kat.defaultTaxTreatment,
+        propertyId: cil.propertyId, date: pohyb.datum, amount: znamenko * castka, category: kat.key, taxTreatment: kat.defaultTaxTreatment,
         description: [pohyb.nazevProtiuctu, pohyb.zprava].filter(Boolean).join(" · ") || "Platba z banky", sourceKey: `banka:${pohyb.id}`,
       },
     });
     await tx.bankovniPohyb.update({ where: { id: pohybId }, data: { stav: "SPAROVANO", propertyId: cil.propertyId, navrhCil: null, poznamka: null, parovani: { vydaj: cilNaText(cil), transakce: t.id } } });
   });
-  return { ok: true, zprava: `Zapsáno jako výdaj: ${kat.label}.` };
+  return { ok: true, zprava: `Zapsáno jako ${znamenko > 0 ? "příjem" : "výdaj"}: ${kat.label}.` };
 }
 
 /** Nejstarsi nezaplaceny predpis sluzby / uveru (podle predpony klice), splatny nejpozdeji mesic po platbe. */
