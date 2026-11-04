@@ -57,9 +57,28 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   const poplatkova = services.find((s) => s.id === poplatekId) ?? null;
 
   const upravovana = services.find((s) => s.id === upravaId) ?? null;
+  // Zobrazeni k vybranemu mesici (rrrr-mm): sluzby, ktere v nem plati, a castky platne k 15. dni
+  // (stejne pravidlo jako predpisy plateb na Stavu uctu); null = aktualne
+  const [mesic, setMesic] = useState<string | null>(null);
+  const denMesice = mesic ? new Date(`${mesic}-15T00:00:00Z`) : null;
+  const platiVMesici = (x: Row) => !denMesice || ((!x.contractStart || new Date(x.contractStart).getTime() <= denMesice.getTime())
+    && (!x.activeTo || new Date(x.activeTo).getTime() >= denMesice.getTime()));
+  const vyseKDatu = (sl: Row, d: Date) => {
+    const zm = [...(historie[sl.id] ?? [])].sort((a, b) => new Date(a.validFrom).getTime() - new Date(b.validFrom).getTime());
+    let z = zm[0];
+    for (const x of zm) { if (new Date(x.validFrom).getTime() <= d.getTime()) z = x; else break; }
+    return z ? z.monthlyCost + (z.annualCost ?? 0) / 12 : sl.monthlyCost + (sl.annualCost ?? 0) / 12;
+  };
   const jeUkoncena = (x: Row) => x.activeTo != null && x.activeTo.getTime() < Date.now();
-  const aktivni = services.filter((x) => !jeUkoncena(x));
-  const ukoncene = services.filter(jeUkoncena);
+  const aktivni = denMesice ? services.filter(platiVMesici) : services.filter((x) => !jeUkoncena(x));
+  const ukoncene = denMesice ? [] : services.filter(jeUkoncena);
+  const roky = (() => {
+    const ted = new Date().getFullYear();
+    const od = Math.min(ted, ...services.map((x) => x.contractStart ? new Date(x.contractStart).getFullYear() : ted));
+    return Array.from({ length: ted + 1 - od + 1 }, (_, i) => ted + 1 - i);
+  })();
+  const MESICE = ["leden", "únor", "březen", "duben", "květen", "červen", "červenec", "srpen", "září", "říjen", "listopad", "prosinec"];
+  const nazevMesice = mesic ? `${MESICE[Number(mesic.slice(5)) - 1]} ${mesic.slice(0, 4)}` : "";
   // Nazvy skupin pro naseptavani ve formulari z vsech sluzeb, v seznamu jen z platnych
   const skupiny = [...new Set(services.map((x) => x.groupName).filter((g): g is string => !!g))].sort();
   const skupinyAktivni = [...new Set(aktivni.map((x) => x.groupName).filter((g): g is string => !!g))].sort();
@@ -68,6 +87,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   const [skupinyOtevrene, setSkupinyOtevrene] = useState<Set<string>>(new Set());
   const prepniSkupinu = (g: string) => setSkupinyOtevrene((x) => { const n = new Set(x); if (n.has(g)) n.delete(g); else n.add(g); return n; });
   const vyseSluzby = (sl: Row) => {
+    if (denMesice) return vyseKDatu(sl, denMesice);
     const zm = [...(historie[sl.id] ?? [])].sort((a, b) => new Date(b.validFrom).getTime() - new Date(a.validFrom).getTime());
     const a = zm[0];
     return a ? a.monthlyCost + (a.annualCost ?? 0) / 12 : sl.monthlyCost + (sl.annualCost ?? 0) / 12;
@@ -87,6 +107,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
 
   // Celkem jen za sluzby, ktere plati
   const celkem = aktivni.reduce((a, s) => {
+    if (denMesice) return a + vyseKDatu(s, denMesice);
     const posledni = [...(historie[s.id] ?? [])]
       .sort((x, y) => new Date(y.validFrom).getTime() - new Date(x.validFrom).getTime())[0];
     return a + (posledni ? posledni.monthlyCost + (posledni.annualCost ?? 0) / 12 : s.monthlyCost + (s.annualCost ?? 0) / 12);
@@ -104,6 +125,25 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
       } />
 
       <ZalohyUpozorneni porovnani={porovnani} />
+
+      {services.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-ink-secondary">Zobrazit:</span>
+          <button type="button" aria-pressed={!mesic} onClick={() => setMesic(null)}
+            className={`rounded-full border px-3 py-1 ${!mesic ? "border-accent bg-accent-soft font-medium text-accent" : "border-line"}`}>Aktuálně</button>
+          <select className="input w-auto py-1 text-sm" aria-label="Měsíc" value={mesic ? Number(mesic.slice(5)) : ""}
+            onChange={(e) => { const m = Number(e.target.value); if (!m) { setMesic(null); return; } const r = mesic ? mesic.slice(0, 4) : String(new Date().getFullYear()); setMesic(`${r}-${String(m).padStart(2, "0")}`); }}>
+            <option value="">Měsíc…</option>
+            {MESICE.map((n, i) => <option key={n} value={i + 1}>{n}</option>)}
+          </select>
+          <select className="input w-auto py-1 text-sm" aria-label="Rok" value={mesic ? mesic.slice(0, 4) : ""}
+            onChange={(e) => { const r = e.target.value; if (!r) { setMesic(null); return; } setMesic(`${r}-${mesic ? mesic.slice(5) : String(new Date().getMonth() + 1).padStart(2, "0")}`); }}>
+            <option value="">Rok…</option>
+            {roky.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          {mesic && <span className="text-xs text-ink-muted">Služby platné v měsíci a částky k 15. dni — co se má za {nazevMesice} na byt zaplatit.</span>}
+        </div>
+      )}
 
       {services.length === 0 ? (
         <p className="py-3 text-center text-sm text-ink-muted">Žádné evidované služby.</p>
@@ -151,8 +191,8 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                 // Hlavni je posledni zapsana vyse, i kdyz zacne platit az v budoucnu
                 const dnes = dnesISO();
                 const aktualni = zmeny[0];
-                const planovano = aktualni != null && new Date(aktualni.validFrom).toISOString().slice(0, 10) > dnes;
-                const vyse = aktualni ? aktualni.monthlyCost + (aktualni.annualCost ?? 0) / 12 : s.monthlyCost + (s.annualCost ?? 0) / 12;
+                const planovano = !denMesice && aktualni != null && new Date(aktualni.validFrom).toISOString().slice(0, 10) > dnes;
+                const vyse = denMesice ? vyseKDatu(s, denMesice) : aktualni ? aktualni.monthlyCost + (aktualni.annualCost ?? 0) / 12 : s.monthlyCost + (s.annualCost ?? 0) / 12;
                 const vSeznamu = zmeny.slice(1);
                 const otevrena = rozbaleno.has(s.id);
                 return (
@@ -171,7 +211,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                             {s.activeTo && <> do {dateCz(s.activeTo)}</>}
                           </div>
                         )}
-                        {s.activeTo && s.activeTo.getTime() < Date.now() && (
+                        {!denMesice && s.activeTo && s.activeTo.getTime() < Date.now() && (
                           <div className="mt-0.5"><Badge tone="neutral">ukončená</Badge></div>
                         )}
                         {s.chargedToTenant && (
@@ -260,7 +300,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
             </tbody>
             <tfoot>
               <tr className="border-t-4 border-double border-line bg-surface-card">
-                <td className="px-3 py-4 font-semibold uppercase tracking-wide text-ink-secondary">Celkem měsíčně (platné)</td>
+                <td className="px-3 py-4 font-semibold uppercase tracking-wide text-ink-secondary">{mesic ? `Celkem za ${nazevMesice}` : "Celkem měsíčně (platné)"}</td>
                 <td className="hidden sm:table-cell" />
                 <td className="num px-3 py-4 text-lg font-bold">{czk(celkem)}</td>
                 <td className="hidden sm:table-cell" />
