@@ -175,6 +175,10 @@ over("smlouva v budoucnu → zadna osa", casovaOsa({ ...najem, startDate: "2027-
   const nova = { ...sl("WATER", 800, true), contractStart: "2026-03-01" };
   over("pred zacatkem sluzba nic nestoji", sluzbaKDatu(nova, new Date("2026-02-15")).monthlyCost === 0 && !sluzbaKDatu(nova, new Date("2026-02-15")).chargedToTenant);
   over("po zacatku plati", sluzbaKDatu(nova, new Date("2026-03-15")).monthlyCost === 800 && sluzbaKDatu(nova, new Date("2026-03-15")).chargedToTenant);
+  // Prvni vyse v historii je drivejsi nez "plati od": platilo se uz od ni
+  const drive = { ...nova, historie: [{ validFrom: "2026-01-01", monthlyCost: 1500, annualCost: null }, { validFrom: "2026-10-01", monthlyCost: 1000, annualCost: null }] };
+  over("historie pred 'plati od': v unoru plati 1 500", sluzbaKDatu(drive, new Date("2026-02-15")).monthlyCost === 1500);
+  over("historie pred 'plati od': v prosinci 2025 nic", sluzbaKDatu(drive, new Date("2025-12-15")).monthlyCost === 0);
   over("bez data plati vzdy", sluzbaKDatu(sl("WATER", 800, true), new Date("2000-01-01")).monthlyCost === 800);
   const najem = { tenantName: "A", utilitiesMonthly: 800, isActive: true, startDate: "2026-01-01" };
   const osa = casovaOsa(najem, [nova], new Date("2026-05-20"))!;

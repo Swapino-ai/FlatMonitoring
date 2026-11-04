@@ -11,7 +11,7 @@ import { Ikona, type NazevIkony } from "./Ikony";
 import { merakySluzby } from "@/lib/meraky";
 import { DatumPole } from "./DatumPole";
 import { ZalohyUpozorneni } from "./ZalohyUpozorneni";
-import type { PorovnaniZaloh } from "@/lib/zalohy";
+import { zacatekSluzby, type PorovnaniZaloh } from "@/lib/zalohy";
 import { Badge } from "./Stat";
 
 interface Row {
@@ -75,7 +75,9 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   // (stejne pravidlo jako predpisy plateb na Stavu uctu); null = aktualne
   const [mesic, setMesic] = useState<string | null>(null);
   const denMesice = mesic ? new Date(`${mesic}-15T00:00:00Z`) : null;
-  const platiVMesici = (x: Row) => !denMesice || ((!x.contractStart || new Date(x.contractStart).getTime() <= denMesice.getTime())
+  // Zacatek sluzby: drivejsi z "plati od" a prvni vyse v historii (platilo se uz od ni)
+  const zacatek = (x: Row) => zacatekSluzby({ contractStart: x.contractStart, historie: historie[x.id] });
+  const platiVMesici = (x: Row) => !denMesice || ((!zacatek(x) || zacatek(x)!.getTime() <= denMesice.getTime())
     && (!x.activeTo || new Date(x.activeTo).getTime() >= denMesice.getTime()));
   const vyseKDatu = (sl: Row, d: Date) => {
     const zm = [...(historie[sl.id] ?? [])].sort((a, b) => new Date(a.validFrom).getTime() - new Date(b.validFrom).getTime());
@@ -88,7 +90,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   const ukoncene = denMesice ? [] : services.filter(jeUkoncena);
   const roky = (() => {
     const ted = new Date().getFullYear();
-    const od = Math.min(ted, ...services.map((x) => x.contractStart ? new Date(x.contractStart).getFullYear() : ted));
+    const od = Math.min(ted, ...services.map((x) => zacatek(x)?.getFullYear() ?? ted));
     return Array.from({ length: ted + 1 - od + 1 }, (_, i) => ted + 1 - i);
   })();
   const MESICE = ["leden", "únor", "březen", "duben", "květen", "červen", "červenec", "srpen", "září", "říjen", "listopad", "prosinec"];
@@ -221,9 +223,9 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                       </span>
                       <div className="min-w-0">
                         <div className="font-medium leading-tight">{nazevDruhu(typy, s.type)}</div>
-                        {s.contractStart && (
+                        {zacatek(s) && (
                           <div className="text-xs text-ink-muted">
-                            platí od {dateCz(s.contractStart)}
+                            platí od {dateCz(zacatek(s)!)}
                             {s.activeTo && <> do {dateCz(s.activeTo)}</>}
                           </div>
                         )}
@@ -315,10 +317,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                           }
                           return (
                             <li key={z.id} className="flex items-center gap-3">
-                              <span className="tabular-nums">{odText} {doText}{j === 0 && <span className="ml-1.5 text-accent">· aktuální</span>}
-                                {s.contractStart && new Date(z.validFrom).getTime() < new Date(s.contractStart).getTime() && (
-                                  <span className="ml-1.5 text-warn">· před začátkem služby ({dateCz(s.contractStart)})</span>
-                                )}</span>
+                              <span className="tabular-nums">{odText} {doText}{j === 0 && <span className="ml-1.5 text-accent">· aktuální</span>}</span>
                               <span className="ml-auto font-medium tabular-nums">{czk(z.monthlyCost + (z.annualCost ?? 0) / 12)}/měs.</span>
                               {canEdit && (
                                 <>
@@ -469,7 +468,7 @@ function Formular({ propertyId, r, action, pending, popisekTlacitka, typy, skupi
       )}
       <Pole label="Služba platí od" name="contractStart" type="date" required
         defaultValue={isoDatum(r?.contractStart) || (r ? "" : dnesISO())}
-        hint="Od tohoto dne se služba počítá do nákladů a záloh; dřívější období se s ní neporovnává." />
+        hint="Od tohoto dne se služba počítá do nákladů a záloh. Když je v historii poplatků zapsaná dřívější výše, služba platí od ní." />
       <Pole label="Služba platila do" name="activeTo" type="date" defaultValue={isoDatum(r?.activeTo)}
         hint="Vyplň, když jsi službu ukončil. Po tomto dni se do nákladů a záloh nepočítá; prázdné = platí dosud." />
       <div>

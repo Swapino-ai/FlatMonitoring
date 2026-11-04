@@ -284,10 +284,20 @@ export function platnyKDatu<T extends { validFrom: Date | string }>(zmeny: T[] |
   return vysledek;
 }
 
+/** Skutecny zacatek sluzby: drivejsi z "plati od" a prvni vyse v historii poplatku. */
+export function zacatekSluzby(s: { contractStart?: Date | string | null; historie?: { validFrom: Date | string }[] }): Date | null {
+  // Bez "plati od" plati sluzba odjakziva (pred prvni znamou vysi plati ta prvni)
+  if (!s.contractStart) return null;
+  const kandidati = [s.contractStart, ...(s.historie ?? []).map((h) => h.validFrom)].map((x) => den(x).getTime());
+  return new Date(Math.min(...kandidati));
+}
+
 /** Sluzba s cenou, ktera platila k danemu datu. */
 export function sluzbaKDatu(s: SluzbaVstup, datum: Date): SluzbaVstup {
-  // Sluzba, ktera jeste neplati, se k tomuto dni nepreuctovava a nic nestoji
-  if (s.contractStart && den(s.contractStart).getTime() > datum.getTime()) {
+  // Sluzba, ktera jeste neplati, se k tomuto dni nepreuctovava a nic nestoji.
+  // Zacatek je nejdrivejsi z "plati od" a prvni zapsane vyse v historii (platilo se uz tehdy).
+  const zacatek = zacatekSluzby(s);
+  if (zacatek && zacatek.getTime() > datum.getTime()) {
     return { ...s, monthlyCost: 0, annualCost: null, chargedToTenant: false };
   }
   // Ukoncena sluzba: po poslednim dni platnosti uz nic nestoji

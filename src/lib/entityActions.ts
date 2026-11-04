@@ -97,6 +97,9 @@ async function prepocitejAktualniNaklad(tx: Tx, serviceId: string) {
   if (dnes) {
     await tx.service.update({ where: { id: serviceId }, data: { monthlyCost: dnes.monthlyCost, annualCost: dnes.annualCost } });
   }
+  // Prvni zapsana vyse je zacatek sluzby (uz tehdy se platilo) — "plati od" se srovna
+  const prvni = zaznamy.reduce<Date | null>((a, z) => (!a || z.validFrom < a ? z.validFrom : a), null);
+  if (prvni) await tx.service.updateMany({ where: { id: serviceId, contractStart: { gt: prvni } }, data: { contractStart: prvni } });
 }
 
 async function prepocitejAktualniZalohy(tx: Tx, leaseId: string) {
@@ -445,6 +448,9 @@ export async function saveService(id: string | null, _prev: EntityFormState, for
     const { monthlyCost: _m, annualCost: _a, ...bezNakladu } = data;
     await prisma.$transaction(async (tx) => {
       await tx.service.update({ where: { id }, data: bezNakladu });
+      // Zacatek sluzby nesmi byt po prvni zapsane vysi (platilo se uz od ni)
+      const prvni = stara.costChanges.reduce<Date | null>((a, z) => (!a || z.validFrom < a ? z.validFrom : a), null);
+      if (prvni) await tx.service.updateMany({ where: { id, contractStart: { gt: prvni } }, data: { contractStart: prvni } });
       if (!zmenaNakladu) return;
 
       const platiOd = new Date(d.costValidFrom!);
