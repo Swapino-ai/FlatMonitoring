@@ -13,10 +13,20 @@ export const dynamic = "force-dynamic";
 export default async function VykazPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await page();
   const { id } = await params;
-  const property = await prisma.property.findUnique({
-    where: { id },
-    include: { vykazy: { orderBy: [{ datum: "desc" }, { createdAt: "desc" }] } },
-  });
+  // Starsi zaznamy s jmenem jako textem: prevest na pracovniky (jednou)
+  const stare = await prisma.vykazPrace.findMany({ where: { propertyId: id, kdo: { not: null } }, select: { id: true, kdo: true } });
+  for (const z of stare) {
+    const j = z.kdo!.trim();
+    const p = j ? await prisma.pracovnik.findFirst({ where: { jmeno: { equals: j, mode: "insensitive" } } }) ?? await prisma.pracovnik.create({ data: { jmeno: j } }) : null;
+    await prisma.vykazPrace.update({ where: { id: z.id }, data: { kdo: null, ...(p ? { lide: { connect: { id: p.id } } } : {}) } });
+  }
+  const [property, pracovnici] = await Promise.all([
+    prisma.property.findUnique({
+      where: { id },
+      include: { vykazy: { orderBy: [{ datum: "desc" }, { createdAt: "desc" }], include: { lide: { select: { id: true }, orderBy: { jmeno: "asc" } } } } },
+    }),
+    prisma.pracovnik.findMany({ orderBy: { jmeno: "asc" }, select: { id: true, jmeno: true, _count: { select: { vykazy: true } } } }),
+  ]);
   if (!property) notFound();
   const [fotky, disk] = await Promise.all([
     prisma.dokument.findMany({ where: { vykazId: { in: property.vykazy.map((v) => v.id) } }, select: { id: true, vykazId: true, name: true }, orderBy: { createdAt: "asc" } }),
@@ -30,8 +40,9 @@ export default async function VykazPage({ params }: { params: Promise<{ id: stri
       <main className="mx-auto max-w-[1100px] space-y-5 p-4 sm:p-6">
         <HlavickaNemovitosti property={property} canEdit={canEdit} aktivni="vykaz" />
         <VykazPrace propertyId={id} canEdit={canEdit} diskPripojen={!!disk}
+          pracovnici={pracovnici.sort((a, b) => b._count.vykazy - a._count.vykazy || a.jmeno.localeCompare(b.jmeno, "cs")).map((p) => ({ id: p.id, jmeno: p.jmeno }))}
           zaznamy={property.vykazy.map((v) => ({
-            id: v.id, datum: denISO(v.datum), kdo: v.kdo, minut: v.minut, popis: v.popis,
+            id: v.id, datum: denISO(v.datum), lide: v.lide.map((l) => l.id), minut: v.minut, popis: v.popis,
             fotky: fotky.filter((f) => f.vykazId === v.id).map((f) => ({ id: f.id, nazev: f.name })),
           }))} />
       </main>

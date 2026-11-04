@@ -8,7 +8,7 @@ import { DatumPole } from "./DatumPole";
 import { Galerie } from "./Galerie";
 import { Ikona } from "./Ikony";
 
-export interface ZaznamVykazu { id: string; datum: string; kdo: string; minut: number; popis: string; fotky: { id: string; nazev: string }[] }
+export interface ZaznamVykazu { id: string; datum: string; /** id pracovniku */ lide: string[]; minut: number; popis: string; fotky: { id: string; nazev: string }[] }
 interface Fotka { data: string; mime: string; nahled: string }
 
 const dnes = () => new Date().toISOString().slice(0, 10);
@@ -37,14 +37,16 @@ async function zmensi(f: File): Promise<Fotka> {
   }
 }
 
-type Formular = { id?: string; datum: string | null; kdo: string; hodiny: string; minuty: string; popis: string; fotky: Fotka[] };
+type Formular = { id?: string; datum: string | null; lide: string[]; noveJmena: string[]; novyText: string; pridavam: boolean; hodiny: string; minuty: string; popis: string; fotky: Fotka[] };
 
 /**
  * Vykaz prace na byte: kdo pracoval, kolik casu, co udelal a fotky z telefonu.
  * Delane hlavne pro mobil — velka tlacitka, rychla volba casu, fotky rovnou z fotoaparatu.
  */
-export function VykazPrace({ propertyId, canEdit, diskPripojen, zaznamy }: {
+export function VykazPrace({ propertyId, canEdit, diskPripojen, zaznamy: vsechny, pracovnici }: {
   propertyId: string; canEdit: boolean; diskPripojen: boolean; zaznamy: ZaznamVykazu[];
+  /** Vsichni pracovnici v systemu (nejcastejsi prvni) */
+  pracovnici: { id: string; jmeno: string }[];
 }) {
   const [bezi, spust] = useTransition();
   const [hlaska, setHlaska] = useState<{ ok: boolean; text: string } | null>(null);
@@ -56,8 +58,25 @@ export function VykazPrace({ propertyId, canEdit, diskPripojen, zaznamy }: {
   const [kZaznamu, setKZaznamu] = useState<string | null>(null);
   const formular = useRef<HTMLDivElement>(null);
 
-  const lide = useMemo(() => [...new Set(zaznamy.map((z) => z.kdo))], [zaznamy]);
-  const novy = (): Formular => ({ datum: dnes(), kdo: lide[0] ?? "", hodiny: "", minuty: "", popis: "", fotky: [] });
+  const jmeno = useMemo(() => new Map(pracovnici.map((p) => [p.id, p.jmeno])), [pracovnici]);
+  const jmena = (ids: string[]) => ids.map((i) => jmeno.get(i) ?? "?").join(", ");
+  // Filtr: kdo co delal (pracovnik id)
+  const [filtr, setFiltr] = useState<string | null>(null);
+  const zaznamy = filtr ? vsechny.filter((z) => z.lide.includes(filtr)) : vsechny;
+  const naBytu = pracovnici.filter((p) => vsechny.some((z) => z.lide.includes(p.id)));
+  // Novy zaznam: predvyplni se lide z posledniho zaznamu (nebo jediny pracovnik v systemu)
+  const novy = (): Formular => ({
+    datum: dnes(), lide: vsechny[0]?.lide ?? (pracovnici.length === 1 ? [pracovnici[0].id] : []), noveJmena: [], novyText: "", pridavam: false,
+    hodiny: "", minuty: "", popis: "", fotky: [],
+  });
+  /** Prida napsane jmeno: existujici (bez ohledu na velka pismena) se jen vybere */
+  const pridejJmeno = (f: Formular): Formular => {
+    const j = f.novyText.trim().replace(/\s+/g, " ");
+    if (!j) return { ...f, pridavam: false };
+    const ex = pracovnici.find((p) => p.jmeno.toLocaleLowerCase("cs") === j.toLocaleLowerCase("cs"));
+    if (ex) return { ...f, novyText: "", pridavam: false, lide: f.lide.includes(ex.id) ? f.lide : [...f.lide, ex.id] };
+    return { ...f, novyText: "", pridavam: false, noveJmena: f.noveJmena.some((x) => x.toLocaleLowerCase("cs") === j.toLocaleLowerCase("cs")) ? f.noveJmena : [...f.noveJmena, j] };
+  };
   const otevri = (f: Formular) => { setForm(f); setHlaska(null); setTimeout(() => formular.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); };
 
   const pridejFotky = async (soubory: FileList | null) => {
@@ -83,9 +102,10 @@ export function VykazPrace({ propertyId, canEdit, diskPripojen, zaznamy }: {
 
   const uloz = () => {
     if (!form) return;
-    const minut = (Number(form.hodiny.replace(",", ".")) || 0) * 60 + (Number(form.minuty) || 0);
+    const f = pridejJmeno(form);
+    const minut = (Number(f.hodiny.replace(",", ".")) || 0) * 60 + (Number(f.minuty) || 0);
     spust(async () => {
-      const r = await ulozVykaz(propertyId, { id: form.id, datum: form.datum ?? "", kdo: form.kdo, minut, popis: form.popis });
+      const r = await ulozVykaz(propertyId, { id: f.id, datum: f.datum ?? "", lide: f.lide, noveJmena: f.noveJmena, minut, popis: f.popis });
       if (r.error || !r.id) { setHlaska({ ok: false, text: r.error ?? "Nepodařilo se uložit." }); return; }
       const puvodni = zaznamy.find((z) => z.id === r.id)?.fotky.length ?? 0;
       const chyb = form.fotky.length ? await nahraj(r.id, form.fotky, puvodni + 1) : 0;
@@ -107,11 +127,12 @@ export function VykazPrace({ propertyId, canEdit, diskPripojen, zaznamy }: {
 
   // Souhrn: kolik casu kdo stravil (tento mesic a rok)
   const mesic = dnes().slice(0, 7), rok = dnes().slice(0, 4);
-  const souhrn = lide.map((kdo) => ({
-    kdo,
-    mesic: zaznamy.filter((z) => z.kdo === kdo && z.datum.startsWith(mesic)).reduce((a, z) => a + z.minut, 0),
-    rok: zaznamy.filter((z) => z.kdo === kdo && z.datum.startsWith(rok)).reduce((a, z) => a + z.minut, 0),
-  })).filter((x) => x.rok > 0);
+  const souhrn = naBytu.map((p) => ({
+    id: p.id, kdo: p.jmeno,
+    mesic: vsechny.filter((z) => z.lide.includes(p.id) && z.datum.startsWith(mesic)).reduce((a, z) => a + z.minut, 0),
+    rok: vsechny.filter((z) => z.lide.includes(p.id) && z.datum.startsWith(rok)).reduce((a, z) => a + z.minut, 0),
+    celkem: vsechny.filter((z) => z.lide.includes(p.id)).reduce((a, z) => a + z.minut, 0),
+  }));
   const poMesicich = useMemo(() => {
     const m = new Map<string, ZaznamVykazu[]>();
     for (const z of zaznamy) m.set(z.datum.slice(0, 7), [...(m.get(z.datum.slice(0, 7)) ?? []), z]);
@@ -135,21 +156,35 @@ export function VykazPrace({ propertyId, canEdit, diskPripojen, zaznamy }: {
             <div className="grid gap-4 sm:grid-cols-2">
               <DatumPole label="Kdy" name="vykaz-datum" defaultValue={form.datum ?? ""} onChange={(d) => setForm((x) => x && { ...x, datum: d })} />
               <div>
-                <label className="label mb-1.5 block" htmlFor="vykaz-kdo">Kdo pracoval</label>
-                <input id="vykaz-kdo" className="input" list="vykaz-lide" autoComplete="off" placeholder="Jméno" value={form.kdo}
-                  onChange={(e) => setForm((x) => x && { ...x, kdo: e.target.value })} />
-                <datalist id="vykaz-lide">{lide.map((l) => <option key={l} value={l} />)}</datalist>
-                {lide.length > 1 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {lide.slice(0, 6).map((l) => (
-                      <button key={l} type="button" onClick={() => setForm((x) => x && { ...x, kdo: l })}
-                        className={`rounded-full border px-3 py-1 text-sm ${form.kdo === l ? "border-accent bg-accent-soft text-accent" : "border-line"}`}>{l}</button>
-                    ))}
+                <span className="label mb-1.5 block">Kdo pracoval</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {pracovnici.map((p) => {
+                    const ano = form.lide.includes(p.id);
+                    return (
+                      <button key={p.id} type="button" aria-pressed={ano}
+                        onClick={() => setForm((x) => x && { ...x, lide: ano ? x.lide.filter((i) => i !== p.id) : [...x.lide, p.id] })}
+                        className={`rounded-full border px-3.5 py-1.5 text-sm ${ano ? "border-accent bg-accent text-white" : "border-line"}`}>{ano ? "✓ " : ""}{p.jmeno}</button>
+                    );
+                  })}
+                  {form.noveJmena.map((j) => (
+                    <button key={j} type="button" title="Odebrat" onClick={() => setForm((x) => x && { ...x, noveJmena: x.noveJmena.filter((y) => y !== j) })}
+                      className="rounded-full border border-accent bg-accent px-3.5 py-1.5 text-sm text-white">✓ {j} <span className="text-xs opacity-80">(nový) ✕</span></button>
+                  ))}
+                  {pracovnici.length > 0 && !form.pridavam && (
+                    <button type="button" className="rounded-full border border-dashed border-line px-3.5 py-1.5 text-sm text-accent" onClick={() => setForm((x) => x && { ...x, pridavam: true })}>+ Nové jméno</button>
+                  )}
+                </div>
+                {(form.pridavam || pracovnici.length === 0) && (
+                  <div className="mt-2 flex gap-2">
+                    <input autoFocus={pracovnici.length > 0} className="input" placeholder="Jméno a příjmení" aria-label="Nové jméno" value={form.novyText}
+                      onChange={(e) => setForm((x) => x && { ...x, novyText: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setForm((x) => x && pridejJmeno(x)); } }} />
+                    <button type="button" className="btn" disabled={!form.novyText.trim()} onClick={() => setForm((x) => x && pridejJmeno(x))}>Přidat</button>
                   </div>
                 )}
               </div>
               <div className="sm:col-span-2">
-                <span className="label mb-1.5 block">Kolik času</span>
+                <span className="label mb-1.5 block">Kolik času{form.lide.length + form.noveJmena.length > 1 ? " (každý)" : ""}</span>
                 <div className="flex flex-wrap gap-1.5">
                   {RYCHLE.map((m) => (
                     <button key={m} type="button" onClick={() => setForm((x) => x && { ...x, hodiny: String(Math.floor(m / 60) || ""), minuty: String(m % 60 || "") })}
@@ -206,7 +241,7 @@ export function VykazPrace({ propertyId, canEdit, diskPripojen, zaznamy }: {
             </div>
             {nahravam && <p className="mt-3 text-sm text-ink-secondary">{nahravam}</p>}
             <div className="mt-4 flex gap-2">
-              <button type="button" className="btn btn-primary flex-1 py-2.5 sm:flex-none" disabled={bezi || !form.datum || !form.kdo.trim() || !form.popis.trim() || minutFormu <= 0} onClick={uloz}>
+              <button type="button" className="btn btn-primary flex-1 py-2.5 sm:flex-none" disabled={bezi || !form.datum || (!form.lide.length && !form.noveJmena.length && !form.novyText.trim()) || !form.popis.trim() || minutFormu <= 0} onClick={uloz}>
                 {bezi ? "Ukládám…" : "Uložit"}
               </button>
               <button type="button" className="btn py-2.5" disabled={bezi} onClick={() => setForm(null)}>Zrušit</button>
@@ -216,14 +251,18 @@ export function VykazPrace({ propertyId, canEdit, diskPripojen, zaznamy }: {
       )}
 
       {souhrn.length > 0 && (
-        <Card title="Kolik kdo odpracoval">
+        <Card title="Kdo co dělal" action={filtr ? <button type="button" className="text-sm text-accent hover:underline" onClick={() => setFiltr(null)}>Zobrazit všechny</button> : undefined}>
+          <p className="mb-2 text-xs text-ink-muted">Klepni na jméno — ukážou se jen jeho práce.</p>
           <ul className="divide-y divide-line/70 text-sm">
             {souhrn.map((s) => (
-              <li key={s.kdo} className="flex items-center justify-between gap-3 py-2">
-                <span className="font-medium">{s.kdo}</span>
-                <span className="text-right tabular-nums text-ink-secondary">
-                  tento měsíc <strong className="text-ink-primary">{casText(s.mesic)}</strong> · {rok} <strong className="text-ink-primary">{casText(s.rok)}</strong>
-                </span>
+              <li key={s.id}>
+                <button type="button" aria-pressed={filtr === s.id} onClick={() => setFiltr(filtr === s.id ? null : s.id)}
+                  className={`-mx-2 flex w-[calc(100%+1rem)] flex-wrap items-center justify-between gap-x-3 gap-y-0.5 rounded-lg px-2 py-2 text-left ${filtr === s.id ? "bg-accent-soft" : "hover:bg-surface-sunken"}`}>
+                  <span className={`font-medium ${filtr === s.id ? "text-accent" : ""}`}>{filtr === s.id ? "✓ " : ""}{s.kdo}</span>
+                  <span className="tabular-nums text-ink-secondary">
+                    měsíc <strong className="text-ink-primary">{casText(s.mesic)}</strong> · {rok} <strong className="text-ink-primary">{casText(s.rok)}</strong> · celkem <strong className="text-ink-primary">{casText(s.celkem)}</strong>
+                  </span>
+                </button>
               </li>
             ))}
           </ul>
@@ -239,8 +278,8 @@ export function VykazPrace({ propertyId, canEdit, diskPripojen, zaznamy }: {
             {polozky.map((z) => (
               <li key={z.id} className="py-3">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                  <span className="text-sm"><strong>{z.kdo}</strong> <span className="text-ink-muted">· {dateCz(z.datum)}</span></span>
-                  <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-sm font-semibold tabular-nums text-accent">{casText(z.minut)}</span>
+                  <span className="text-sm"><strong>{jmena(z.lide)}</strong> <span className="text-ink-muted">· {dateCz(z.datum)}</span></span>
+                  <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-sm font-semibold tabular-nums text-accent">{casText(z.minut)}{z.lide.length > 1 ? " každý" : ""}</span>
                 </div>
                 <p className="mt-1 whitespace-pre-line text-sm text-ink-secondary">{z.popis}</p>
                 {z.fotky.length > 0 && (
@@ -256,7 +295,7 @@ export function VykazPrace({ propertyId, canEdit, diskPripojen, zaznamy }: {
                 {canEdit && (
                   <div className="mt-2 flex flex-wrap gap-4 text-sm">
                     {diskPripojen && <button type="button" className="text-accent hover:underline" disabled={bezi} onClick={() => { setKZaznamu(z.id); vstupKZaznamu.current?.click(); }}>+ fotky</button>}
-                    <button type="button" className="text-accent hover:underline" onClick={() => otevri({ id: z.id, datum: z.datum, kdo: z.kdo, hodiny: String(Math.floor(z.minut / 60) || ""), minuty: String(z.minut % 60 || ""), popis: z.popis, fotky: [] })}>Upravit</button>
+                    <button type="button" className="text-accent hover:underline" onClick={() => otevri({ id: z.id, datum: z.datum, lide: z.lide, noveJmena: [], novyText: "", pridavam: false, hodiny: String(Math.floor(z.minut / 60) || ""), minuty: String(z.minut % 60 || ""), popis: z.popis, fotky: [] })}>Upravit</button>
                     <button type="button" className="text-bad hover:underline" disabled={bezi}
                       onClick={() => { if (confirm("Smazat záznam i s fotkami?")) spust(async () => { const r = await smazVykaz(propertyId, z.id); if (r.error) setHlaska({ ok: false, text: r.error }); }); }}>Smazat</button>
                   </div>

@@ -652,13 +652,24 @@ model DriveFolder {
 }
 
 /// Dokument nahrany na Google Disk. Vazby jsou volne (retezce), at smazani zaznamu nesmaze soubor.
+/// Clovek, ktery pracuje na bytech (vykaz prace); jmena jsou spolecna pro vsechny byty
+model Pracovnik {
+  id        String       @id @default(cuid())
+  jmeno     String       @unique
+  createdAt DateTime     @default(now())
+  vykazy    VykazPrace[]
+}
+
 /// Zaznam prace na byte: kdo, kdy, kolik casu, co udelal (fotky jsou Dokumenty s vykazId)
 model VykazPrace {
   id         String   @id @default(cuid())
   propertyId String
   property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   datum      DateTime
-  kdo        String
+  /// Puvodni textove jmeno (pred evidenci pracovniku) — prevede se na lide
+  kdo        String?
+  /// Kdo pracoval (muze jich byt vic); cas je na kazdeho
+  lide       Pracovnik[]
   minut      Int
   popis      String
   createdAt  DateTime @default(now())
