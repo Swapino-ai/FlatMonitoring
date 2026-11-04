@@ -32,6 +32,8 @@ export interface CileNemovitosti {
   id: string; nazev: string; adresa: string; kratkodoby: boolean;
   smlouvy: { id: string; nazev: string }[];
   predpisy: { cil: string; nazev: string }[];
+  /** Vsechny sluzby jednoho dodavatele za mesic jednou platbou */
+  skupiny?: { cil: string; nazev: string; detail: string }[];
   vratky: { cil: string; nazev: string }[];
 }
 type Kategorie = { key: string; label: string };
@@ -124,6 +126,7 @@ function Prirazeni({ p, cile, kategorie, vychoziNemovitost, vychoziCil, bezi, on
   }
   const skupiny: Skupina[] = odchozi
     ? [
+        { label: "Všechny služby dodavatele (jedna platba)", moznosti: (n.skupiny ?? []).map((x) => ({ value: x.cil, label: x.nazev, detail: x.detail })) },
         { label: "Nezaplacené předpisy", moznosti: n.predpisy.map((x) => ({ value: x.cil, label: x.nazev })) },
         { label: "Vrácení přeplatku nájemci", moznosti: n.vratky.map((x) => ({ value: x.cil, label: x.nazev })) },
         { label: "Výdaj", moznosti: kategorie.vydaje.map((k) => ({ value: `vydaj:${n.id}:${k.key}`, label: k.label })) },
@@ -169,6 +172,7 @@ function coUhradila(p: PohybRadek["parovani"]): string {
     const [typ, , ...k] = p.vydaj.split(":");
     if (typ === "vratka") return `vrácení přeplatku${p.cislo ? ` ${p.cislo}` : ""}`;
     if (typ === "vydaj") return `kategorie: ${k[0] ?? ""}`;
+    if (typ === "skupina") return `služby ${k.slice(1).join(":")} ${Number((k[0] ?? "").slice(5))}/${(k[0] ?? "").slice(0, 4)}`;
     const [druh, , mesic] = k;
     return `${POPIS_PREDPISU[druh] ?? "předpis"}${mesic && /^\d{4}-\d{2}$/.test(mesic) ? ` ${Number(mesic.slice(5))}/${mesic.slice(0, 4)}` : ""}`;
   }
@@ -257,7 +261,7 @@ export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, spar
               const odchozi = p.castka < 0;
               // Navrh: smlouva (prichozi) nebo cil (odchozi) urci i nemovitost
               const navrhNem = odchozi
-                ? (p.navrhCil?.startsWith("predpis:") || p.navrhCil?.startsWith("vydaj:") ? p.navrhCil.split(":")[1] : null)
+                ? (p.navrhCil?.startsWith("predpis:") || p.navrhCil?.startsWith("vydaj:") || p.navrhCil?.startsWith("skupina:") ? p.navrhCil.split(":")[1] : null)
                 : cile.find((c) => c.smlouvy.some((x) => x.id === p.navrhLeaseId))?.id ?? null;
               const navrh = odchozi ? p.navrhCil ?? "" : p.navrhLeaseId ? `lease:${p.navrhLeaseId}` : "";
               return (

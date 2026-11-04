@@ -7,6 +7,7 @@ import { prisma } from "@/lib/db";
 import { fioNastaveno } from "@/lib/fio";
 import { denISO } from "@/lib/format";
 import { nactiNavrhyPortfolia } from "@/lib/pravidelnePlatbyData";
+import { skupinySluzeb } from "@/lib/parovani";
 import { CATEGORIES } from "@/lib/categories";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +38,11 @@ export default async function BankaPage() {
     predpisy: (navrhy.get(n.id) ?? [])
       .filter((x: { castka: number; stav: string; mesic: string }) => x.castka < 0 && x.stav === "nezaplaceno" && x.mesic >= odDne)
       .map((x: { klic: string; popis: string; mesic: string; castka: number }) => ({ cil: `predpis:${n.id}:${x.klic}`, nazev: `${x.popis} · ${Number(x.mesic.slice(5))}/${x.mesic.slice(0, 4)} · ${Math.round(-x.castka).toLocaleString("cs-CZ")} Kč` })),
+    skupiny: skupinySluzeb(navrhy.get(n.id) ?? []).filter((g) => g.mesic >= odDne).map((g) => ({
+      cil: `skupina:${n.id}:${g.mesic}:${g.dodavatel}`,
+      nazev: `${g.dodavatel} · ${Number(g.mesic.slice(5))}/${g.mesic.slice(0, 4)} · ${Math.round(g.castka).toLocaleString("cs-CZ")} Kč`,
+      detail: g.polozky.map((x) => x.popis.replace(/ \d{2}\/\d{4}$/, "")).join(", "),
+    })),
     vratky: vratky.filter((v) => v.propertyId === n.id).map((v) => ({ cil: `vratka:${v.id}`, nazev: `Vrácení přeplatku ${v.cislo} · ${(v.snapshot as { najemce?: { name?: string } })?.najemce?.name ?? ""} · ${Math.round(v.result).toLocaleString("cs-CZ")} Kč` })),
   }));
   const kategorie = {

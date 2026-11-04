@@ -123,16 +123,49 @@ export async function sparujKratkodoby(pohybId: string, propertyId: string): Pro
 export type CilVydaje =
   | { typ: "predpis"; klic: string; propertyId: string }
   | { typ: "vratka"; statementId: string }
-  | { typ: "vydaj"; propertyId: string; kategorie: string };
+  | { typ: "vydaj"; propertyId: string; kategorie: string }
+  /** Vsechny sluzby jednoho dodavatele za mesic jednou platbou (napr. SVJ) */
+  | { typ: "skupina"; propertyId: string; mesic: string; dodavatel: string };
 
 export const cilZTextu = (t: string): CilVydaje | null => {
   const [typ, a, ...zbytek] = t.split(":");
   if (typ === "predpis" && a && zbytek.length) return { typ: "predpis", propertyId: a, klic: zbytek.join(":") };
   if (typ === "vratka" && a) return { typ: "vratka", statementId: a };
   if (typ === "vydaj" && a && zbytek[0]) return { typ: "vydaj", propertyId: a, kategorie: zbytek[0] };
+  if (typ === "skupina" && a && /^\d{4}-\d{2}$/.test(zbytek[0] ?? "") && zbytek.length > 1) return { typ: "skupina", propertyId: a, mesic: zbytek[0], dodavatel: zbytek.slice(1).join(":") };
   return null;
 };
-export const cilNaText = (c: CilVydaje) => c.typ === "predpis" ? `predpis:${c.propertyId}:${c.klic}` : c.typ === "vratka" ? `vratka:${c.statementId}` : `vydaj:${c.propertyId}:${c.kategorie}`;
+export const cilNaText = (c: CilVydaje) => c.typ === "predpis" ? `predpis:${c.propertyId}:${c.klic}` : c.typ === "vratka" ? `vratka:${c.statementId}`
+  : c.typ === "skupina" ? `skupina:${c.propertyId}:${c.mesic}:${c.dodavatel}` : `vydaj:${c.propertyId}:${c.kategorie}`;
+
+export interface SkupinaSluzeb { dodavatel: string; mesic: string; castka: number; polozky: NavrzenaPlatba[] }
+
+/**
+ * Nezaplacene sluzby po dodavatelich a mesicich: kdyz ma byt u jednoho dodavatele vic sluzeb,
+ * plati se jednou castkou (napr. SVJ: sprava, fond oprav, voda, teplo). Co se plati zvlast,
+ * ma u sluzby jineho dodavatele.
+ */
+export function skupinySluzeb(navrhy: NavrzenaPlatba[]): SkupinaSluzeb[] {
+  const sluzby = navrhy.filter((p) => p.druh === "SLUZBA" && p.skupina.typ === "DODAVATEL" && p.skupina.nazev !== "Bez dodavatele");
+  const pocet = new Map<string, Set<string>>();
+  for (const p of sluzby) {
+    const m = pocet.get(p.skupina.nazev) ?? new Set<string>();
+    m.add(p.klic.split(":")[1]);
+    pocet.set(p.skupina.nazev, m);
+  }
+  const g = new Map<string, SkupinaSluzeb>();
+  for (const p of sluzby) {
+    if ((pocet.get(p.skupina.nazev)?.size ?? 0) < 2 || p.stav !== "nezaplaceno" || p.castka >= 0) continue;
+    const k = `${p.skupina.nazev}|${p.mesic}`;
+    const x = g.get(k) ?? { dodavatel: p.skupina.nazev, mesic: p.mesic, castka: 0, polozky: [] };
+    x.polozky.push(p);
+    x.castka = Math.round((x.castka - p.castka) * 100) / 100;
+    g.set(k, x);
+  }
+  return [...g.values()].sort((a, b) => a.mesic.localeCompare(b.mesic) || a.dodavatel.localeCompare(b.dodavatel, "cs"));
+}
+
+const mesicCz = (m: string) => `${Number(m.slice(5))}/${m.slice(0, 4)}`;
 
 /** Odchozi platbu zapise k cili: predpis se oznaci jako zaplaceny, vratka vyporada vyuctovani, vydaj se zauctuje. */
 export async function sparujVydaj(pohybId: string, cil: CilVydaje): Promise<{ ok: boolean; zprava: string }> {
@@ -152,6 +185,27 @@ export async function sparujVydaj(pohybId: string, cil: CilVydaje): Promise<{ ok
       prisma.bankovniPohyb.update({ where: { id: pohybId }, data: { stav: "SPAROVANO", propertyId: cil.propertyId, navrhCil: null, poznamka: null, parovani: { vydaj: cilNaText(cil) } } }),
     ]);
     return { ok: true, zprava: "Platba zapsána k předpisu." };
+  }
+  if (cil.typ === "skupina") {
+    const sk = skupinySluzeb(await nactiNavrhPlatby(cil.propertyId)).find((x) => x.dodavatel === cil.dodavatel && x.mesic === cil.mesic);
+    if (!sk) return { ok: false, zprava: `Služby ${cil.dodavatel} za ${mesicCz(cil.mesic)} už jsou zaplacené.` };
+    const rozdil = Math.round((castka - sk.castka) * 100) / 100;
+    await prisma.$transaction([
+      ...sk.polozky.map((x) => prisma.pravidelnaPlatba.upsert({
+        where: { klic: x.klic },
+        update: { paidAt: pohyb.datum, amount: Math.abs(x.castka), pohybId },
+        create: { propertyId: cil.propertyId, klic: x.klic, paidAt: pohyb.datum, amount: Math.abs(x.castka), pohybId },
+      })),
+      prisma.bankovniPohyb.update({
+        where: { id: pohybId },
+        data: {
+          stav: "SPAROVANO", propertyId: cil.propertyId, navrhCil: null,
+          poznamka: Math.abs(rozdil) >= TOLERANCE ? `Zaplaceno o ${Math.abs(rozdil).toLocaleString("cs-CZ")} Kč ${rozdil > 0 ? "víc" : "míň"}, než je součet předpisů (${sk.castka.toLocaleString("cs-CZ")} Kč) — dorovná vyúčtování od dodavatele.` : null,
+          parovani: { vydaj: cilNaText(cil), klice: sk.polozky.map((x) => x.klic) },
+        },
+      }),
+    ]);
+    return { ok: true, zprava: `Zaplaceno ${sk.polozky.length} služeb ${cil.dodavatel} za ${mesicCz(cil.mesic)}.` };
   }
   if (cil.typ === "vratka") {
     const v = await prisma.tenantStatement.findUnique({ where: { id: cil.statementId } });
@@ -202,14 +256,30 @@ async function zpracujVydaj(p: { id: string; castka: number; datum: Date; vs: st
   if (driveCil?.typ === "predpis") {
     const predpona = driveCil.klic.split(":").slice(0, 2).join(":") + ":";
     const dalsi = await nezaplacenyPredpis(k, driveCil.propertyId, predpona, iso(p.datum));
+    // Sluzba je dnes ve skupine dodavatele → plati se cela skupina
+    const sk = dalsi ? skupinySluzeb(await navrhNemovitosti(k, driveCil.propertyId)).find((x) => x.polozky.some((y) => y.klic === dalsi.klic)) : null;
+    if (sk) { k.navrhy.delete(driveCil.propertyId); return (await sparujVydaj(p.id, { typ: "skupina", propertyId: driveCil.propertyId, mesic: sk.mesic, dodavatel: sk.dodavatel })).ok; }
     if (dalsi) { k.navrhy.delete(driveCil.propertyId); return (await sparujVydaj(p.id, { typ: "predpis", propertyId: driveCil.propertyId, klic: dalsi.klic })).ok; }
+  }
+  if (driveCil?.typ === "skupina") {
+    const limit = (() => { const d = new Date(p.datum); d.setUTCMonth(d.getUTCMonth() + 1); return iso(d).slice(0, 7); })();
+    const dalsi = skupinySluzeb(await navrhNemovitosti(k, driveCil.propertyId)).find((x) => x.dodavatel === driveCil.dodavatel && x.mesic <= limit);
+    if (dalsi) { k.navrhy.delete(driveCil.propertyId); return (await sparujVydaj(p.id, { ...driveCil, mesic: dalsi.mesic })).ok; }
   }
   if (driveCil?.typ === "vydaj") return (await sparujVydaj(p.id, driveCil)).ok;
 
   // Navrh podle castky: jediny nezaplaceny predpis se stejnou castkou
   const shodne: CilVydaje[] = [];
   for (const id of nemovitosti) {
-    for (const x of await navrhNemovitosti(k, id)) {
+    const navrhy = await navrhNemovitosti(k, id);
+    // Sluzby jednoho dodavatele se plati jednou castkou: sedi-li soucet skupiny, je to ona
+    const vSkupine = new Set<string>();
+    for (const sk of skupinySluzeb(navrhy)) {
+      sk.polozky.forEach((x) => vSkupine.add(x.klic));
+      if (Math.abs(sk.castka - castka) < TOLERANCE) shodne.push({ typ: "skupina", propertyId: id, mesic: sk.mesic, dodavatel: sk.dodavatel });
+    }
+    for (const x of navrhy) {
+      if (vSkupine.has(x.klic)) continue;
       if (x.castka < 0 && x.stav === "nezaplaceno" && Math.abs(Math.abs(x.castka) - castka) < TOLERANCE) shodne.push({ typ: "predpis", propertyId: id, klic: x.klic });
     }
   }
