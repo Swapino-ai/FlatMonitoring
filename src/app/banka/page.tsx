@@ -36,7 +36,8 @@ export default async function BankaPage() {
     id: n.id, nazev: n.name, adresa: [n.street, n.city].filter(Boolean).join(", "), kratkodoby: n.kratkodobe.length > 0,
     smlouvy: smlouvy.filter((s) => s.propertyId === n.id).map((s) => ({ id: s.id, nazev: `${s.tenantName}${s.isActive ? "" : " (skončená)"}` })),
     predpisy: (navrhy.get(n.id) ?? [])
-      .filter((x: { castka: number; stav: string; mesic: string }) => x.castka < 0 && x.stav === "nezaplaceno" && x.mesic >= odDne)
+      // Sluzby se paruji po dodavatelich (skupiny); tady zbyvaji splatky, nedoplatky dodavatelum a sluzby bez dodavatele
+      .filter((x: { klic: string; castka: number; stav: string; mesic: string; skupina: { nazev: string } }) => (!x.klic.startsWith("sluzba:") || x.skupina.nazev === "Bez dodavatele") && x.castka < 0 && x.stav === "nezaplaceno" && x.mesic >= odDne)
       .map((x: { klic: string; popis: string; mesic: string; castka: number }) => ({ cil: `predpis:${n.id}:${x.klic}`, nazev: `${x.popis} · ${Number(x.mesic.slice(5))}/${x.mesic.slice(0, 4)} · ${Math.round(-x.castka).toLocaleString("cs-CZ")} Kč` })),
     skupiny: skupinySluzeb(navrhy.get(n.id) ?? []).filter((g) => g.mesic >= odDne).map((g) => ({
       cil: `skupina:${n.id}:${g.mesic}:${g.dodavatel}`,

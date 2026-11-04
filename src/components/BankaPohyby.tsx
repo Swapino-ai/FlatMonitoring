@@ -126,8 +126,10 @@ function Prirazeni({ p, cile, kategorie, vychoziNemovitost, vychoziCil, bezi, on
   }
   const skupiny: Skupina[] = odchozi
     ? [
-        { label: "Všechny služby dodavatele (jedna platba)", moznosti: (n.skupiny ?? []).map((x) => ({ value: x.cil, label: x.nazev, detail: x.detail })) },
-        { label: "Nezaplacené předpisy", moznosti: n.predpisy.map((x) => ({ value: x.cil, label: x.nazev })) },
+        { label: "Služby (za dodavatele a měsíc)", moznosti: (n.skupiny ?? []).map((x) => ({ value: x.cil, label: x.nazev, detail: x.detail })) },
+        { label: "Splátky úvěru", moznosti: n.predpisy.filter((x) => x.cil.includes(":uver:")).map((x) => ({ value: x.cil, label: x.nazev })) },
+        { label: "Služby bez dodavatele", moznosti: n.predpisy.filter((x) => x.cil.includes(":sluzba:")).map((x) => ({ value: x.cil, label: x.nazev })) },
+        { label: "Nedoplatky z vyúčtování dodavatele", moznosti: n.predpisy.filter((x) => x.cil.includes(":vyuctovani:")).map((x) => ({ value: x.cil, label: x.nazev })) },
         { label: "Vrácení přeplatku nájemci", moznosti: n.vratky.map((x) => ({ value: x.cil, label: x.nazev })) },
         { label: "Výdaj", moznosti: kategorie.vydaje.map((k) => ({ value: `vydaj:${n.id}:${k.key}`, label: k.label })) },
       ]

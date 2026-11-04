@@ -141,21 +141,15 @@ export const cilNaText = (c: CilVydaje) => c.typ === "predpis" ? `predpis:${c.pr
 export interface SkupinaSluzeb { dodavatel: string; mesic: string; castka: number; polozky: NavrzenaPlatba[] }
 
 /**
- * Nezaplacene sluzby po dodavatelich a mesicich: kdyz ma byt u jednoho dodavatele vic sluzeb,
- * plati se jednou castkou (napr. SVJ: sprava, fond oprav, voda, teplo). Co se plati zvlast,
+ * Nezaplacene sluzby po dodavatelich a mesicich: vsechny sluzby jednoho dodavatele u bytu
+ * se plati jednou castkou (napr. SVJ: sprava, fond oprav, voda, teplo). Co se plati zvlast,
  * ma u sluzby jineho dodavatele.
  */
 export function skupinySluzeb(navrhy: NavrzenaPlatba[]): SkupinaSluzeb[] {
   const sluzby = navrhy.filter((p) => p.druh === "SLUZBA" && p.skupina.typ === "DODAVATEL" && p.skupina.nazev !== "Bez dodavatele");
-  const pocet = new Map<string, Set<string>>();
-  for (const p of sluzby) {
-    const m = pocet.get(p.skupina.nazev) ?? new Set<string>();
-    m.add(p.klic.split(":")[1]);
-    pocet.set(p.skupina.nazev, m);
-  }
   const g = new Map<string, SkupinaSluzeb>();
   for (const p of sluzby) {
-    if ((pocet.get(p.skupina.nazev)?.size ?? 0) < 2 || p.stav !== "nezaplaceno" || p.castka >= 0) continue;
+    if (p.stav !== "nezaplaceno" || p.castka >= 0) continue;
     const k = `${p.skupina.nazev}|${p.mesic}`;
     const x = g.get(k) ?? { dodavatel: p.skupina.nazev, mesic: p.mesic, castka: 0, polozky: [] };
     x.polozky.push(p);
