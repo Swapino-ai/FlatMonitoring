@@ -37,6 +37,71 @@ type Kategorie = { key: string; label: string };
 
 const bezDiakritiky = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
+type Moznost = { value: string; label: string; detail?: string };
+type Skupina = { label?: string; moznosti: Moznost[] };
+
+/**
+ * Vyber s hledanim: po kliknuti ukaze cely seznam (po skupinach), psanim se filtruje
+ * (bez diakritiky, v nazvu i v nazvu skupiny). Sipky + Enter vybiraji, Esc zavre.
+ */
+function HledaciVyber({ skupiny, value, onChange, placeholder, label, className = "" }: {
+  skupiny: Skupina[]; value: string; onChange: (v: string) => void; placeholder: string; label: string; className?: string;
+}) {
+  const [text, setText] = useState("");
+  const [otevreno, setOtevreno] = useState(false);
+  const [aktivni, setAktivni] = useState(0);
+  const vybrana = skupiny.flatMap((s) => s.moznosti).find((m) => m.value === value);
+  const q = bezDiakritiky(text.trim());
+  const filtr = skupiny
+    .map((s) => ({ ...s, moznosti: q ? s.moznosti.filter((m) => bezDiakritiky(`${m.label} ${m.detail ?? ""} ${s.label ?? ""}`).includes(q)) : s.moznosti }))
+    .filter((s) => s.moznosti.length);
+  const ploche = filtr.flatMap((s) => s.moznosti);
+  const vyber = (m: Moznost) => { onChange(m.value); setText(""); setOtevreno(false); };
+  let i = -1;
+  return (
+    <div className={`relative ${className}`}>
+      <input className="input w-full py-1.5 text-sm" aria-label={label} role="combobox" aria-expanded={otevreno}
+        placeholder={vybrana ? vybrana.label : placeholder}
+        value={otevreno ? text : vybrana?.label ?? ""}
+        onFocus={() => { setOtevreno(true); setText(""); setAktivni(0); }}
+        onBlur={() => setTimeout(() => setOtevreno(false), 150)}
+        onChange={(e) => { setText(e.target.value); setOtevreno(true); setAktivni(0); }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") { e.preventDefault(); setAktivni((a) => Math.min(a + 1, ploche.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setAktivni((a) => Math.max(a - 1, 0)); }
+          else if (e.key === "Enter" && ploche[aktivni]) { e.preventDefault(); vyber(ploche[aktivni]); (e.target as HTMLInputElement).blur(); }
+          else if (e.key === "Escape") (e.target as HTMLInputElement).blur();
+        }} />
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-muted">▾</span>
+      {otevreno && (
+        <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-xl border border-line bg-surface-card py-1 shadow-lg" role="listbox">
+          {filtr.map((s, si) => (
+            <li key={si}>
+              {s.label && <p className="px-3 pb-0.5 pt-2 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">{s.label}</p>}
+              <ul>
+                {s.moznosti.map((m) => {
+                  i++;
+                  const idx = i;
+                  return (
+                    <li key={m.value}>
+                      <button type="button" role="option" aria-selected={m.value === value}
+                        className={`block w-full px-3 py-1.5 text-left text-sm ${idx === aktivni ? "bg-accent-soft" : "hover:bg-accent-soft"} ${m.value === value ? "font-semibold" : ""}`}
+                        onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setAktivni(idx)} onClick={() => vyber(m)}>
+                        {m.label}{m.detail && <span className="block text-xs text-ink-muted">{m.detail}</span>}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          ))}
+          {!ploche.length && <li className="px-3 py-1.5 text-sm text-ink-muted">Nic nenalezeno.</li>}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /**
  * Prirazeni platby: nejdriv nemovitost (hledani podle nazvu a adresy), pak co platba je —
  * stejne kategorie jako na strance Pohyby, u prichozi i najemci, u odchozi nezaplacene predpisy.
@@ -47,53 +112,32 @@ function Prirazeni({ p, cile, kategorie, vychoziNemovitost, vychoziCil, bezi, on
 }) {
   const odchozi = p.castka < 0;
   const [nemId, setNemId] = useState<string | null>(vychoziNemovitost);
-  const [hledat, setHledat] = useState("");
   const [cil, setCil] = useState(vychoziCil);
   const n = cile.find((c) => c.id === nemId) ?? null;
-  const shody = hledat.trim()
-    ? cile.filter((c) => bezDiakritiky(`${c.nazev} ${c.adresa}`).includes(bezDiakritiky(hledat.trim()))).slice(0, 8)
-    : [];
   if (!n) {
     return (
-      <div className="relative w-full sm:w-80">
-        <input className="input py-1.5 text-sm" placeholder="Nemovitost — hledej podle názvu nebo adresy…" value={hledat}
-          onChange={(e) => setHledat(e.target.value)} aria-label="Nemovitost" />
-        {shody.length > 0 && (
-          <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-auto rounded-xl border border-line bg-surface-card py-1 shadow-lg">
-            {shody.map((c) => (
-              <li key={c.id}>
-                <button type="button" className="block w-full px-3 py-1.5 text-left text-sm hover:bg-accent-soft"
-                  onClick={() => { setNemId(c.id); setHledat(""); setCil(""); }}>
-                  <span className="font-medium">{c.nazev}</span>{c.adresa && <span className="block text-xs text-ink-muted">{c.adresa}</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {hledat.trim() && !shody.length && <p className="mt-1 text-xs text-ink-muted">Nic nenalezeno.</p>}
-      </div>
+      <HledaciVyber className="w-full sm:w-80" label="Nemovitost" placeholder="Nemovitost — vyber nebo hledej…" value=""
+        skupiny={[{ moznosti: cile.map((c) => ({ value: c.id, label: c.nazev, detail: c.adresa || undefined })) }]}
+        onChange={(v) => { setNemId(v); setCil(""); }} />
     );
   }
+  const skupiny: Skupina[] = odchozi
+    ? [
+        { label: "Nezaplacené předpisy", moznosti: n.predpisy.map((x) => ({ value: x.cil, label: x.nazev })) },
+        { label: "Vrácení přeplatku nájemci", moznosti: n.vratky.map((x) => ({ value: x.cil, label: x.nazev })) },
+        { label: "Výdaj", moznosti: kategorie.vydaje.map((k) => ({ value: `vydaj:${n.id}:${k.key}`, label: k.label })) },
+      ]
+    : [
+        { label: "Nájem a zálohy od nájemce", moznosti: n.smlouvy.map((x) => ({ value: `lease:${x.id}`, label: x.nazev })) },
+        { label: "Krátkodobý pronájem", moznosti: [{ value: `kt:${n.id}`, label: "Výplata Airbnb, Booking…" }] },
+        { label: "Příjem", moznosti: kategorie.prijmy.map((k) => ({ value: `vydaj:${n.id}:${k.key}`, label: k.label })) },
+      ];
   return (
     <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
       <button type="button" className="rounded-full bg-accent-soft px-3 py-1 text-sm font-medium text-accent" title="Změnit nemovitost"
         onClick={() => { setNemId(null); setCil(""); }}>{n.nazev} ✕</button>
-      <select className="input w-full py-1.5 text-sm sm:w-72" value={cil} onChange={(e) => setCil(e.target.value)} aria-label="Co platba je">
-        <option value="">Co to je…</option>
-        {odchozi ? (
-          <>
-            {n.predpisy.length > 0 && <optgroup label="Nezaplacené předpisy">{n.predpisy.map((x) => <option key={x.cil} value={x.cil}>{x.nazev}</option>)}</optgroup>}
-            {n.vratky.length > 0 && <optgroup label="Vrácení přeplatku nájemci">{n.vratky.map((x) => <option key={x.cil} value={x.cil}>{x.nazev}</option>)}</optgroup>}
-            <optgroup label="Výdaj">{kategorie.vydaje.map((k) => <option key={k.key} value={`vydaj:${n.id}:${k.key}`}>{k.label}</option>)}</optgroup>
-          </>
-        ) : (
-          <>
-            {n.smlouvy.length > 0 && <optgroup label="Nájem a zálohy od nájemce">{n.smlouvy.map((x) => <option key={x.id} value={`lease:${x.id}`}>{x.nazev}</option>)}</optgroup>}
-            <optgroup label="Krátkodobý pronájem"><option value={`kt:${n.id}`}>Výplata Airbnb, Booking…</option></optgroup>
-            <optgroup label="Příjem">{kategorie.prijmy.map((k) => <option key={k.key} value={`vydaj:${n.id}:${k.key}`}>{k.label}</option>)}</optgroup>
-          </>
-        )}
-      </select>
+      <HledaciVyber className="w-full sm:w-72" label="Co platba je" placeholder="Co to je… (vyber nebo hledej)" value={cil} onChange={setCil}
+        skupiny={skupiny.filter((s) => s.moznosti.length)} />
       <button type="button" className="btn btn-primary py-1.5" disabled={!cil || bezi} onClick={() => onSparuj(cil)}>Spárovat</button>
     </div>
   );
