@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { deleteService, kopirujSluzby, novyPoplatek, saveService, smazZmenuNakladu, type EntityFormState } from "@/lib/entityActions";
+import { deleteService, kopirujSluzby, novyPoplatek, saveService, smazZmenuNakladu, upravZmenuNakladu, type EntityFormState } from "@/lib/entityActions";
 import {
   Hlaska, Pole, Rozbalovaci, SmazatTlacitko, TextPole, UpravaPanel, UpravitTlacitko, Vyber, Zaskrtavatko, isoDatum,
 } from "./form";
@@ -52,6 +52,20 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   const [poplatekState, poplatekAction, ukladamPoplatek] = useActionState<EntityFormState, FormData>(novyPoplatek, {});
   useEffect(() => { if (poplatekState.success) setPoplatekId(null); }, [poplatekState.success]);
   const [smazState, smazAction] = useActionState<EntityFormState, FormData>(smazZmenuNakladu, {});
+  // Uprava zaznamu v historii poplatku
+  const [upravaZmeny, setUpravaZmeny] = useState<{ id: string; od: string | null; mesicne: string; rocne: string } | null>(null);
+  const [zmenaState, setZmenaState] = useState<EntityFormState>({});
+  const [ukladamZmenu, spustZmenu] = useTransition();
+  const ulozZmenu = () => {
+    const u = upravaZmeny;
+    if (!u) return;
+    const cislo = (t: string) => Number(t.replace(/\s/g, "").replace(",", "."));
+    spustZmenu(async () => {
+      const r = await upravZmenuNakladu(u.id, { validFrom: u.od ?? "", monthlyCost: cislo(u.mesicne) || 0, annualCost: u.rocne.trim() ? cislo(u.rocne) : null });
+      setZmenaState(r);
+      if (!r.error) setUpravaZmeny(null);
+    });
+  };
   const [rozbaleno, setRozbaleno] = useState<Set<string>>(new Set());
   const prepniHistorii = (id: string) => setRozbaleno((r) => { const n = new Set(r); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const poplatkova = services.find((s) => s.id === poplatekId) ?? null;
@@ -116,7 +130,8 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   return (
     <div>
       <Hlaska state={
-        poplatekState.error || poplatekState.success || poplatekState.warning ? poplatekState
+        zmenaState.error || zmenaState.success ? zmenaState
+          : poplatekState.error || poplatekState.success || poplatekState.warning ? poplatekState
           : smazState.error || smazState.success ? smazState
           : upravaState.error ? upravaState
           : addState.error || addState.success ? addState
@@ -193,7 +208,8 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                 const aktualni = zmeny[0];
                 const planovano = !denMesice && aktualni != null && new Date(aktualni.validFrom).toISOString().slice(0, 10) > dnes;
                 const vyse = denMesice ? vyseKDatu(s, denMesice) : aktualni ? aktualni.monthlyCost + (aktualni.annualCost ?? 0) / 12 : s.monthlyCost + (s.annualCost ?? 0) / 12;
-                const vSeznamu = zmeny.slice(1);
+                // V historii vsechny zapsane vyse (i aktualni) — jdou upravit, nez to sedi
+                const vSeznamu = zmeny;
                 const otevrena = rozbaleno.has(s.id);
                 return (
                 <Fragment key={s.id}>
@@ -276,18 +292,40 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
                         {vSeznamu.map((z) => {
                           // Vyse platila do dne pred nastupem nasledujici zmeny
                           const j = zmeny.indexOf(z);
-                          // Nejstarsi vyse plati od zacatku sluzby (kdyz je zmena zapsana s drivejsim datem)
-                          const od = new Date(z.validFrom);
-                          const odText = `od ${dateCz(j === zmeny.length - 1 && s.contractStart && new Date(s.contractStart).getTime() > od.getTime() ? new Date(s.contractStart) : od)}`;
+                          const odText = `od ${dateCz(new Date(z.validFrom))}`;
                           const doText = j === 0 ? "dále"
                             : `do ${dateCz(new Date(new Date(zmeny[j - 1].validFrom).getTime() - 24 * 3600 * 1000))}`;
+                          if (upravaZmeny?.id === z.id) {
+                            return (
+                              <li key={z.id} className="flex flex-wrap items-end gap-2 rounded-lg bg-surface-card p-2">
+                                <DatumPole label="Platí od" name={`zm-od-${z.id}`} sirka="w-40" defaultValue={upravaZmeny.od ?? ""}
+                                  onChange={(d) => setUpravaZmeny((x) => x && { ...x, od: d })} />
+                                <label className="block">
+                                  <span className="label mb-1.5 block">Měsíčně (Kč)</span>
+                                  <input className="input w-28" inputMode="decimal" value={upravaZmeny.mesicne}
+                                    onChange={(e) => setUpravaZmeny((x) => x && { ...x, mesicne: e.target.value })} /></label>
+                                <label className="block">
+                                  <span className="label mb-1.5 block">Ročně (Kč)</span>
+                                  <input className="input w-28" inputMode="decimal" value={upravaZmeny.rocne}
+                                    onChange={(e) => setUpravaZmeny((x) => x && { ...x, rocne: e.target.value })} /></label>
+                                <button type="button" className="btn btn-primary" disabled={ukladamZmenu || !upravaZmeny.od} onClick={ulozZmenu}>{ukladamZmenu ? "Ukládám…" : "Uložit"}</button>
+                                <button type="button" className="btn" onClick={() => setUpravaZmeny(null)}>Zrušit</button>
+                              </li>
+                            );
+                          }
                           return (
                             <li key={z.id} className="flex items-center gap-3">
-                              <span className="tabular-nums">{odText} {doText}</span>
+                              <span className="tabular-nums">{odText} {doText}{j === 0 && <span className="ml-1.5 text-accent">· aktuální</span>}
+                                {s.contractStart && new Date(z.validFrom).getTime() < new Date(s.contractStart).getTime() && (
+                                  <span className="ml-1.5 text-warn">· před začátkem služby ({dateCz(s.contractStart)})</span>
+                                )}</span>
                               <span className="ml-auto font-medium tabular-nums">{czk(z.monthlyCost + (z.annualCost ?? 0) / 12)}/měs.</span>
                               {canEdit && (
-                                <SmazatTlacitko action={smazAction} id={z.id} popisek="Smazat záznam"
-                                  potvrzeni="Smazat tuto změnu nákladu? Náklad se vrátí na hodnotu platnou před ní." />
+                                <>
+                                  <UpravitTlacitko aktivni={false} onClick={() => { setZmenaState({}); setUpravaZmeny({ id: z.id, od: new Date(z.validFrom).toISOString().slice(0, 10), mesicne: String(z.monthlyCost).replace(".", ","), rocne: z.annualCost != null ? String(z.annualCost).replace(".", ",") : "" }); }} />
+                                  <SmazatTlacitko action={smazAction} id={z.id} popisek="Smazat záznam"
+                                    potvrzeni="Smazat tuto změnu nákladu? Náklad se vrátí na hodnotu platnou před ní." />
+                                </>
                               )}
                             </li>
                           );

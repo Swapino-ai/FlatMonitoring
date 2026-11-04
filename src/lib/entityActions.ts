@@ -558,6 +558,27 @@ export async function smazZmenuNakladu(_prev: EntityFormState, formData: FormDat
   return { success: "Změna nákladu smazána.", warning: await varovaniZaloh(zmena.service.propertyId) };
 }
 
+/** Uprava zapsane vyse nakladu v historii (od kdy platila, mesicne, rocne). */
+export async function upravZmenuNakladu(id: string, v: { validFrom: string; monthlyCost: number; annualCost: number | null }): Promise<EntityFormState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v.validFrom)) return { error: "Zadej, od kdy výše platila." };
+  const mesicne = Number.isFinite(v.monthlyCost) ? v.monthlyCost : 0;
+  const rocne = v.annualCost != null && Number.isFinite(v.annualCost) && v.annualCost > 0 ? v.annualCost : null;
+  if (mesicne < 0 || (mesicne === 0 && !rocne)) return { error: "Vyplň měsíční nebo roční náklad." };
+  const zmena = await prisma.serviceCostChange.findUnique({ where: { id }, include: { service: { select: { propertyId: true } } } });
+  if (!zmena) return { error: "Záznam neexistuje." };
+  const od = new Date(`${v.validFrom}T00:00:00Z`);
+  const kolize = await prisma.serviceCostChange.findFirst({ where: { serviceId: zmena.serviceId, validFrom: od, id: { not: id } } });
+  if (kolize) return { error: "K tomuto datu už je zapsaná jiná výše — uprav nebo smaž tu." };
+  await prisma.$transaction(async (tx) => {
+    await tx.serviceCostChange.update({ where: { id }, data: { validFrom: od, monthlyCost: mesicne, annualCost: rocne } });
+    await prepocitejAktualniNaklad(tx, zmena.serviceId);
+  });
+  obnov(zmena.service.propertyId);
+  return { success: "Výše v historii upravena.", warning: await varovaniZaloh(zmena.service.propertyId) };
+}
+
 /** Totez pro zalohy ve smlouve. */
 export async function smazZmenuZaloh(_prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
   const auth = await majitel();
