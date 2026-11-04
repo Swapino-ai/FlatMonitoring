@@ -262,7 +262,7 @@ export async function obnovVse(zaloha: Zaloha): Promise<VysledekObnovy> {
     const pohyby = (t.bankovniPohyb as any[] ?? []).map((x) => ({
       id: String(x.id), bankaId: String(x.bankaId), datum: dPovinne(x.datum), castka: c(x.castka), mena: String(x.mena ?? "CZK"),
       protiucet: s(x.protiucet), nazevProtiuctu: s(x.nazevProtiuctu), vs: s(x.vs), ks: s(x.ks), ss: s(x.ss), zprava: s(x.zprava), typ: s(x.typ),
-      stav: String(x.stav ?? "NOVY"), propertyId: s(x.propertyId), leaseId: s(x.leaseId), navrhLeaseId: s(x.navrhLeaseId),
+      stav: String(x.stav ?? "NOVY"), propertyId: s(x.propertyId), leaseId: s(x.leaseId), navrhLeaseId: s(x.navrhLeaseId), navrhCil: s(x.navrhCil), mojePoznamka: s(x.mojePoznamka),
       parovani: x.parovani ?? undefined, poznamka: s(x.poznamka), createdAt: dPovinne(x.createdAt ?? new Date()),
     }));
     if (pohyby.length) obnoveno.bankovniPohyb = (await tx.bankovniPohyb.createMany({ data: pohyby })).count;

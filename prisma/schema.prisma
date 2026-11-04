@@ -954,7 +954,7 @@ model BankovniPohyb {
   ss             String?
   zprava         String?
   typ            String?
-  /// NOVY | SPAROVANO | KE_KONTROLE | IGNOROVANO | VYDAJ
+  /// NOVY | SPAROVANO | KE_KONTROLE | IGNOROVANO | VYDAJ (starsi nezpracovany vydaj, projde parovanim znovu)
   stav           String   @default("NOVY")
   propertyId     String?
   leaseId        String?
@@ -963,6 +963,10 @@ model BankovniPohyb {
   /// Co pohyb uhradil: [{klic, castka}] pravidelnych plateb, nebo {vyuctovani: id}
   parovani       Json?
   poznamka       String?
+  /// Poznamka uzivatele k platbe (system ji neprepisuje)
+  mojePoznamka   String?
+  /// Navrh parovani odchozi platby: "predpis:<klic>" | "vratka:<id vyuctovani>" | "vydaj:<propertyId>:<kategorie>"
+  navrhCil       String?
   createdAt      DateTime @default(now())
 
   @@index([stav])
