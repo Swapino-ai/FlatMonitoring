@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ignorovatPohyb, priraditKratkodoby, priraditPohyb, priraditVydaj, stahnoutZBanky, ulozPoznamkuPohybu, zrusitParovani } from "@/lib/bankaActions";
 import { czk, dateCz } from "@/lib/format";
@@ -200,6 +201,23 @@ export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, spar
     const r = await f();
     setHlaska(r.error ? { ok: false, text: r.error } : r.success ? { ok: true, text: r.success } : null);
   });
+  const router = useRouter();
+  // Vyrizene radky zmizi hned (nezavisle na obnove stranky); chyba se ukaze primo u platby
+  const [vyrizene, setVyrizene] = useState<Set<string>>(new Set());
+  const [chybaRadku, setChybaRadku] = useState<{ id: string; text: string } | null>(null);
+  const vyrid = (id: string, f: () => Promise<{ error?: string; success?: string }>) => spust(async () => {
+    setChybaRadku(null);
+    try {
+      const r = await f();
+      if (r.error) { setChybaRadku({ id, text: r.error }); return; }
+      setVyrizene((v) => new Set(v).add(id));
+      setHlaska(r.success ? { ok: true, text: r.success } : null);
+      router.refresh();
+    } catch {
+      setChybaRadku({ id, text: "Nepodařilo se uložit — zkus to znovu." });
+    }
+  });
+  const zbyva = keKontrole.filter((p) => !vyrizene.has(p.id));
 
   const platce = (p: PohybRadek) => [p.nazevProtiuctu, p.protiucet].filter(Boolean).join(" · ") || "neznámý účet";
 
@@ -230,12 +248,12 @@ export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, spar
         {hlaska && <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${hlaska.ok ? "bg-good/10 text-good" : "bg-bad/10 text-bad"}`}>{hlaska.text}</p>}
       </Card>
 
-      <Card title={`Ke kontrole (${keKontrole.length})`}>
-        {keKontrole.length === 0 ? (
+      <Card title={`Ke kontrole (${zbyva.length})`}>
+        {zbyva.length === 0 ? (
           <p className="py-3 text-center text-sm text-ink-muted">Vše spárováno.</p>
         ) : (
           <ul className="divide-y divide-line/70">
-            {keKontrole.map((p) => {
+            {zbyva.map((p) => {
               const odchozi = p.castka < 0;
               // Navrh: smlouva (prichozi) nebo cil (odchozi) urci i nemovitost
               const navrhNem = odchozi
@@ -257,10 +275,11 @@ export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, spar
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Prirazeni p={p} cile={cile} kategorie={kategorie} vychoziNemovitost={navrhNem} vychoziCil={navrh} bezi={bezi}
-                      onSparuj={(cil) => akce(() => cil.startsWith("lease:") ? priraditPohyb(p.id, cil.slice(6))
+                      onSparuj={(cil) => vyrid(p.id, () => cil.startsWith("lease:") ? priraditPohyb(p.id, cil.slice(6))
                         : cil.startsWith("kt:") ? priraditKratkodoby(p.id, cil.slice(3)) : priraditVydaj(p.id, cil))} />
-                    <button type="button" className="btn py-1.5" disabled={bezi} onClick={() => akce(async () => { await ignorovatPohyb(p.id); return {}; })}>Ignorovat</button>
+                    <button type="button" className="btn py-1.5" disabled={bezi} onClick={() => vyrid(p.id, () => ignorovatPohyb(p.id))}>Ignorovat</button>
                   </div>
+                  {chybaRadku?.id === p.id && <p className="w-full rounded-lg bg-bad/10 px-3 py-1.5 text-sm text-bad">{chybaRadku.text}</p>}
                 </li>
               );
             })}
@@ -295,7 +314,7 @@ export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, spar
                     <td className={`num font-medium tabular-nums ${p.castka < 0 ? "text-bad" : ""}`}>{czk(p.castka)}</td>
                     <td className="text-right">
                       <button type="button" className="text-ink-muted hover:text-bad" title="Zrušit párování" aria-label="Zrušit párování"
-                        onClick={() => { if (confirm("Zrušit párování? Uhrazené předpisy budou zase nezaplacené.")) akce(async () => { await zrusitParovani(p.id); return {}; }); }}>
+                        onClick={() => { if (confirm("Zrušit párování? Uhrazené předpisy budou zase nezaplacené.")) { setVyrizene((v) => { const n = new Set(v); n.delete(p.id); return n; }); akce(async () => { await zrusitParovani(p.id); return {}; }); }; }}>
                         <Ikona nazev="kos" trida="h-4 w-4" />
                       </button>
                     </td>
