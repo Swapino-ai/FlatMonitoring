@@ -88,13 +88,16 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
   const jeUkoncena = (x: Row) => x.activeTo != null && x.activeTo.getTime() < Date.now();
   const aktivni = denMesice ? services.filter(platiVMesici) : services.filter((x) => !jeUkoncena(x));
   const ukoncene = denMesice ? [] : services.filter(jeUkoncena);
-  const roky = (() => {
-    const ted = new Date().getFullYear();
-    const od = Math.min(ted, ...services.map((x) => zacatek(x)?.getFullYear() ?? ted));
-    return Array.from({ length: ted + 1 - od + 1 }, (_, i) => ted + 1 - i);
-  })();
+  // Listovani po mesicich: z "aktualne" se zacina od tohoto mesice
+  const tentoMesic = new Date().toISOString().slice(0, 7);
+  const posun = (o: number) => {
+    const [r, m] = (mesic ?? tentoMesic).split("-").map(Number);
+    const d = new Date(Date.UTC(r, m - 1 + o, 1));
+    setMesic(d.toISOString().slice(0, 7));
+  };
   const MESICE = ["leden", "únor", "březen", "duben", "květen", "červen", "červenec", "srpen", "září", "říjen", "listopad", "prosinec"];
-  const nazevMesice = mesic ? `${MESICE[Number(mesic.slice(5)) - 1]} ${mesic.slice(0, 4)}` : "";
+  const nazevMesiceText = (m: string) => `${MESICE[Number(m.slice(5)) - 1]} ${m.slice(0, 4)}`;
+  const nazevMesice = mesic ? nazevMesiceText(mesic) : "";
   // Nazvy skupin pro naseptavani ve formulari z vsech sluzeb, v seznamu jen z platnych
   const skupiny = [...new Set(services.map((x) => x.groupName).filter((g): g is string => !!g))].sort();
   const skupinyAktivni = [...new Set(aktivni.map((x) => x.groupName).filter((g): g is string => !!g))].sort();
@@ -148,16 +151,15 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
           <span className="text-ink-secondary">Zobrazit:</span>
           <button type="button" aria-pressed={!mesic} onClick={() => setMesic(null)}
             className={`rounded-full border px-3 py-1 ${!mesic ? "border-accent bg-accent-soft font-medium text-accent" : "border-line"}`}>Aktuálně</button>
-          <select className="input w-auto py-1 text-sm" aria-label="Měsíc" value={mesic ? Number(mesic.slice(5)) : ""}
-            onChange={(e) => { const m = Number(e.target.value); if (!m) { setMesic(null); return; } const r = mesic ? mesic.slice(0, 4) : String(new Date().getFullYear()); setMesic(`${r}-${String(m).padStart(2, "0")}`); }}>
-            <option value="">Měsíc…</option>
-            {MESICE.map((n, i) => <option key={n} value={i + 1}>{n}</option>)}
-          </select>
-          <select className="input w-auto py-1 text-sm" aria-label="Rok" value={mesic ? mesic.slice(0, 4) : ""}
-            onChange={(e) => { const r = e.target.value; if (!r) { setMesic(null); return; } setMesic(`${r}-${mesic ? mesic.slice(5) : String(new Date().getMonth() + 1).padStart(2, "0")}`); }}>
-            <option value="">Rok…</option>
-            {roky.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
+          <div className="inline-flex items-center rounded-full border border-line bg-surface-card">
+            <button type="button" aria-label="Předchozí měsíc" onClick={() => posun(-1)}
+              className="flex h-8 w-9 items-center justify-center rounded-l-full text-lg text-ink-secondary hover:bg-accent-soft hover:text-accent">‹</button>
+            <span className={`min-w-[8.5rem] px-1 text-center font-medium tabular-nums ${mesic ? "text-accent" : "text-ink-secondary"}`} aria-live="polite">
+              {nazevMesiceText(mesic ?? tentoMesic)}
+            </span>
+            <button type="button" aria-label="Další měsíc" onClick={() => posun(1)}
+              className="flex h-8 w-9 items-center justify-center rounded-r-full text-lg text-ink-secondary hover:bg-accent-soft hover:text-accent">›</button>
+          </div>
           {mesic && <span className="text-xs text-ink-muted">Služby platné v měsíci a částky k 15. dni — co se má za {nazevMesice} na byt zaplatit.</span>}
         </div>
       )}
