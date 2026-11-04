@@ -229,6 +229,8 @@ export { pridejDny };
 export interface DluhSkupiny {
   typ: "NAJEMCE" | "DODAVATEL";
   nazev: string;
+  /** Skupina splatek uveru (veritel), ne dodavatel sluzeb */
+  splatky?: boolean;
   /** Kolik chybi zaplatit (kladne cislo). */
   dluh: number;
   /** Z toho kolik polozek je uplne nezaplaceno. */
@@ -245,8 +247,12 @@ export interface PrehledPlateb {
   dodavatele: DluhSkupiny[];
   /** Kolik celkem dluzi najemci. */
   najemciDluzi: number;
-  /** Kolik celkem dluzim dodavatelum ja. */
+  /** Kolik celkem dluzim ja (sluzby i splatky uveru). */
   dluzimDodavatelum: number;
+  /** Z toho za sluzby dodavatelum (vcetne nedoplatku z jejich vyuctovani) */
+  dluzimZaSluzby: number;
+  /** Z toho nezaplacene splatky uveru */
+  dluzimNaSplatkach: number;
   /** Preplatky z vyuctovani, ktere mi dodavatele jeste nevratili. */
   dodavateleDluzi: number;
   zaplacenoCelkem: { prijmy: number; vydaje: number };
@@ -263,7 +269,7 @@ export function prehledPlateb(navrh: NavrzenaPlatba[]): PrehledPlateb {
   let pohledavky = 0;
   for (const p of navrh) {
     const k = `${p.skupina.typ}:${p.skupina.nazev}`;
-    const g = m.get(k) ?? { typ: p.skupina.typ, nazev: p.skupina.nazev, dluh: 0, nezaplacenych: 0, nedoplaceno: 0, nejstarsi: null, preplaceno: 0 };
+    const g = m.get(k) ?? { typ: p.skupina.typ, nazev: p.skupina.nazev, dluh: 0, nezaplacenych: 0, nedoplaceno: 0, nejstarsi: null, preplaceno: 0, splatky: p.druh === "UVER" };
     const predpis = Math.abs(p.castka);
     // Preplatek od dodavatele: dodavatel dluzi mne, nezapocitava se do toho, co dluzim ja
     if (p.skupina.typ === "DODAVATEL" && p.castka > 0) {
@@ -295,6 +301,8 @@ export function prehledPlateb(navrh: NavrzenaPlatba[]): PrehledPlateb {
     najemci, dodavatele,
     najemciDluzi: zaokr(najemci.reduce((a, g) => a + g.dluh, 0)),
     dluzimDodavatelum: zaokr(dodavatele.reduce((a, g) => a + g.dluh, 0)),
+    dluzimZaSluzby: zaokr(dodavatele.filter((g) => !g.splatky).reduce((a, g) => a + g.dluh, 0)),
+    dluzimNaSplatkach: zaokr(dodavatele.filter((g) => g.splatky).reduce((a, g) => a + g.dluh, 0)),
     dodavateleDluzi: zaokr(pohledavky),
     zaplacenoCelkem: { prijmy: zaokr(prijmy), vydaje: zaokr(vydaje) },
   };

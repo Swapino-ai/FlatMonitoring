@@ -202,15 +202,26 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
       <Hlaska state={stav} />
 
       {/* Prehled: kolik kde chybi */}
-      <div className={`grid gap-3 ${prehled.dodavateleDluzi > 0 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
-        {tile("Nájemci dluží", prehled.najemciDluzi, `nájemné a zálohy, které nejsou zaplacené (zaplaceno ${czk(prehled.zaplacenoCelkem.prijmy)})`, true)}
-        {tile("Dlužím dodavatelům", prehled.dluzimDodavatelum, `platby za služby, které jsem nezaplatil (zaplaceno ${czk(prehled.zaplacenoCelkem.vydaje)})`, true)}
-        {prehled.dodavateleDluzi > 0 && tile("Dodavatelé mi dluží", prehled.dodavateleDluzi, "přeplatky z vyúčtování, které mi ještě nevrátili", false)}
-      </div>
-      <div className="mt-3 grid gap-3 lg:grid-cols-2">
-        {rozpis("najemci", "Po nájemcích", prehled.najemci, "Žádný nájemce.")}
-        {rozpis("dodavatele", "Po dodavatelích", prehled.dodavatele, "Žádný dodavatel.")}
-      </div>
+      {(() => {
+        const sUvery = prehled.dodavatele.some((g) => g.splatky);
+        const pocet = 2 + (sUvery ? 1 : 0) + (prehled.dodavateleDluzi > 0 ? 1 : 0);
+        return (
+          <>
+            <div className={`grid gap-3 ${pocet >= 4 ? "sm:grid-cols-2 lg:grid-cols-4" : pocet === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+              {tile("Nájemci dluží", prehled.najemciDluzi, `nájemné a zálohy, které nejsou zaplacené (zaplaceno ${czk(prehled.zaplacenoCelkem.prijmy)})`, true)}
+              {tile("Dlužím dodavatelům", prehled.dluzimZaSluzby, "nezaplacené platby za služby a nedoplatky z jejich vyúčtování", true)}
+              {sUvery && tile("Nezaplacené splátky", prehled.dluzimNaSplatkach, "splátky úvěrů, které nejsou zapsané jako zaplacené", true)}
+              {prehled.dodavateleDluzi > 0 && tile("Dodavatelé mi dluží", prehled.dodavateleDluzi, "přeplatky z vyúčtování, které mi ještě nevrátili", false)}
+            </div>
+            <div className={`mt-3 grid gap-3 ${sUvery ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
+              {rozpis("najemci", "Po nájemcích", prehled.najemci, "Žádný nájemce.")}
+              {rozpis("dodavatele", "Po dodavatelích", prehled.dodavatele.filter((g) => !g.splatky), "Žádný dodavatel.")}
+              {sUvery && rozpis("splatky", "Splátky úvěrů", prehled.dodavatele.filter((g) => g.splatky), "Žádný úvěr.")}
+            </div>
+            <p className="mt-2 text-xs text-ink-muted">Celkem jsem zaplatil {czk(prehled.zaplacenoCelkem.vydaje)} (služby i splátky).</p>
+          </>
+        );
+      })()}
 
       <div className="mb-3 mt-5 flex flex-wrap items-center justify-between gap-2 text-sm">
         <p className="text-ink-secondary">

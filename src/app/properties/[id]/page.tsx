@@ -798,7 +798,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             {(dluhyPlateb.najemciDluzi > 0 || dluhyPlateb.dluzimDodavatelum > 0) && (
               <StatGrid>
                 <Stat label="Nájemci dluží" value={czk(dluhyPlateb.najemciDluzi)} tone={dluhyPlateb.najemciDluzi > 0 ? "bad" : "good"} />
-                <Stat label="Dlužím dodavatelům" value={czk(dluhyPlateb.dluzimDodavatelum)} tone={dluhyPlateb.dluzimDodavatelum > 0 ? "bad" : "good"} />
+                <Stat label="Dlužím dodavatelům" value={czk(dluhyPlateb.dluzimZaSluzby)} tone={dluhyPlateb.dluzimZaSluzby > 0 ? "bad" : "good"} sub="služby a nedoplatky z vyúčtování" />
+                {dluhyPlateb.dluzimNaSplatkach > 0 && <Stat label="Nezaplacené splátky" value={czk(dluhyPlateb.dluzimNaSplatkach)} tone="bad" sub="splátky úvěrů" />}
                 <Stat label="Po vyrovnání dluhů" value={czk(naUctu + dluhyPlateb.najemciDluzi - dluhyPlateb.dluzimDodavatelum)}
                   sub="kolik by bylo na účtu, kdyby se vše zaplatilo" />
               </StatGrid>
