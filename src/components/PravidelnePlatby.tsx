@@ -286,10 +286,12 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
                                     <div className="text-sm">{p.popis}</div>
                                     <div className="text-xs text-ink-muted">
                                       splatnost {dateCz(p.datum)} · předpis {czk(predpis)}
+                                      {p.zaplaceno?.zBanky && <span className="ml-2"><Badge tone="neutral">z banky</Badge></span>}
                                       {p.castecny && <span className="ml-2"><Badge tone="warn">částečný měsíc</Badge></span>}
                                       {!r.datum && dniPo(p.datum) > 0 && <span className="ml-2 text-bad">po splatnosti {dniPo(p.datum)} dní</span>}
                                       {mene && <span className="ml-2 text-warn">nedoplaceno {czk(predpis - zaplacenoCastka)}</span>}
                                     </div>
+                                    {p.zaplaceno?.poznamka && <div className="text-xs italic text-ink-secondary">✎ {p.zaplaceno.poznamka}</div>}
                                   </div>
                                   {pohyb ? (
                                     <span className="text-xs text-ink-secondary">

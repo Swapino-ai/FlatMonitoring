@@ -10,6 +10,8 @@ import { Ikona } from "./Ikony";
 interface Row {
   id: string; date: Date; amount: number; category: string;
   description: string | null; documentRef: string | null;
+  /** Poznamka ze sparovane platby v bance */
+  poznamkaBanky?: string | null;
 }
 
 export function TransactionManager({ propertyId, transactions, canEdit }: {
@@ -95,6 +97,7 @@ export function TransactionManager({ propertyId, transactions, canEdit }: {
                       <td className="max-w-[24rem] text-ink-secondary">
                         <span className="line-clamp-2" title={t.description ?? undefined}>{t.description}</span>
                         {t.documentRef && <span className="text-xs text-ink-muted">{t.documentRef}</span>}
+                        {t.poznamkaBanky && <span className="block text-xs italic text-ink-secondary" title="Poznámka z banky">✎ {t.poznamkaBanky}</span>}
                       </td>
                       <td className={`num font-semibold ${t.amount >= 0 ? "text-good" : ""}`}>
                         {t.amount > 0 ? "+" : ""}{czk(t.amount)}

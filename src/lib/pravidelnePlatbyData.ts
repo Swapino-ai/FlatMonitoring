@@ -17,6 +17,12 @@ export async function nactiNavrhPlatby(propertyId: string): Promise<NavrzenaPlat
     prisma.serviceSettlement.findMany({ where: { service: { propertyId } }, include: { service: true } }),
   ]);
 
+  // Poznamky ze sparovanych plateb v bance
+  const pohybIds = zaplaceno.map((z) => z.pohybId).filter((x): x is string => !!x);
+  const poznamky = new Map(pohybIds.length
+    ? (await prisma.bankovniPohyb.findMany({ where: { id: { in: pohybIds } }, select: { id: true, mojePoznamka: true } })).map((p) => [p.id, p.mojePoznamka])
+    : []);
+
   return navrhniPlatby({
     najmy: smlouvy.map((n) => ({
       id: n.id, nazev: n.tenant?.name ?? n.tenantName, od: denISO(n.startDate), do: n.endDate ? denISO(n.endDate) : null,
@@ -36,7 +42,7 @@ export async function nactiNavrhPlatby(propertyId: string): Promise<NavrzenaPlat
       rozdil: v.totalCost - v.supplierAdvances, dodavatel: v.service.provider, nazevDruhu: nazevDruhu(typy, v.service.type),
     })),
     pohyby: pohyby.map((p) => ({ date: denISO(p.date), category: p.category, sourceKey: p.sourceKey, amount: p.amount })),
-    zaplaceno: zaplaceno.map((z) => ({ klic: z.klic, datum: denISO(z.paidAt), castka: z.amount })),
+    zaplaceno: zaplaceno.map((z) => ({ klic: z.klic, datum: denISO(z.paidAt), castka: z.amount, ...(z.pohybId ? { zBanky: true, poznamka: poznamky.get(z.pohybId) ?? null } : {}) })),
     dnes: new Date().toISOString().slice(0, 10),
   });
 }

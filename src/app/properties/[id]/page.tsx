@@ -368,8 +368,14 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     return { body, bezSouradnic };
   })();
 
+  // Poznamky ze sparovanych plateb v bance (pohyby zalozene z banky maji sourceKey "banka:<id>")
+  const bankovniIds = property.transactions.map((t) => t.sourceKey?.startsWith("banka:") ? t.sourceKey.slice(6) : null).filter((x): x is string => !!x);
+  const poznamkyBanky = new Map(bankovniIds.length
+    ? (await prisma.bankovniPohyb.findMany({ where: { id: { in: bankovniIds }, mojePoznamka: { not: null } }, select: { id: true, mojePoznamka: true } })).map((p) => [`banka:${p.id}`, p.mojePoznamka])
+    : []);
   const recentTx = [...property.transactions]
-    .sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime());
+    .sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime())
+    .map((t) => ({ ...t, poznamkaBanky: t.sourceKey ? poznamkyBanky.get(t.sourceKey) ?? null : null }));
 
   return (
     <>

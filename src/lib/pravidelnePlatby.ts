@@ -36,6 +36,9 @@ export interface ZaplacenaPlatba {
   castka: number;
   /** EVIDENCE = zapsano v prehledu; POHYB = starsi platba zauctovana jako pohyb (jen ke cteni). */
   zdroj: "EVIDENCE" | "POHYB";
+  /** Zaplaceno pres banku (sparovany pohyb) a poznamka k nemu */
+  zBanky?: boolean;
+  poznamka?: string | null;
 }
 
 export interface NajemPlatba extends NajemVyuct {
@@ -110,13 +113,13 @@ export function navrhniPlatby(a: {
   vyuctovani?: VyuctovaniPlatba[];
   pohyby: ExistujiciPohyb[];
   /** Zaplacene platby z prehledu (klic -> datum a castka). */
-  zaplaceno?: { klic: string; datum: string; castka: number }[];
+  zaplaceno?: { klic: string; datum: string; castka: number; zBanky?: boolean; poznamka?: string | null }[];
   dnes: string;
 }): NavrzenaPlatba[] {
   const { najmy, sluzby, pohyby, dnes } = a;
   const zaplacenoMapa = new Map<string, ZaplacenaPlatba>();
   for (const p of pohyby) if (p.sourceKey) zaplacenoMapa.set(p.sourceKey, { datum: p.date, castka: Math.abs(p.amount ?? 0), zdroj: "POHYB" });
-  for (const z of a.zaplaceno ?? []) zaplacenoMapa.set(z.klic, { datum: z.datum, castka: z.castka, zdroj: "EVIDENCE" });
+  for (const z of a.zaplaceno ?? []) zaplacenoMapa.set(z.klic, { datum: z.datum, castka: z.castka, zdroj: "EVIDENCE", ...(z.zBanky ? { zBanky: true, poznamka: z.poznamka ?? null } : {}) });
   const zacatky = [...najmy.map((n) => n.od), ...sluzby.map((s) => (s.contractStart ? String(s.contractStart).slice(0, 10) : null)).filter((x): x is string => !!x)];
   const uvery = a.uvery ?? [];
   const vyuctovani = a.vyuctovani ?? [];

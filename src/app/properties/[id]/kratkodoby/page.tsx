@@ -27,6 +27,10 @@ export default async function KratkodobyPage({ params }: { params: Promise<{ id:
     prisma.dokument.findMany({ where: { transactionId: { in: property.transactions.map((t) => t.id) } }, select: { id: true, transactionId: true, mime: true, name: true } }),
     prisma.googleConnection.findUnique({ where: { id: "main" }, select: { id: true } }),
   ]);
+  const bankovni = property.transactions.map((t) => t.sourceKey?.startsWith("banka:") ? t.sourceKey.slice(6) : null).filter((x): x is string => !!x);
+  const poznamky = new Map(bankovni.length
+    ? (await prisma.bankovniPohyb.findMany({ where: { id: { in: bankovni }, mojePoznamka: { not: null } }, select: { id: true, mojePoznamka: true } })).map((p) => [`banka:${p.id}`, p.mojePoznamka])
+    : []);
   const canEdit = user.role === "OWNER";
 
   return (
@@ -42,6 +46,7 @@ export default async function KratkodobyPage({ params }: { params: Promise<{ id:
           obdobi={property.kratkodobe.map((o) => ({ id: o.id, od: denISO(o.od), do: o.do ? denISO(o.do) : null, poznamka: o.poznamka }))}
           polozky={property.transactions.map((t) => ({
             id: t.id, datum: denISO(t.date), castka: t.amount, kategorie: t.category, popis: t.description,
+            poznamka: t.sourceKey ? poznamky.get(t.sourceKey) ?? null : null,
             uctenky: dokumenty.filter((d) => d.transactionId === t.id).map((d) => ({ id: d.id, nazev: d.name, mime: d.mime })),
           }))}
         />

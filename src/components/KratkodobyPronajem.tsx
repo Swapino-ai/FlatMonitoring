@@ -9,7 +9,7 @@ import { DatumPole } from "./DatumPole";
 import { Ikona } from "./Ikony";
 
 interface Obdobi { id: string; od: string; do: string | null; poznamka: string | null }
-interface Polozka { id: string; datum: string; castka: number; kategorie: string; popis: string | null; uctenky: { id: string; nazev: string; mime: string }[] }
+interface Polozka { id: string; datum: string; castka: number; kategorie: string; popis: string | null; poznamka?: string | null; uctenky: { id: string; nazev: string; mime: string }[] }
 interface Soubor { data: string; mime: string; nazev: string; nahled: string | null }
 
 const dnes = () => new Date().toISOString().slice(0, 10);
@@ -270,6 +270,7 @@ export function KratkodobyPronajem({ propertyId, canEdit, aiZapnuto, diskPripoje
                     {categoryLabel(p.kategorie)}
                     {p.uctenky.map((u) => <a key={u.id} href={`/api/soubory/${u.id}`} target="_blank" rel="noreferrer" className="ml-2 text-accent hover:underline">účtenka</a>)}
                   </span>
+                  {p.poznamka && <span className="block text-xs italic text-ink-secondary" title="Poznámka z banky">✎ {p.poznamka}</span>}
                 </span>
                 <span className={`shrink-0 font-medium tabular-nums ${p.castka >= 0 ? "text-good" : ""}`}>{p.castka >= 0 ? "+" : "−"}{czk(Math.abs(p.castka))}</span>
                 {canEdit && (

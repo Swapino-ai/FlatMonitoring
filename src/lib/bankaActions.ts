@@ -107,6 +107,8 @@ export async function ulozPoznamkuPohybu(pohybId: string, text: string): Promise
   const chyba = await majitel();
   if (chyba) return { error: chyba };
   await prisma.bankovniPohyb.update({ where: { id: pohybId }, data: { mojePoznamka: text.trim().slice(0, 500) || null } });
+  // Poznamka je videt i u nemovitosti (stav uctu, pohyby, kratkodoby pronajem)
   revalidatePath("/banka");
+  revalidatePath("/properties", "layout");
   return {};
 }
