@@ -150,6 +150,8 @@ model Property {
   kratkodobe       KratkodobeObdobi[]
   /// Ucty, ze kterych chodi vyplaty kratkodobeho pronajmu (banka je sparuje sama)
   kratkodobeUcty   String[] @default([])
+  /// Vykaz prace na byte (kdo, kolik casu, co udelal, fotky)
+  vykazy           VykazPrace[]
   /// Cislo bytu v Evidenci SVJ: meraky se tam dohledaji podle vyrobniho cisla
   svjByt           String?
   /// Posledni prevzeti stavu ze SVJ (automaticky jednou za mesic, jinak tlacitkem)
@@ -650,6 +652,20 @@ model DriveFolder {
 }
 
 /// Dokument nahrany na Google Disk. Vazby jsou volne (retezce), at smazani zaznamu nesmaze soubor.
+/// Zaznam prace na byte: kdo, kdy, kolik casu, co udelal (fotky jsou Dokumenty s vykazId)
+model VykazPrace {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  datum      DateTime
+  kdo        String
+  minut      Int
+  popis      String
+  createdAt  DateTime @default(now())
+
+  @@index([propertyId, datum])
+}
+
 /// Obdobi, kdy se byt pronajima kratkodobe (bez smluv; prijmy jako platby, naklady s uctenkami)
 model KratkodobeObdobi {
   id         String    @id @default(cuid())
@@ -679,6 +695,8 @@ model Dokument {
   statementId  String?
   /// Uctenka / doklad k pohybu (kratkodoby pronajem)
   transactionId String?
+  /// Fotka k zaznamu vykazu prace
+  vykazId      String?
   rok          Int?
   note         String?
   uploadedById String?

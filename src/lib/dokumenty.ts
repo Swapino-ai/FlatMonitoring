@@ -30,7 +30,7 @@
 export type KategorieKlic =
   | "KUPNI_SMLOUVA" | "KATASTR" | "NAJEMNI_SMLOUVA" | "PREDAVACI_PROTOKOL"
   | "SLUZBA_SMLOUVA" | "SLUZBA_VYUCTOVANI" | "VYUCTOVANI_NAJEMCE" | "UVER" | "DANE" | "FOTKY"
-  | "NAJEMCE_DOKLAD" | "OSTATNI" | "UCTENKA";
+  | "NAJEMCE_DOKLAD" | "OSTATNI" | "UCTENKA" | "VYKAZ";
 
 type Vyzaduje = "nemovitost" | "najemce" | "sluzba" | "rok";
 
@@ -56,6 +56,7 @@ export const KATEGORIE: Record<KategorieKlic, Kategorie> = {
   DANE:               { nazev: "Daně",                    slozka: "06 Daně",              klic: "C:DANE",    vyzaduje: ["nemovitost", "rok"], podslozky: ["rok"] },
   FOTKY:              { nazev: "Fotky a ostatní",         slozka: "07 Fotky a ostatní",   klic: "C:FOTKY",   vyzaduje: ["nemovitost"], podslozky: [] },
   UCTENKA:            { nazev: "Účtenka",                 slozka: "08 Krátkodobý pronájem", klic: "C:KRATKODOBY", vyzaduje: ["nemovitost", "rok"], podslozky: ["rok"] },
+  VYKAZ:              { nazev: "Výkaz práce",             slozka: "09 Výkaz práce",       klic: "C:VYKAZ",   vyzaduje: ["nemovitost", "rok"], podslozky: ["rok"] },
   NAJEMCE_DOKLAD:     { nazev: "Doklad nájemce",          slozka: null,                   klic: "NAJEMNICI", vyzaduje: ["najemce"], podslozky: [] },
   OSTATNI:            { nazev: "Ostatní",                 slozka: null,                   klic: "OSTATNI",   vyzaduje: [], podslozky: [] },
 };

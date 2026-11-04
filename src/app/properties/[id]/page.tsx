@@ -721,6 +721,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             </>),
           },
           { id: "kratkodoby", nazev: "Krátkodobý", odkaz: `/properties/${property.id}/kratkodoby` },
+          { id: "vykaz", nazev: "Výkaz práce", odkaz: `/properties/${property.id}/vykaz` },
           {
             id: "finance",
             nazev: "Finance",
