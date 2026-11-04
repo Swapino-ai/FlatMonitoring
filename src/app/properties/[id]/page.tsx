@@ -224,6 +224,15 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     merakySluzby, (d) => DRUH_MERAKU_MAP.get(d)?.jednotka ?? null, (t) => nazevDruhu(typy, t),
   );
 
+  // Jine nemovitosti se sluzbami: zdroj pro kopirovani (byt ve stejnem dome)
+  const zdrojeSluzeb = user.role === "OWNER" ? (await prisma.property.findMany({
+    where: { id: { not: property.id }, services: { some: {} } }, orderBy: { name: "asc" },
+    select: { id: true, name: true, services: { select: { id: true, type: true, provider: true, monthlyCost: true, annualCost: true, activeTo: true } } },
+  })).map((p) => ({
+    id: p.id, nazev: p.name,
+    sluzby: p.services.map((s) => ({ id: s.id, nazev: `${nazevDruhu(typy, s.type)} · ${s.provider}`, castka: Math.round(s.monthlyCost + (s.annualCost ?? 0) / 12), aktivni: !s.activeTo || s.activeTo >= new Date() })),
+  })) : [];
+
   const sluzbyVstup: SluzbaVstup[] = property.services.map((sl) => ({
     ...sl,
     historie: (historieNakladu[sl.id] ?? []).map((z) => ({ validFrom: z.validFrom, monthlyCost: z.monthlyCost, annualCost: z.annualCost })),
@@ -680,7 +689,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             obsah: (<>
             <SbalitelnaKarta klic="sluzby" title="Služby a dodavatelé" action={<Link href="/savings" className="text-xs text-accent">Kde ušetřit →</Link>}>
               <ServiceManager typy={typy} propertyId={property.id} services={property.services} canEdit={user.role === "OWNER"}
-                porovnani={zalohy} historie={historieNakladu} />
+                porovnani={zalohy} historie={historieNakladu} jine={zdrojeSluzeb} />
             </SbalitelnaKarta>
             </>),
           },

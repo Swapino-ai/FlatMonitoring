@@ -682,3 +682,28 @@ export async function deleteOwner(_prev: EntityFormState, formData: FormData): P
   obnov(o.propertyId);
   return { success: "Podíl odebrán." };
 }
+
+/**
+ * Zkopiruje sluzby z jine nemovitosti (napr. byt ve stejnem dome): druh, dodavatel, soucasny
+ * naklad, skupina, preuctovani, merak. Cislo smlouvy a poznamky (odberne misto) se neprenaseji,
+ * historie nakladu taky ne. Vsechny plati od zadaneho dne — castky si pak uzivatel upravi.
+ */
+export async function kopirujSluzby(propertyId: string, v: { zdrojId: string; ids: string[]; od: string }): Promise<EntityFormState> {
+  const auth = await majitel();
+  if ("error" in auth) return auth;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v.od)) return { error: "Zadej, od kdy služby platí." };
+  if (!v.ids.length) return { error: "Vyber aspoň jednu službu." };
+  if (v.zdrojId === propertyId) return { error: "Vyber jinou nemovitost." };
+  const zdroj = await prisma.service.findMany({ where: { propertyId: v.zdrojId, id: { in: v.ids } } });
+  if (!zdroj.length) return { error: "Služby nenalezeny." };
+  const od = new Date(`${v.od}T00:00:00Z`);
+  await prisma.service.createMany({
+    data: zdroj.map((s) => ({
+      propertyId, type: s.type, provider: s.provider, monthlyCost: s.monthlyCost, annualCost: s.annualCost,
+      contractStart: od, groupName: s.groupName, merak: s.merak, noticePeriodMonths: s.noticePeriodMonths,
+      isBundleable: s.isBundleable, chargedToTenant: s.chargedToTenant,
+    })),
+  });
+  obnov(propertyId);
+  return { success: `Zkopírováno ${zdroj.length} ${zdroj.length === 1 ? "služba" : zdroj.length < 5 ? "služby" : "služeb"}, platí od ${v.od.split("-").reverse().join(". ")}. Uprav jejich částky.` };
+}

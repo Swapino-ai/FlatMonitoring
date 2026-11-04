@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useActionState, useEffect, useRef, useState } from "react";
-import { deleteService, novyPoplatek, saveService, smazZmenuNakladu, type EntityFormState } from "@/lib/entityActions";
+import { Fragment, useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { deleteService, kopirujSluzby, novyPoplatek, saveService, smazZmenuNakladu, type EntityFormState } from "@/lib/entityActions";
 import {
   Hlaska, Pole, Rozbalovaci, SmazatTlacitko, TextPole, UpravaPanel, UpravitTlacitko, Vyber, Zaskrtavatko, isoDatum,
 } from "./form";
@@ -24,7 +24,12 @@ export interface ZmenaNakladuRadek { id: string; validFrom: Date | string; month
 
 const dnesISO = () => new Date().toISOString().slice(0, 10);
 
-export function ServiceManager({ propertyId, services, canEdit, porovnani, historie, typy }: {
+/** Jina nemovitost a jeji sluzby (zdroj kopirovani) */
+export interface ZdrojSluzeb { id: string; nazev: string; sluzby: { id: string; nazev: string; castka: number; aktivni: boolean }[] }
+
+export function ServiceManager({ propertyId, services, canEdit, porovnani, historie, typy, jine = [] }: {
+  /** Jine nemovitosti se sluzbami — jde z nich sluzby zkopirovat */
+  jine?: ZdrojSluzeb[];
   /** Druhy sluzeb (upravitelne ve Sprave). */
   typy: TypySluzeb;
   propertyId: string; services: Row[]; canEdit: boolean;
@@ -338,6 +343,7 @@ export function ServiceManager({ propertyId, services, canEdit, porovnani, histo
             popisekTlacitka="Uložit službu" />
         </Rozbalovaci>
       )}
+      {canEdit && !upravovana && !poplatkova && jine.length > 0 && <KopieSluzeb propertyId={propertyId} jine={jine} />}
     </div>
   );
 }
@@ -440,5 +446,57 @@ function KonecVazby({ datum }: { datum: Date | null }) {
       <span className="tabular-nums text-ink-secondary">{dateCz(konec)}</span>
       {mesicu <= 3 && <Badge tone="warn">za {mesicu} {mesicu === 1 ? "měsíc" : "měs."}</Badge>}
     </span>
+  );
+}
+
+/**
+ * Kopie sluzeb z jine nemovitosti (byt ve stejnem dome): vyber nemovitost a sluzby, den, od
+ * kdy plati. Castky se zkopiruji soucasne — upravi se pak u kazde sluzby.
+ */
+function KopieSluzeb({ propertyId, jine }: { propertyId: string; jine: ZdrojSluzeb[] }) {
+  const [zdrojId, setZdrojId] = useState("");
+  const [vybrane, setVybrane] = useState<Set<string>>(new Set());
+  const [od, setOd] = useState<string | null>(dnesISO());
+  const [stav, setStav] = useState<EntityFormState>({});
+  const [bezi, spust] = useTransition();
+  const zdroj = jine.find((j) => j.id === zdrojId);
+  const vyberZdroj = (id: string) => {
+    setZdrojId(id);
+    setVybrane(new Set((jine.find((j) => j.id === id)?.sluzby ?? []).filter((s) => s.aktivni).map((s) => s.id)));
+  };
+  return (
+    <Rozbalovaci popisek="Zkopírovat služby z jiné nemovitosti" zavritPo={stav.success}>
+      <Hlaska state={stav} />
+      <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label mb-1.5 block" htmlFor="kopie-zdroj">Z nemovitosti</label>
+            <select id="kopie-zdroj" className="input" value={zdrojId} onChange={(e) => vyberZdroj(e.target.value)}>
+              <option value="">Vyber…</option>
+              {jine.map((j) => <option key={j.id} value={j.id}>{j.nazev} ({j.sluzby.length})</option>)}
+            </select>
+          </div>
+          <DatumPole label="Služby platí od" name="kopie-od" defaultValue={od ?? ""} onChange={setOd}
+            hint="Všem zkopírovaným službám — pak to u každé můžeš upravit." />
+        </div>
+        {zdroj && (
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            {zdroj.sluzby.map((s) => (
+              <label key={s.id} className={`flex cursor-pointer items-center gap-2 rounded-lg border border-line px-2.5 py-1.5 text-sm ${s.aktivni ? "" : "opacity-60"}`}>
+                <input type="checkbox" className="h-4 w-4 accent-accent" checked={vybrane.has(s.id)}
+                  onChange={() => setVybrane((v) => { const n = new Set(v); if (n.has(s.id)) n.delete(s.id); else n.add(s.id); return n; })} />
+                <span className="min-w-0 flex-1 truncate">{s.nazev}{s.aktivni ? "" : " (ukončená)"}</span>
+                <span className="text-xs tabular-nums text-ink-muted">{czk(s.castka)}/měs.</span>
+              </label>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-ink-muted">Zkopíruje se druh, dodavatel, současná částka, skupina, přeúčtování nájemci a měřák. Číslo smlouvy a poznámky ne.</p>
+        <button type="button" className="btn btn-primary" disabled={bezi || !zdroj || !vybrane.size || !od}
+          onClick={() => spust(async () => setStav(await kopirujSluzby(propertyId, { zdrojId, ids: [...vybrane], od: od! })))}>
+          {bezi ? "Kopíruji…" : vybrane.size ? `Zkopírovat ${vybrane.size} ${vybrane.size === 1 ? "službu" : vybrane.size < 5 ? "služby" : "služeb"}` : "Zkopírovat služby"}
+        </button>
+      </div>
+    </Rozbalovaci>
   );
 }
