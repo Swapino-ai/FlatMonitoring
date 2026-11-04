@@ -278,7 +278,7 @@ export function PravidelnePlatby({ propertyId, navrh, zauctovane, canDelete }: {
                       <div key={k} className="border-t border-line/60">
                         <div className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted">
                           <Sipka otevreno={otevrena} onClick={() => skupinyOtevrene.prepni(k)} popisek={`Rozbalit nebo sbalit ${sk.nazev}`} />
-                          <span className="min-w-0 flex-1 truncate">{sk.typ === "NAJEMCE" ? "Nájemce" : sk.platby.every((p) => p.druh === "UVER") ? "Splátky" : "Dodavatel"}: <span className="normal-case tracking-normal text-ink-primary">{sk.nazev}</span></span>
+                          <span className="min-w-0 flex-1 truncate">{sk.typ === "NAJEMCE" ? "Nájemce" : sk.platby.every((p) => p.druh === "UVER") ? "Splátky" : "Služby"}: <span className="normal-case tracking-normal text-ink-primary">{sk.nazev}</span></span>
                           <span className="normal-case tracking-normal">{sk.platby.length}×</span>
                           <span className={`w-24 text-right normal-case tracking-normal tabular-nums ${dluhSk > 0 ? "text-bad" : "text-good"}`}>{dluhSk > 0 ? czk(dluhSk) : "zaplaceno"}</span>
                           {sk.platby.some((p) => !radek(p.klic).datum) && <button type="button" className="btn px-2 py-0.5 text-[11px] normal-case tracking-normal font-normal" onClick={() => otevriHromadne(`Zaplaceno: ${sk.nazev}`, sk.platby)}>Zaplaceno</button>}
