@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { PodminkyNajmu } from "@/lib/market/aiParametry";
 import type { AiNahled } from "@/lib/market/aiNahled";
 import type { Profil } from "@/lib/market/profily";
@@ -39,14 +40,33 @@ const kc = (x: number) => `${x.toLocaleString("cs-CZ")} Kč`;
  */
 export function PlatbyNajmu({ n }: { n: PodminkyNajmu }) {
   const [otevreno, setOtevreno] = useState(false);
+  // Bublina se kresli mimo radek (portal, pevna poloha): ztlumeny radek (stazena nabidka)
+  // ani sousedni radky ji tak neprosvitnou a neprekryji
+  const tlacitko = useRef<HTMLButtonElement>(null);
+  const [poloha, setPoloha] = useState<{ top: number; left: number } | null>(null);
+  const zavrit = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const otevri = () => {
+    if (zavrit.current) { clearTimeout(zavrit.current); zavrit.current = null; }
+    const r = tlacitko.current?.getBoundingClientRect();
+    if (r) setPoloha({ top: r.bottom + 4, left: Math.max(8, Math.min(r.left, window.innerWidth - 296)) });
+    setOtevreno(true);
+  };
+  const zavriPozdeji = () => { zavrit.current = setTimeout(() => setOtevreno(false), 150); };
+  useEffect(() => {
+    if (!otevreno) return;
+    const pryc = () => setOtevreno(false);
+    window.addEventListener("scroll", pryc, true);
+    window.addEventListener("resize", pryc);
+    return () => { window.removeEventListener("scroll", pryc, true); window.removeEventListener("resize", pryc); };
+  }, [otevreno]);
   const polozky = n.polozky ?? [];
   const soucetPolozek = polozky.reduce((a, x) => a + (x.castka ?? 0), 0);
   const sluzby = n.sluzby ?? (soucetPolozek > 0 ? soucetPolozek : null);
   const detail = polozky.length > 0 || n.energie || n.kauce != null || n.provize != null || n.popis;
   if (n.najem == null && sluzby == null && !detail) return null;
   return (
-    <div className="relative inline-block" onMouseEnter={() => setOtevreno(true)} onMouseLeave={() => setOtevreno(false)}>
-      <button type="button" onClick={() => setOtevreno((x) => !x)} aria-expanded={otevreno}
+    <div className="relative inline-block" onMouseEnter={otevri} onMouseLeave={zavriPozdeji}>
+      <button ref={tlacitko} type="button" onClick={() => (otevreno ? setOtevreno(false) : otevri())} aria-expanded={otevreno}
         className="rounded-lg border border-line px-2 py-1 text-left tabular-nums hover:border-accent">
         <div><span className="text-ink-muted">Nájem</span> <strong className="text-ink-primary">{n.najem != null ? kc(n.najem) : "—"}</strong></div>
         <div className="text-ink-secondary">
@@ -55,8 +75,9 @@ export function PlatbyNajmu({ n }: { n: PodminkyNajmu }) {
         </div>
         {n.najem != null && sluzby != null && <div className="text-ink-muted">celkem {kc(n.najem + sluzby)}/měs.</div>}
       </button>
-      {otevreno && detail && (
-        <div role="tooltip" className="absolute left-0 top-full z-30 mt-1 w-72 rounded-xl border border-line bg-surface-card p-3 text-xs shadow-lg">
+      {otevreno && detail && poloha && createPortal(
+        <div role="tooltip" style={{ top: poloha.top, left: poloha.left }} onMouseEnter={otevri} onMouseLeave={zavriPozdeji}
+          className="fixed z-[1500] w-72 rounded-xl border border-line bg-surface-card p-3 text-xs text-ink-primary shadow-lg">
           <div className="mb-1.5 font-semibold text-ink-primary">Co nájemce platí</div>
           <table className="w-full tabular-nums">
             <tbody>
@@ -78,7 +99,8 @@ export function PlatbyNajmu({ n }: { n: PodminkyNajmu }) {
             {n.provize != null && <div>{n.provize === 0 ? "Bez provize" : `Provize: ${kc(n.provize)}`}</div>}
           </div>
           {n.popis && <div className="mt-2 italic text-ink-muted">{n.popis}</div>}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
