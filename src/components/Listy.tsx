@@ -42,7 +42,10 @@ export function Listy({ klic, listy }: { klic: string; listy: List[] }) {
       const ulozeny = localStorage.getItem(`list:${klic}`);
       if (ulozeny && listy.some((l) => l.id === ulozeny && !l.odkaz)) setAktivni(ulozeny);
     } catch { /* soukrome okno nebo zakazana uloziste — zustane prvni list */ }
-  }, [klic, listy]);
+    // Jen pri otevreni stranky: po ulozeni (obnova dat ze serveru prijde s novym polem listu)
+    // nesmi list preskocit zpet na ten z adresy
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [klic]);
 
   function prepni(id: string) {
     setAktivni(id);
@@ -50,6 +53,11 @@ export function Listy({ klic, listy }: { klic: string; listy: List[] }) {
     const el = obal.current;
     const hlavicka = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--vyska-hlavicky")) || 56;
     if (el && el.getBoundingClientRect().top < hlavicka) window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top - hlavicka - 8 });
+    // Adresa drzi otevreny list (obnoveni stranky a zpet vrati tentyz)
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("list") !== id) { url.searchParams.set("list", id); window.history.replaceState(null, "", url.toString()); }
+    } catch { /* adresu nejde zmenit — nevadi */ }
     try {
       localStorage.setItem(`list:${klic}`, id);
     } catch { /* neulozi se, prepnuti presto plati */ }
