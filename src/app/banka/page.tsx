@@ -16,22 +16,25 @@ export const dynamic = "force-dynamic";
 export default async function BankaPage() {
   const user = await page();
   if (user.role !== "OWNER") redirect("/");
-  const [keKontrole, sparovane, smlouvy, pocty, kratkodobe] = await Promise.all([
+  const [keKontrole, sparovane, smlouvy, pocty, kratkodobe, ignorovane] = await Promise.all([
     prisma.bankovniPohyb.findMany({ where: { stav: "KE_KONTROLE" }, orderBy: { datum: "desc" } }),
     prisma.bankovniPohyb.findMany({ where: { stav: "SPAROVANO" }, orderBy: { datum: "desc" }, take: 50 }),
     prisma.lease.findMany({ include: { property: { select: { name: true } } }, orderBy: [{ isActive: "desc" }, { startDate: "desc" }] }),
     prisma.bankovniPohyb.groupBy({ by: ["stav"], _count: true }),
     // Byty s krátkodobým pronájmem: výplaty z Airbnb / Booking jdou přiřadit jako jejich příjem
     prisma.property.findMany({ where: { kratkodobe: { some: {} } }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    prisma.bankovniPohyb.findMany({ where: { stav: "IGNOROVANO" }, orderBy: { datum: "desc" }, take: 200 }),
   ]);
+  // K zarazeni: platby ke kontrole i ignorovane (zobrazi se po zaskrtnuti)
+  const kZarazeni = [...keKontrole, ...ignorovane];
   // Cile parovani po nemovitostech: najemci (prichozi), nezaplacene predpisy a vratky (odchozi),
   // jiny prijem / vydaj podle kategorie (stejne kategorie jako na strance Pohyby)
-  const nemovitosti = keKontrole.length ? await prisma.property.findMany({
+  const nemovitosti = kZarazeni.length ? await prisma.property.findMany({
     where: { status: { not: "SOLD" } }, select: { id: true, name: true, street: true, city: true, kratkodobe: { select: { id: true } } }, orderBy: { name: "asc" },
   }) : [];
-  const navrhy = keKontrole.some((p) => p.castka < 0) ? await nactiNavrhyPortfolia(nemovitosti) : new Map();
+  const navrhy = kZarazeni.some((p) => p.castka < 0) ? await nactiNavrhyPortfolia(nemovitosti) : new Map();
   const odDne = denISO(new Date(Date.now() - 400 * 86400000)).slice(0, 7);
-  const vratky = keKontrole.some((p) => p.castka < 0) ? await prisma.tenantStatement.findMany({ where: { status: { in: ["VYDANO", "ODESLANO"] }, result: { gt: 0 } }, select: { id: true, cislo: true, result: true, snapshot: true, propertyId: true } }) : [];
+  const vratky = kZarazeni.some((p) => p.castka < 0) ? await prisma.tenantStatement.findMany({ where: { status: { in: ["VYDANO", "ODESLANO"] }, result: { gt: 0 } }, select: { id: true, cislo: true, result: true, snapshot: true, propertyId: true } }) : [];
   const cile: CileNemovitosti[] = nemovitosti.map((n) => ({
     id: n.id, nazev: n.name, adresa: [n.street, n.city].filter(Boolean).join(", "), kratkodoby: n.kratkodobe.length > 0,
     smlouvy: smlouvy.filter((s) => s.propertyId === n.id).map((s) => ({ id: s.id, nazev: `${s.tenantName}${s.isActive ? "" : " (skončená)"}` })),
@@ -80,6 +83,7 @@ export default async function BankaPage() {
           pocty={Object.fromEntries(pocty.map((x) => [x.stav, x._count]))}
           keKontrole={keKontrole.map(radek)}
           sparovane={sparovane.map(radek)}
+          ignorovane={ignorovane.map(radek)}
           smlouvy={smlouvy.map((s) => ({ id: s.id, nazev: `${s.tenantName} · ${s.property.name}${s.isActive ? "" : " (skončená)"}` }))}
           cile={cile} kategorie={kategorie}
           kategorieNazvy={Object.fromEntries(CATEGORIES.map((c) => [c.key, c.label]))}

@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { ignorovatPohyb, priraditKratkodoby, priraditPohyb, priraditVydaj, stahnoutZBanky, ulozPoznamkuPohybu, zrusitParovani } from "@/lib/bankaActions";
+import { useEffect, useState, useTransition } from "react";
+import { ignorovatPohyb, vratitKeKontrole, priraditKratkodoby, priraditPohyb, priraditVydaj, stahnoutZBanky, ulozPoznamkuPohybu, zrusitParovani } from "@/lib/bankaActions";
 import { czk, dateCz } from "@/lib/format";
 import { Card } from "./Stat";
 import { Ikona } from "./Ikony";
@@ -186,7 +186,7 @@ function coUhradila(p: PohybRadek["parovani"]): string {
 }
 
 /** Pohyby z banky: stazeni, kontrola nesparovanych a prehled sparovanych. */
-export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, sparovane, cile = [], kategorie = { prijmy: [], vydaje: [] }, kategorieNazvy = {} }: {
+export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, sparovane, ignorovane = [], cile = [], kategorie = { prijmy: [], vydaje: [] }, kategorieNazvy = {} }: {
   cile?: CileNemovitosti[];
   kategorie?: { prijmy: Kategorie[]; vydaje: Kategorie[] };
   /** Klic kategorie -> nazev (do popisu sparovanych vydaju) */
@@ -198,6 +198,8 @@ export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, spar
   pocty: Record<string, number>;
   keKontrole: PohybRadek[];
   sparovane: PohybRadek[];
+  /** Ignorovane platby (jdou zobrazit a i tak zaradit) */
+  ignorovane?: PohybRadek[];
   smlouvy?: { id: string; nazev: string }[];
 }) {
   const [bezi, spust] = useTransition();
@@ -224,6 +226,43 @@ export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, spar
     }
   });
   const zbyva = keKontrole.filter((p) => !vyrizene.has(p.id));
+  const zbyvaIgnorovane = ignorovane.filter((p) => !vyrizene.has(p.id));
+  // Zobrazovat ignorovane platby (pamatuje si prohlizec)
+  const [ukazIgnorovane, setUkazIgnorovane] = useState(false);
+  useEffect(() => { try { setUkazIgnorovane(localStorage.getItem("banka:ignorovane") === "1"); } catch { /* bez uloziste */ } }, []);
+  const prepniIgnorovane = (v: boolean) => { setUkazIgnorovane(v); try { localStorage.setItem("banka:ignorovane", v ? "1" : "0"); } catch { /* bez uloziste */ } };
+  const radek = (p: PohybRadek, ignorovany: boolean) => {
+              const odchozi = p.castka < 0;
+              // Navrh: smlouva (prichozi) nebo cil (odchozi) urci i nemovitost
+              const navrhNem = odchozi
+                ? (p.navrhCil?.startsWith("predpis:") || p.navrhCil?.startsWith("vydaj:") || p.navrhCil?.startsWith("skupina:") ? p.navrhCil.split(":")[1] : null)
+                : cile.find((c) => c.smlouvy.some((x) => x.id === p.navrhLeaseId))?.id ?? null;
+              const navrh = odchozi ? p.navrhCil ?? "" : p.navrhLeaseId ? `lease:${p.navrhLeaseId}` : "";
+              return (
+                <li key={p.id} className={`flex flex-wrap items-start gap-x-4 gap-y-2 py-3 ${ignorovany ? "opacity-80" : ""}`}>
+                  <div className="min-w-[14rem] flex-1">
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <strong className={`tabular-nums ${odchozi ? "text-bad" : "text-good"}`}>{odchozi ? "−" : "+"}{czk(Math.abs(p.castka))}</strong>
+                      <span className="text-sm text-ink-muted">{dateCz(p.datum)}</span>
+                      <span className="text-xs text-ink-muted">{odchozi ? "odchozí" : "příchozí"}</span>
+                    </div>
+                    <div className="text-sm">{platce(p)}</div>
+                    <div className="text-xs text-ink-muted">{[p.vs && `VS ${p.vs}`, p.zprava].filter(Boolean).join(" · ")}</div>
+                    {p.poznamka && <div className="mt-0.5 text-xs text-warn">{p.poznamka}</div>}
+                    <Poznamka p={p} onUloz={(t) => akce(async () => { await ulozPoznamkuPohybu(p.id, t); return {}; })} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Prirazeni p={p} cile={cile} kategorie={kategorie} vychoziNemovitost={navrhNem} vychoziCil={navrh} bezi={bezi}
+                      onSparuj={(cil) => vyrid(p.id, () => cil.startsWith("lease:") ? priraditPohyb(p.id, cil.slice(6))
+                        : cil.startsWith("kt:") ? priraditKratkodoby(p.id, cil.slice(3)) : priraditVydaj(p.id, cil))} />
+                    {ignorovany
+                      ? <button type="button" className="btn py-1.5" disabled={bezi} onClick={() => vyrid(p.id, () => vratitKeKontrole(p.id))}>Vrátit ke kontrole</button>
+                      : <button type="button" className="btn py-1.5" disabled={bezi} onClick={() => vyrid(p.id, () => ignorovatPohyb(p.id))}>Ignorovat</button>}
+                  </div>
+                  {chybaRadku?.id === p.id && <p className="w-full rounded-lg bg-bad/10 px-3 py-1.5 text-sm text-bad">{chybaRadku.text}</p>}
+                </li>
+              );
+  };
 
   const platce = (p: PohybRadek) => [p.nazevProtiuctu, p.protiucet].filter(Boolean).join(" · ") || "neznámý účet";
 
@@ -259,40 +298,26 @@ export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, spar
           <p className="py-3 text-center text-sm text-ink-muted">Vše spárováno.</p>
         ) : (
           <ul className="divide-y divide-line/70">
-            {zbyva.map((p) => {
-              const odchozi = p.castka < 0;
-              // Navrh: smlouva (prichozi) nebo cil (odchozi) urci i nemovitost
-              const navrhNem = odchozi
-                ? (p.navrhCil?.startsWith("predpis:") || p.navrhCil?.startsWith("vydaj:") || p.navrhCil?.startsWith("skupina:") ? p.navrhCil.split(":")[1] : null)
-                : cile.find((c) => c.smlouvy.some((x) => x.id === p.navrhLeaseId))?.id ?? null;
-              const navrh = odchozi ? p.navrhCil ?? "" : p.navrhLeaseId ? `lease:${p.navrhLeaseId}` : "";
-              return (
-                <li key={p.id} className="flex flex-wrap items-start gap-x-4 gap-y-2 py-3">
-                  <div className="min-w-[14rem] flex-1">
-                    <div className="flex flex-wrap items-baseline gap-2">
-                      <strong className={`tabular-nums ${odchozi ? "text-bad" : "text-good"}`}>{odchozi ? "−" : "+"}{czk(Math.abs(p.castka))}</strong>
-                      <span className="text-sm text-ink-muted">{dateCz(p.datum)}</span>
-                      <span className="text-xs text-ink-muted">{odchozi ? "odchozí" : "příchozí"}</span>
-                    </div>
-                    <div className="text-sm">{platce(p)}</div>
-                    <div className="text-xs text-ink-muted">{[p.vs && `VS ${p.vs}`, p.zprava].filter(Boolean).join(" · ")}</div>
-                    {p.poznamka && <div className="mt-0.5 text-xs text-warn">{p.poznamka}</div>}
-                    <Poznamka p={p} onUloz={(t) => akce(async () => { await ulozPoznamkuPohybu(p.id, t); return {}; })} />
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Prirazeni p={p} cile={cile} kategorie={kategorie} vychoziNemovitost={navrhNem} vychoziCil={navrh} bezi={bezi}
-                      onSparuj={(cil) => vyrid(p.id, () => cil.startsWith("lease:") ? priraditPohyb(p.id, cil.slice(6))
-                        : cil.startsWith("kt:") ? priraditKratkodoby(p.id, cil.slice(3)) : priraditVydaj(p.id, cil))} />
-                    <button type="button" className="btn py-1.5" disabled={bezi} onClick={() => vyrid(p.id, () => ignorovatPohyb(p.id))}>Ignorovat</button>
-                  </div>
-                  {chybaRadku?.id === p.id && <p className="w-full rounded-lg bg-bad/10 px-3 py-1.5 text-sm text-bad">{chybaRadku.text}</p>}
-                </li>
-              );
-            })}
+            {zbyva.map((p) => radek(p, false))}
           </ul>
         )}
         <p className="mt-2 text-xs text-ink-muted">Po spárování si aplikace účet zapamatuje — další platby z něj (příchozí i odchozí) se spárují samy.</p>
+        <label className="mt-3 flex w-fit cursor-pointer items-center gap-2 text-sm">
+          <input type="checkbox" className="h-4 w-4 accent-[var(--accent,#2563eb)]" checked={ukazIgnorovane} onChange={(e) => prepniIgnorovane(e.target.checked)} />
+          Zobrazovat ignorované platby ({zbyvaIgnorovane.length})
+        </label>
       </Card>
+
+      {ukazIgnorovane && (
+        <Card title={`Ignorované (${zbyvaIgnorovane.length})`}>
+          {zbyvaIgnorovane.length === 0 ? (
+            <p className="py-3 text-center text-sm text-ink-muted">Žádné ignorované platby.</p>
+          ) : (
+            <ul className="divide-y divide-line/70">{zbyvaIgnorovane.map((p) => radek(p, true))}</ul>
+          )}
+          <p className="mt-2 text-xs text-ink-muted">Ignorovanou platbu jde i tak zařadit (spárovat), nebo vrátit ke kontrole.</p>
+        </Card>
+      )}
 
       <Card title="Spárované platby">
         {sparovane.length === 0 ? (

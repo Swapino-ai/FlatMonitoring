@@ -59,6 +59,15 @@ export async function ignorovatPohyb(pohybId: string): Promise<{ error?: string 
   return {};
 }
 
+/** Ignorovanou platbu vrati mezi platby ke kontrole. */
+export async function vratitKeKontrole(pohybId: string): Promise<{ error?: string }> {
+  const chyba = await majitel();
+  if (chyba) return { error: chyba };
+  await prisma.bankovniPohyb.updateMany({ where: { id: pohybId, stav: "IGNOROVANO" }, data: { stav: "KE_KONTROLE" } });
+  obnov();
+  return {};
+}
+
 /** Zrusi parovani: uhrazene predpisy jsou zase nezaplacene, pohyb jde ke kontrole. */
 export async function zrusitParovani(pohybId: string): Promise<{ error?: string }> {
   const chyba = await majitel();
