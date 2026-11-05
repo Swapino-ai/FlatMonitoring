@@ -307,11 +307,20 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
 
   // Zakladni prehled pohybu. Platby zapsane jako zaplacene v Pravidelnych platbach
   // (zdroj EVIDENCE) se pricitaji; ty zaucotovane jako pohyb uz v pohybech jsou.
+  // V pohledu "Muj podil" se castky krati: vse podle podilu na nemovitosti, splatky uveru
+  // podle toho, komu uver patri (predpis uveru konkretne, pohyb splatky prumerne)
+  const vahaPredpisu = (klic: string) => {
+    if (!klic.startsWith("uver:")) return podil;
+    const uver = property.loans.find((l) => l.id === klic.split(":")[1]);
+    return uver ? podilNaUveru(pohled, uver, property.owners, user.id) : a.podilSplatek;
+  };
+  const vahaPohybu = (kategorie: string) => kategorie.startsWith("LOAN_") ? a.podilSplatek : podil;
+  const kraceno = pohled === "moje" && (podil !== 1 || a.podilSplatek !== 1);
   const evidovane = navrhPlateb.filter((p) => p.zaplaceno?.zdroj === "EVIDENCE")
-    .map((p) => ({ datum: p.zaplaceno!.datum, castka: (p.castka >= 0 ? 1 : -1) * p.zaplaceno!.castka }));
+    .map((p) => ({ datum: p.zaplaceno!.datum, castka: (p.castka >= 0 ? 1 : -1) * p.zaplaceno!.castka * vahaPredpisu(p.klic) }));
   const letos = String(new Date().getFullYear());
   const vse = [
-    ...property.transactions.map((t) => ({ datum: denISO(t.date), castka: t.amount })),
+    ...property.transactions.map((t) => ({ datum: denISO(t.date), castka: t.amount * vahaPohybu(t.category) })),
     ...evidovane,
   ];
   const souctyPohybu = {
@@ -320,7 +329,10 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     letos: vse.filter((x) => x.datum.startsWith(letos)).reduce((a, x) => a + x.castka, 0),
   };
   const naUctu = souctyPohybu.prijmy - souctyPohybu.vydaje;
-  const dluhyPlateb = prehledPlateb(navrhPlateb);
+  const dluhyPlateb = prehledPlateb(kraceno ? navrhPlateb.map((p) => {
+    const w = vahaPredpisu(p.klic);
+    return { ...p, castka: p.castka * w, ...(p.zaplaceno ? { zaplaceno: { ...p.zaplaceno, castka: p.zaplaceno.castka * w } } : {}) };
+  }) : navrhPlateb);
 
   // Mesicni cash flow majitele: pravidelne platby (najem a zalohy od najemce, platby sluzeb
   // dodavatelum) podle predpisu, u zaplacenych podle skutecne zaplacene castky, plus ostatni
@@ -788,6 +800,12 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             nazev: "Stav účtu",
             obsah: (<>
           <div className="mb-3 space-y-3">
+            {kraceno && (
+              <p className="rounded-lg bg-accent-soft/60 px-3 py-2 text-sm text-ink-secondary">
+                Pohled <strong>Můj podíl</strong>: souhrnná čísla jsou tvoje část — {Math.round(podil * 1000) / 10} % nemovitosti,
+                splátky úvěrů podle toho, komu úvěr patří ({Math.round(a.podilSplatek * 1000) / 10} %). Seznamy plateb níže ukazují celé částky.
+              </p>
+            )}
             <StatGrid>
               <Stat label="Na účtu" value={czk(naUctu)} tone={naUctu >= 0 ? "good" : "bad"}
                 sub="součet všech pohybů a zaplacených pravidelných plateb" />
