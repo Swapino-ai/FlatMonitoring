@@ -14,12 +14,12 @@ export const dynamic = "force-dynamic";
 
 export default async function CashFlowPage() {
   const user = await page();
-  const { properties } = await nactiPortfolio(user);
+  const { properties, vahy } = await nactiPortfolio(user);
   const year = new Date().getFullYear();
 
   const navrhy = await nactiNavrhyPortfolia(properties);
-  const series = cashFlowSeries(properties, 12, new Date(), navrhy);
-  const expenses = expenseBreakdown(properties, year, navrhy).map((e) => ({ kategorie: categoryLabel(e.kategorie), castka: e.castka }));
+  const series = cashFlowSeries(properties, 12, new Date(), navrhy, vahy);
+  const expenses = expenseBreakdown(properties, year, navrhy, vahy).map((e) => ({ kategorie: categoryLabel(e.kategorie), castka: e.castka }));
 
   const totalIncome = sum(series.map((s) => s.prijmy));
   const totalExpense = sum(series.map((s) => s.vydaje));
@@ -66,7 +66,7 @@ export default async function CashFlowPage() {
                 {expenses.length ? <ExpenseBreakdownChart data={expenses} /> : <Empty>Žádné výdaje v roce {year}.</Empty>}
               </Card>
 
-              <Card title="Poslední pohyby">
+              <Card title={vahy ? "Poslední pohyby (celé částky)" : "Poslední pohyby"}>
                 <div className="max-h-96 overflow-y-auto">
                   <table className="table-base">
                     <thead><tr><th>Datum</th><th>Nemovitost</th><th>Kategorie</th><th className="num">Částka</th></tr></thead>

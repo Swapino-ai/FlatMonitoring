@@ -21,14 +21,14 @@ export const dynamic = "force-dynamic";
 export default async function Dashboard() {
   const user = await page();
   await srovnejPlatnost();
-  const { pohled, properties, analyses, maSpoluvlastnictvi } = await nactiPortfolio(user);
+  const { pohled, properties, analyses, maSpoluvlastnictvi, vahy } = await nactiPortfolio(user);
   const s = summarize(analyses);
   const nazvyDruhu = Object.fromEntries(Object.entries(await nactiTypySluzeb()).map(([k, t]) => [k, t.name]));
   const savings = summarizeSavings(findBundleOpportunities(properties, new Date(), nazvyDruhu));
 
-  const equity = equitySeries(properties);
+  const equity = equitySeries(properties, new Date(), vahy);
   const navrhyPlateb = await nactiNavrhyPortfolia(properties);
-  const cashflow = cashFlowSeries(properties, 12, new Date(), navrhyPlateb);
+  const cashflow = cashFlowSeries(properties, 12, new Date(), navrhyPlateb, vahy);
   const upozorneni = await nactiUpozorneni(properties, navrhyPlateb);
   const yields = analyses
     .filter((a) => a.property.status !== "SOLD")

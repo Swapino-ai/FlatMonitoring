@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PohledPrepinac } from "./PohledPrepinac";
-import type { Pohled } from "@/lib/ownership";
 import { useEffect, useRef, useState, type ReactNode, Suspense } from "react";
 
 /** Jednoduche linkove ikony. Bez knihovny — je jich jen par a nemaji zvetsovat balicek. */
@@ -46,7 +45,13 @@ const OWNER_LINKS = [{ href: "/banka", label: "Banka", ikona: "banka" }, { href:
 /** Ve spodni liste na telefonu jsou jen ctyri nejdulezitejsi, zbytek pod "Vice". */
 const SPODNI = ["/", "/properties", "/cashflow", "/market"];
 
-export function NavKlient({ user, verze, pohled }: { user: { name: string; role: string }; verze?: ReactNode; pohled: Pohled }) {
+export function NavKlient({ user, verze, volba, moznosti, komu }: {
+  user: { name: string; role: string }; verze?: ReactNode;
+  /** "vse" | "moje" | "u:<id>" */
+  volba: string; moznosti: { value: string; label: string }[];
+  /** Cisi podil se zobrazuje (null = cele portfolio) */
+  komu: string | null;
+}) {
   const pathname = usePathname();
   const [vice, setVice] = useState(false);
 
@@ -105,7 +110,7 @@ export function NavKlient({ user, verze, pohled }: { user: { name: string; role:
 
           <div className="ml-auto flex items-center gap-3 text-sm md:ml-0">
             {/* Pohled plati pro vsechny stranky, proto je vzdy v hlavicce */}
-            <Suspense fallback={null}><PohledPrepinac pohled={pohled} /></Suspense>
+            <Suspense fallback={null}><PohledPrepinac volba={volba} moznosti={moznosti} /></Suspense>
             {verze}
             <span className="hidden items-center gap-2 text-ink-secondary lg:flex">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-sunken text-xs font-semibold text-ink-primary">
@@ -121,6 +126,20 @@ export function NavKlient({ user, verze, pohled }: { user: { name: string; role:
             </form>
           </div>
         </div>
+        {/* Zobrazuje se jen podil: vyrazne na kazde strance, at je jasne, ze cisla nejsou cela */}
+        {komu && (
+          <div className="border-t-2 border-warn bg-warn/20">
+            <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-1.5 text-sm sm:px-6">
+              <span className="rounded-md bg-warn px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-white">Jen podíl</span>
+              <span className="font-semibold text-ink-primary">Zobrazuješ {komu}</span>
+              <span className="hidden text-ink-secondary sm:inline">— částky jsou krácené podle vlastnictví nemovitostí a úvěrů, nejsou celé.</span>
+              <form action="/api/pohled" method="post" className="ml-auto">
+                <input type="hidden" name="kam" value={pathname} />
+                <button type="submit" name="pohled" value="vse" className="text-sm font-medium text-accent underline-offset-2 hover:underline">Zobrazit celé portfolio</button>
+              </form>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Spodni lista pro telefon. Fixni, s ohledem na spodni vyrez (iPhone). */}

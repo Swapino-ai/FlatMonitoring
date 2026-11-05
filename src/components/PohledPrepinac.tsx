@@ -1,39 +1,28 @@
 "use client";
 
+import { useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import type { Pohled } from "@/lib/ownership";
 
 /**
- * Prepinac mezi vlastnim podilem a celym portfoliem.
+ * Vyber pohledu: cele portfolio, muj podil nebo podil jineho vlastnika.
  * Jde o formular, ne o stav v prohlizeci — cisla pocita server a musi se
  * prepocitat cela stranka.
  */
-export function PohledPrepinac({ pohled }: { pohled: Pohled }) {
+export function PohledPrepinac({ volba, moznosti }: { volba: string; moznosti: { value: string; label: string }[] }) {
   const pathname = usePathname();
   const params = useSearchParams().toString();
   const kam = pathname + (params ? `?${params}` : "");
+  const form = useRef<HTMLFormElement>(null);
 
   return (
-    <form action="/api/pohled" method="post" className="no-print flex rounded-lg border border-line p-0.5">
+    <form ref={form} action="/api/pohled" method="post" className="no-print">
       <input type="hidden" name="kam" value={kam} />
-      {([
-        ["moje", "Můj podíl", "Můj"],
-        ["vse", "Celé portfolio", "Vše"],
-      ] as [Pohled, string, string][]).map(([hodnota, popisek, kratce]) => (
-        <button
-          key={hodnota}
-          type="submit"
-          name="pohled"
-          value={hodnota}
-          aria-pressed={pohled === hodnota}
-          className={`whitespace-nowrap rounded px-2.5 py-1 text-xs transition-colors ${
-            pohled === hodnota ? "bg-accent font-medium text-white" : "text-ink-secondary hover:text-ink-primary"
-          }`}
-        >
-          <span className="hidden sm:inline">{popisek}</span>
-          <span className="sm:hidden">{kratce}</span>
-        </button>
-      ))}
+      <select name="pohled" aria-label="Zobrazit" defaultValue={volba} onChange={() => form.current?.requestSubmit()}
+        className={`max-w-[11rem] rounded-lg border px-2 py-1 text-xs font-medium sm:max-w-[14rem] ${
+          volba === "vse" ? "border-line bg-surface-card text-ink-secondary" : "border-warn bg-warn/15 text-ink-primary"}`}>
+        {moznosti.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+      </select>
+      <noscript><button type="submit" className="ml-1 text-xs">OK</button></noscript>
     </form>
   );
 }

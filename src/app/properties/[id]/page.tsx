@@ -17,7 +17,7 @@ import { ServiceManager } from "@/components/ServiceManager";
 import { TransactionManager } from "@/components/TransactionManager";
 import { analyzeProperty, loadProperty, mujMesicniTok } from "@/lib/portfolio";
 import { nasobitel, podilNaUveru, podilUzivatele } from "@/lib/ownership";
-import { aktualniPohled } from "@/lib/ownership.server";
+import { aktualniPohled, kdoPohledu } from "@/lib/ownership.server";
 import { prisma } from "@/lib/db";
 import { synchronizujSvjKdyzJeCas } from "@/lib/svj";
 import { sluzbyProNajemce } from "@/lib/vyuctovaniNajemce";
@@ -111,7 +111,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   ]);
   if (!property) notFound();
 
-  const podil = nasobitel(pohled, property.owners, user.id);
+  const kdo = await kdoPohledu(user.id);
+  const podil = nasobitel(pohled, property.owners, kdo);
   // Meraky se stavy: spotreba najemcu do vyuctovani podle odectu
   // Stavy ze SVJ jednou za mesic, az po odeslani stranky (nebrzdi ji)
   after(() => synchronizujSvjKdyzJeCas(id));
@@ -129,7 +130,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
     ] } }),
   ]);
   const ceka = { trh: navrhuTrhu + shodTrhu };
-  const a = analyzeProperty(property, new Date(), podil, (l) => podilNaUveru(pohled, l, property.owners, user.id));
+  const a = analyzeProperty(property, new Date(), podil, (l) => podilNaUveru(pohled, l, property.owners, kdo));
   const year = new Date().getFullYear();
 
   const mujPodil = podilUzivatele(property.owners, user.id);
@@ -312,7 +313,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const vahaPredpisu = (klic: string) => {
     if (!klic.startsWith("uver:")) return podil;
     const uver = property.loans.find((l) => l.id === klic.split(":")[1]);
-    return uver ? podilNaUveru(pohled, uver, property.owners, user.id) : a.podilSplatek;
+    return uver ? podilNaUveru(pohled, uver, property.owners, kdo) : a.podilSplatek;
   };
   const vahaPohybu = (kategorie: string) => kategorie.startsWith("LOAN_") ? a.podilSplatek : podil;
   const kraceno = pohled === "moje" && (podil !== 1 || a.podilSplatek !== 1);
@@ -420,8 +421,8 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
 
         {pohled === "moje" && podil === 0 && (
           <div className="rounded-card border border-warn/40 bg-warn/10 px-4 py-3 text-sm">
-            <strong>Tuhle nemovitost nevlastníš</strong> — tvůj podíl je 0 %, takže v pohledu <strong>Můj podíl</strong> jsou
-            všechny částky nulové. Pro skutečná čísla přepni nahoře na <strong>Celé portfolio</strong>
+            <strong>{kdo === user.id ? "Tuhle nemovitost nevlastníš" : "Vybraný vlastník tuhle nemovitost nevlastní"}</strong> — podíl je 0 %, takže
+            v tomto pohledu jsou všechny částky nulové. Pro skutečná čísla přepni nahoře na <strong>Celé portfolio</strong>
             {property.owners.length > 0 && <>, případně uprav spoluvlastníky na záložce Přehled</>}.
           </div>
         )}
@@ -800,20 +801,6 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             nazev: "Stav účtu",
             obsah: (<>
           <div className="mb-3 space-y-3">
-            {kraceno && (
-              <div className="flex items-center gap-4 rounded-2xl border-2 border-warn bg-warn/15 px-4 py-3 shadow-card" role="note">
-                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-warn text-xl font-bold text-white tabular-nums">
-                  {Math.round(podil * 100)} %
-                </span>
-                <div className="text-sm">
-                  <p className="text-base font-semibold text-ink-primary">Zobrazuješ jen svůj podíl — {Math.round(podil * 1000) / 10} % nemovitosti</p>
-                  <p className="text-ink-secondary">
-                    Čísla níže nejsou celé částky. Splátky úvěrů se počítají podle toho, komu úvěr patří ({Math.round(a.podilSplatek * 1000) / 10} %).
-                    Seznamy plateb ukazují celé platby. Celé částky uvidíš po přepnutí pohledu nahoře na <strong>Celé portfolio</strong>.
-                  </p>
-                </div>
-              </div>
-            )}
             <StatGrid>
               <Stat label="Na účtu" value={czk(naUctu)} tone={naUctu >= 0 ? "good" : "bad"}
                 sub="součet všech pohybů a zaplacených pravidelných plateb" />

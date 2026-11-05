@@ -18,8 +18,9 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
   const currentYear = new Date().getFullYear();
   const year = Number(rok) || currentYear;
   // Dan se vzdy pocita z vlastniho podilu — spoluvlastnik zdanuje jen svou cast
-  const { properties, analyses } = await nactiPortfolio(user);
-  const podily = new Map(analyses.map((a) => [a.property.id, podilUzivatele(a.property.owners, user.id)]));
+  // Vybrany vlastnik v hlavicce: dan z jeho podilu (jinak z meho)
+  const { properties, analyses, kdo } = await nactiPortfolio(user);
+  const podily = new Map(analyses.map((a) => [a.property.id, podilUzivatele(a.property.owners, kdo)]));
   const report = buildTaxReport(properties, year, true, podily);
   const maPodily = [...podily.values()].some((p) => p < 1);
 

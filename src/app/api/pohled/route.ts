@@ -3,12 +3,14 @@ import { cookies } from "next/headers";
 import { getSession } from "@/lib/auth";
 import { POHLED_COOKIE } from "@/lib/ownership";
 
-/** Prepnuti mezi vlastnim podilem a celym portfoliem. */
+/** Prepnuti pohledu: cele portfolio, muj podil nebo podil jineho vlastnika. */
 export async function POST(request: Request) {
   if (!(await getSession())) return NextResponse.json({ error: "Nepřihlášen" }, { status: 401 });
 
   const form = await request.formData();
-  const pohled = String(form.get("pohled") ?? "vse") === "moje" ? "moje" : "vse";
+  const v = String(form.get("pohled") ?? "vse");
+  // "moje", "u:<id>" (podil jineho vlastnika), jinak cele portfolio
+  const pohled = v === "moje" || /^u:[\w-]{1,64}$/.test(v) ? v : "vse";
   const kam = String(form.get("kam") ?? "/");
 
   (await cookies()).set(POHLED_COOKIE, pohled, {
