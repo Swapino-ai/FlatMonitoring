@@ -801,10 +801,18 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             obsah: (<>
           <div className="mb-3 space-y-3">
             {kraceno && (
-              <p className="rounded-lg bg-accent-soft/60 px-3 py-2 text-sm text-ink-secondary">
-                Pohled <strong>Můj podíl</strong>: souhrnná čísla jsou tvoje část — {Math.round(podil * 1000) / 10} % nemovitosti,
-                splátky úvěrů podle toho, komu úvěr patří ({Math.round(a.podilSplatek * 1000) / 10} %). Seznamy plateb níže ukazují celé částky.
-              </p>
+              <div className="flex items-center gap-4 rounded-2xl border-2 border-warn bg-warn/15 px-4 py-3 shadow-card" role="note">
+                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-warn text-xl font-bold text-white tabular-nums">
+                  {Math.round(podil * 100)} %
+                </span>
+                <div className="text-sm">
+                  <p className="text-base font-semibold text-ink-primary">Zobrazuješ jen svůj podíl — {Math.round(podil * 1000) / 10} % nemovitosti</p>
+                  <p className="text-ink-secondary">
+                    Čísla níže nejsou celé částky. Splátky úvěrů se počítají podle toho, komu úvěr patří ({Math.round(a.podilSplatek * 1000) / 10} %).
+                    Seznamy plateb ukazují celé platby. Celé částky uvidíš po přepnutí pohledu nahoře na <strong>Celé portfolio</strong>.
+                  </p>
+                </div>
+              </div>
             )}
             <StatGrid>
               <Stat label="Na účtu" value={czk(naUctu)} tone={naUctu >= 0 ? "good" : "bad"}
