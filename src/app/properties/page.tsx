@@ -3,6 +3,7 @@ import { page } from "@/lib/guard";
 import { Nav } from "@/components/Nav";
 import { Verze } from "@/components/Verze";
 import { Badge, Card, Empty } from "@/components/Stat";
+import { BezPodiluPrepinac } from "@/components/BezPodiluPrepinac";
 import { nactiPortfolio } from "@/lib/pohled";
 import { mujMesicniTok } from "@/lib/portfolio";
 import { nactiNavrhyPortfolia } from "@/lib/pravidelnePlatbyData";
@@ -11,9 +12,12 @@ import { czk, czkCompact, dateCz, pct, STATUS_LABELS } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-export default async function PropertiesPage() {
+export default async function PropertiesPage({ searchParams }: { searchParams: Promise<{ bezPodilu?: string }> }) {
   const user = await page();
-  const { pohled, analyses, maSpoluvlastnictvi } = await nactiPortfolio(user);
+  const { pohled, analyses: vsechny, maSpoluvlastnictvi, bezPodilu } = await nactiPortfolio(user);
+  // V pohledu podilu se nemovitosti bez podilu schovaji (jdou zobrazit)
+  const ukazBezPodilu = (await searchParams).bezPodilu === "1";
+  const analyses = ukazBezPodilu ? vsechny : vsechny.filter((a) => !bezPodilu.has(a.property.id));
   // Skutecny mesicni cash flow z plateb a pohybu; odhad ze smluv jen dokud zadne nejsou
   const navrhy = await nactiNavrhyPortfolia(analyses.map((a) => a.property));
   const skutecny = new Map(analyses.map((a) => {
@@ -37,8 +41,9 @@ export default async function PropertiesPage() {
           </div>
         </div>
 
+        <BezPodiluPrepinac pocet={bezPodilu.size} zobrazeno={ukazBezPodilu} cesta="/properties" />
         {analyses.length === 0 ? (
-          <Card><Empty>Zatím žádné nemovitosti.</Empty></Card>
+          <Card><Empty>{bezPodilu.size ? "Zvolený vlastník nemá podíl na žádné nemovitosti." : "Zatím žádné nemovitosti."}</Empty></Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {analyses.map((a) => {

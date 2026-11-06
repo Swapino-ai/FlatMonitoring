@@ -12,6 +12,8 @@ export interface PohledNaPortfolio {
   kdo: string;
   /** Vahy nemovitosti pro grafy a cash flow v pohledu "podil" */
   vahy?: Map<string, VahaNemovitosti>;
+  /** Nemovitosti bez podilu zvoleneho vlastnika (v seznamech schovane, jdou zobrazit) */
+  bezPodilu: Set<string>;
   properties: PropertyWithRelations[];
   analyses: PropertyAnalysis[];
   /** Existuje aspon jeden byt se zadanymi spoluvlastniky? Jinak prepinac nema smysl. */
@@ -41,5 +43,11 @@ export async function nactiPortfolio(user: SessionUser, asOf = new Date()): Prom
       }]))
     : undefined;
 
-  return { pohled, kdo, properties, analyses, maSpoluvlastnictvi, vahy };
+  // Nemovitosti, na kterych zvoleny vlastnik nema podil (ani na uveru) — v seznamech se schovaji
+  const bezPodilu = new Set(vahy ? properties.filter((p) => {
+    const v = vahy.get(p.id)!;
+    return v.podil === 0 && p.loans.every((l) => v.uver(l.id) === 0);
+  }).map((p) => p.id) : []);
+
+  return { pohled, kdo, properties, analyses, maSpoluvlastnictvi, vahy, bezPodilu };
 }

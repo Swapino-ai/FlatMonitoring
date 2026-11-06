@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function CashFlowPage() {
   const user = await page();
-  const { properties, vahy } = await nactiPortfolio(user);
+  const { properties, vahy, bezPodilu } = await nactiPortfolio(user);
   const year = new Date().getFullYear();
 
   const navrhy = await nactiNavrhyPortfolia(properties);
@@ -27,7 +27,9 @@ export default async function CashFlowPage() {
   const best = series.reduce((a, b) => (b.cisty > a.cisty ? b : a), series[0]);
   const worst = series.reduce((a, b) => (b.cisty < a.cisty ? b : a), series[0]);
 
+  // Nemovitosti bez podilu zvoleneho vlastnika do poslednich pohybu nepatri
   const recent = properties
+    .filter((p) => !bezPodilu.has(p.id))
     .flatMap((p) => p.transactions.map((t) => ({ ...t, propertyName: p.name })))
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 25);

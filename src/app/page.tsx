@@ -7,6 +7,7 @@ import { Badge, Card, Empty, Stat, StatGrid } from "@/components/Stat";
 import { CashFlowChart, EquityChart, YieldBarChart } from "@/components/charts";
 import { summarize } from "@/lib/portfolio";
 import { nactiPortfolio } from "@/lib/pohled";
+import { BezPodiluPrepinac } from "@/components/BezPodiluPrepinac";
 import { MapaPortfolia, type BodMapy } from "@/components/MapaPortfolia";
 import { nactiNavrhyPortfolia } from "@/lib/pravidelnePlatbyData";
 import { cashFlowSeries, equitySeries } from "@/lib/series";
@@ -18,10 +19,13 @@ import { Upozorneni } from "@/components/Upozorneni";
 
 export const dynamic = "force-dynamic";
 
-export default async function Dashboard() {
+export default async function Dashboard({ searchParams }: { searchParams: Promise<{ bezPodilu?: string }> }) {
   const user = await page();
   await srovnejPlatnost();
-  const { pohled, properties, analyses, maSpoluvlastnictvi, vahy } = await nactiPortfolio(user);
+  const { pohled, properties, analyses, maSpoluvlastnictvi, vahy, bezPodilu } = await nactiPortfolio(user);
+  // V pohledu podilu se v seznamech, mape a grafu vynosu schovaji nemovitosti bez podilu
+  const ukazBezPodilu = (await searchParams).bezPodilu === "1";
+  const seznam = ukazBezPodilu ? analyses : analyses.filter((a) => !bezPodilu.has(a.property.id));
   const s = summarize(analyses);
   const nazvyDruhu = Object.fromEntries(Object.entries(await nactiTypySluzeb()).map(([k, t]) => [k, t.name]));
   const savings = summarizeSavings(findBundleOpportunities(properties, new Date(), nazvyDruhu));
@@ -30,7 +34,7 @@ export default async function Dashboard() {
   const navrhyPlateb = await nactiNavrhyPortfolia(properties);
   const cashflow = cashFlowSeries(properties, 12, new Date(), navrhyPlateb, vahy);
   const upozorneni = await nactiUpozorneni(properties, navrhyPlateb);
-  const yields = analyses
+  const yields = seznam
     .filter((a) => a.property.status !== "SOLD")
     .map((a) => ({ name: a.property.name, vynos: Number(a.metrics.netYield.toFixed(2)) }))
     .sort((a, b) => b.vynos - a.vynos);
@@ -39,7 +43,7 @@ export default async function Dashboard() {
 
   // Mapa: prodane nemovitosti tam nepatri; ty bez souradnic se vypisou zvlast,
   // ne tise vynechaji — jinak by clovek nevedel, proc jich je na mape min.
-  const aktivni = analyses.filter((a) => a.property.status !== "SOLD");
+  const aktivni = seznam.filter((a) => a.property.status !== "SOLD");
   const body: BodMapy[] = aktivni
     .filter((a) => a.property.latitude != null && a.property.longitude != null)
     .map((a) => ({
@@ -196,6 +200,7 @@ export default async function Dashboard() {
               </Card>
 
               <Card title="Nemovitosti" className="lg:col-span-3">
+                {bezPodilu.size > 0 && <div className="mb-3"><BezPodiluPrepinac pocet={bezPodilu.size} zobrazeno={ukazBezPodilu} cesta="/" /></div>}
                 <div className="table-scroll">
                   <table className="table-base">
                     <thead>
@@ -209,7 +214,7 @@ export default async function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {analyses.map((a) => (
+                      {seznam.map((a) => (
                         <tr key={a.property.id} className="transition-colors hover:bg-surface-sunken/60">
                           <td>
                             <Link href={`/properties/${a.property.id}`} className="font-medium hover:text-accent">
