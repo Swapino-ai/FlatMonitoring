@@ -19,7 +19,7 @@ export function PohledPrepinac({ volba, moznosti }: { volba: string; moznosti: {
       <input type="hidden" name="kam" value={kam} />
       <select name="pohled" aria-label="Zobrazit" defaultValue={volba} onChange={() => form.current?.requestSubmit()}
         className={`max-w-[11rem] rounded-lg border px-2 py-1 text-xs font-medium sm:max-w-[14rem] ${
-          volba === "vse" ? "border-line bg-surface-card text-ink-secondary" : "border-violet-600 bg-violet-50 text-violet-900"}`}>
+          volba === "vse" ? "border-line bg-surface-card text-ink-secondary" : "border-slate-700 bg-slate-800 text-white"}`}>
         {moznosti.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
       </select>
       <noscript><button type="submit" className="ml-1 text-xs">OK</button></noscript>

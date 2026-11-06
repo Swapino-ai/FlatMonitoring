@@ -128,14 +128,14 @@ export function NavKlient({ user, verze, volba, moznosti, komu }: {
         </div>
         {/* Zobrazuje se jen podil: vyrazne na kazde strance, at je jasne, ze cisla nejsou cela */}
         {komu && (
-          <div className="border-b-4 border-violet-900/40 bg-violet-700 text-white shadow-[0_4px_12px_rgba(76,29,149,0.35)]">
+          <div className="border-b-2 border-amber-400 bg-slate-800 text-white shadow-[0_4px_12px_rgba(15,23,42,0.25)]">
             <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-sm sm:px-6">
-              <span className="rounded-md bg-white px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-violet-800">Jen podíl</span>
+              <span className="rounded-md bg-amber-400 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-slate-900">Jen podíl</span>
               <span className="font-semibold">Zobrazuješ {komu}</span>
-              <span className="hidden text-violet-100 sm:inline">— částky jsou krácené podle vlastnictví nemovitostí a úvěrů, nejsou celé.</span>
+              <span className="hidden text-slate-300 sm:inline">— částky jsou krácené podle vlastnictví nemovitostí a úvěrů, nejsou celé.</span>
               <form action="/api/pohled" method="post" className="ml-auto">
                 <input type="hidden" name="kam" value={pathname} />
-                <button type="submit" name="pohled" value="vse" className="rounded-lg border border-white/60 px-2.5 py-0.5 text-sm font-medium text-white hover:bg-white/15">Zobrazit celé portfolio</button>
+                <button type="submit" name="pohled" value="vse" className="rounded-lg border border-white/40 px-2.5 py-0.5 text-sm font-medium text-white hover:bg-white/10">Zobrazit celé portfolio</button>
               </form>
             </div>
           </div>
