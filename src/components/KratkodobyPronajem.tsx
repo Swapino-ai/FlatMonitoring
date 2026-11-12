@@ -7,6 +7,7 @@ import { czk, dateCz } from "@/lib/format";
 import { Card } from "./Stat";
 import { DatumPole } from "./DatumPole";
 import { Ikona } from "./Ikony";
+import { useOrezFotky } from "./OrezFotky";
 
 interface Obdobi { id: string; od: string; do: string | null; poznamka: string | null }
 interface Polozka { id: string; datum: string; castka: number; kategorie: string; popis: string | null; poznamka?: string | null; uctenky: { id: string; nazev: string; mime: string }[] }
@@ -60,7 +61,11 @@ export function KratkodobyPronajem({ propertyId, canEdit, aiZapnuto, diskPripoje
   const formular = useRef<HTMLDivElement>(null);
   const otevriFormular = (f: NonNullable<typeof form>) => { setForm(f); setTimeout(() => formular.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); };
 
-  const vyberUctenku = async (f: File | undefined) => {
+  const { orizni, dialog: dialogOrezu } = useOrezFotky();
+  const vyberUctenku = async (puvodni: File | undefined) => {
+    if (!puvodni) return;
+    // Fotku jde pred nahranim oriznout a narovnat podle rohu uctenky
+    const [f] = await orizni([puvodni]);
     if (!f) return;
     setHlaska(null);
     let s: Soubor;
@@ -106,6 +111,7 @@ export function KratkodobyPronajem({ propertyId, canEdit, aiZapnuto, diskPripoje
 
   return (
     <div className="space-y-5">
+      {dialogOrezu}
       {hlaska && <p className={`rounded-lg px-3 py-2 text-sm ${hlaska.ok ? "bg-good/10 text-good" : "bg-bad/10 text-bad"}`}>{hlaska.text}</p>}
 
       {/* Obdobi */}

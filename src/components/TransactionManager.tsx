@@ -8,6 +8,7 @@ import { Hlaska, Pole, Rozbalovaci, SmazatTlacitko, UpravaPanel, UpravitTlacitko
 import { CATEGORIES, categoryLabel } from "@/lib/categories";
 import { czk, dateCz, denISO } from "@/lib/format";
 import { Ikona } from "./Ikony";
+import { useOrezFotky } from "./OrezFotky";
 
 interface Row {
   id: string; date: Date; amount: number; category: string;
@@ -41,9 +42,11 @@ export function TransactionManager({ propertyId, transactions, canEdit, diskPrip
   const [nahravam, spustNahrani] = useTransition();
   const vstupRadku = useRef<HTMLInputElement>(null);
   const [kPohybu, setKPohybu] = useState<string | null>(null);
+  // Fotky dokladu jde pred nahranim oriznout a narovnat podle rohu
+  const { orizni, dialog: dialogOrezu } = useOrezFotky();
   const nacti = async (fl: FileList | null) => {
     const out: NactenySoubor[] = [];
-    for (const f of Array.from(fl ?? [])) {
+    for (const f of await orizni(Array.from(fl ?? []))) {
       try { out.push(await nactiSoubor(f)); } catch { setStavDokladu({ ok: false, text: `Soubor ${f.name} se nepodařilo načíst.` }); }
     }
     return out.filter((x) => { const ok = x.data.length * 0.75 <= 2_600_000; if (!ok) setStavDokladu({ ok: false, text: "PDF je moc velké (max. 2,5 MB)." }); return ok; });
@@ -83,6 +86,7 @@ export function TransactionManager({ propertyId, transactions, canEdit, diskPrip
 
   return (
     <div>
+      {dialogOrezu}
       {stavDokladu && <p className={`mb-2 rounded-lg px-3 py-2 text-sm ${stavDokladu.ok ? "bg-good/10 text-good" : "bg-bad/10 text-bad"}`}>{stavDokladu.text}</p>}
       <input ref={vstupRadku} type="file" accept="image/*,application/pdf" multiple className="hidden"
         onChange={async (e) => { const id = kPohybu; const fl = e.target.files; const seznam = await nacti(fl); e.target.value = ""; if (id && seznam.length) nahraj(id, seznam); }} />
