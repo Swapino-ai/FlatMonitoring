@@ -11,7 +11,7 @@ import { denISO } from "../format";
 import type { ScrapedListing } from "./types";
 import { profilTypu } from "./profily";
 import { PRAH_SHODY, podlaziZUdaju, podobnostBytu, type InzeratProShodu } from "./shody";
-import { cenaVJednotce, jednotkaOdhadu, odhadNaM2, odhadZeZarazenych, ohodnot, median, vOkneOdhadu, vahaZarazeni } from "./zarazeni";
+import { cenaVJednotce, jeCenaNaVyzadani, jednotkaOdhadu, odhadNaM2, odhadZeZarazenych, ohodnot, median, vOkneOdhadu, vahaZarazeni } from "./zarazeni";
 
 /** Odhad z nabidek, ktere se objevily za posledni 2 mesice (ve dnech). */
 export const OKNO_ODHADU = 61;
@@ -49,9 +49,9 @@ export async function ulozInzeraty(listings: ScrapedListing[], region?: string |
         data: {
           source: l.source, externalId: l.externalId, dealType: l.dealType, category: l.category,
           city: l.city, region: region ?? null, district: l.district ?? null, disposition: l.disposition ?? null,
-          areaM2: l.areaM2 ?? null, price: l.price, pricePerM2: l.pricePerM2 ?? null, url: l.url ?? null,
+          areaM2: l.areaM2 ?? null, price: l.price, pricePerM2: jeCenaNaVyzadani(l) ? null : l.pricePerM2 ?? null, url: l.url ?? null,
           latitude: l.latitude ?? null, longitude: l.longitude ?? null,
-          ceny: { create: { price: l.price, pricePerM2: l.pricePerM2 ?? null } },
+          ceny: { create: { price: l.price, pricePerM2: jeCenaNaVyzadani(l) ? null : l.pricePerM2 ?? null } },
         },
       });
       ids.push(novy.id);
@@ -63,7 +63,7 @@ export async function ulozInzeraty(listings: ScrapedListing[], region?: string |
       where: { id: existujici.id },
       data: {
         lastSeenAt: ted, zmizelAt: null,
-        ...(zmena ? { price: l.price, pricePerM2: l.pricePerM2 ?? existujici.pricePerM2, ceny: { create: { price: l.price, pricePerM2: l.pricePerM2 ?? null } } } : {}),
+        ...(zmena ? { price: l.price, pricePerM2: jeCenaNaVyzadani(l) ? null : l.pricePerM2 ?? existujici.pricePerM2, ceny: { create: { price: l.price, pricePerM2: jeCenaNaVyzadani(l) ? null : l.pricePerM2 ?? null } } } : {}),
         // Odkaz a polohu doplnime, kdyz chybely; rucne urcenou polohu neprepisujeme
         ...(l.url && !existujici.url ? { url: l.url } : {}),
         ...(!existujici.polohaRucne && l.latitude != null ? { latitude: l.latitude, longitude: l.longitude ?? null } : {}),
@@ -201,7 +201,8 @@ async function bodyOdhadu(propertyId: string, dealType: "SALE" | "RENT") {
   });
   // Znovu vlozeny inzerat je tentyz byt: pocita se jen nejnovejsi verze (starsi, kdyz je novejsi taky zarazena, se vynecha)
   const zarazeneIds = new Set(vsechny.map((z) => z.inzeratId));
-  const zarazene = vsechny.filter((z) => !z.inzerat.shodyDrive.some((s) => zarazeneIds.has(s.inzeratId)));
+  // Cena na vyzadani (1 Kc) do odhadu nevstupuje — zarazeni slouzi jen k porovnani
+  const zarazene = vsechny.filter((z) => !z.inzerat.shodyDrive.some((s) => zarazeneIds.has(s.inzeratId)) && !jeCenaNaVyzadani(z.inzerat));
   const body = zarazene.map((z) => ({
     datum: denISO(z.inzerat.firstSeenAt), pricePerM2: cenaVJednotce(z.inzerat, zaKus), i: z.inzerat,
     vaha: vahaZarazeni(p, z, z.inzerat),

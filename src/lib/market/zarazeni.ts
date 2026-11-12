@@ -2,6 +2,7 @@
  * Cista logika noveho sledovani trhu: podobnost navrzeneho inzeratu a odhad
  * z posledních zarazenych inzeratu. Bez databaze, at jde otestovat.
  */
+import { MIN_SKUTECNA_CENA } from "./konstanty";
 import { hodnotyNabidky, hodnotyZaznamu, profilTypu, vahaVlastnosti, type Profil } from "./profily";
 
 export interface NemovitostProSrovnani {
@@ -26,6 +27,8 @@ export interface InzeratProSrovnani {
   longitude: number | null;
   city: string;
   pricePerM2: number | null;
+  /** Celkova cena (kvuli ceně na vyžádání) */
+  price?: number;
 }
 
 const R = 6371;
@@ -111,7 +114,9 @@ export function ohodnot(n: NemovitostProSrovnani, i: InzeratProSrovnani, medianZ
   }
 
   let extrem = false;
-  if (medianZarazenych && i.pricePerM2) {
+  if (i.price != null && jeCenaNaVyzadani({ price: i.price })) {
+    duvody.push("cena na vyžádání — do odhadu se nepočítá");
+  } else if (medianZarazenych && i.pricePerM2) {
     const pomer = i.pricePerM2 / medianZarazenych;
     if (pomer > 1.35 || pomer < 0.65) {
       skore -= 25;
@@ -221,7 +226,13 @@ export function jednotkaOdhadu(type: string, areaM2: number): { zaKus: boolean; 
 }
 
 /** Cena nabidky v jednotce odhadu (za kus, nebo za m²). */
+/** Cena na vyzadani (1 Kc): jde zaradit k porovnani, do odhadu nevstupuje (nesmyslne by ho srazil). */
+export { MIN_SKUTECNA_CENA };
+export const jeCenaNaVyzadani = (i: { price: number }) => !(i.price >= MIN_SKUTECNA_CENA);
+
+/** Cena za m² (u garazi za kus); u ceny na vyzadani 0 = neznama. */
 export function cenaVJednotce(i: { price: number; pricePerM2: number | null }, zaKus: boolean): number {
+  if (jeCenaNaVyzadani(i)) return 0;
   return zaKus ? i.price : i.pricePerM2 ?? 0;
 }
 

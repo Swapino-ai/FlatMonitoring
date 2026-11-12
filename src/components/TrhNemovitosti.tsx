@@ -1,5 +1,6 @@
 "use client";
 
+import { MIN_SKUTECNA_CENA } from "@/lib/market/konstanty";
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { nastavOceneniPodle, prepniVyloucenouObec, nastavVlastnostBytu, nastavVlastnostNabidky, nastavPolohuInzeratu, nastavSledovani, obnovNavrhy, rozhodniInzeraty, rozhodniShodu, slucInzeraty, type TrhState } from "@/lib/trhActions";
@@ -179,7 +180,8 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
   const hraniceOkna = nejnovejsi ? new Date(Date.parse(`${nejnovejsi}T00:00:00Z`) - 61 * 86400000).toISOString().slice(0, 10) : "";
   const odhad = odhady[typ];
   const najem = typ === "RENT";
-  const cena = (n: number) => (najem ? `${czk(n)}/měs.` : czk(n));
+  // Symbolicka castka (1 Kc) = cena na vyzadani
+  const cena = (n: number) => (n < MIN_SKUTECNA_CENA ? "Cena na vyžádání" : najem ? `${czk(n)}/měs.` : czk(n));
 
   const akce = (fn: () => Promise<TrhState>) => spust(async () => {
     const r = await fn();
@@ -240,7 +242,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
     druh: r.stav === "ZARAZENO" ? (r.dealType === "SALE" ? "PRODEJ" : "NAJEM") : r.stav === "VYRAZENO" ? "VYRAZENO" : "NAVRH",
     popis: [
       `${r.stav === "ZARAZENO" ? "Zařazeno" : r.stav === "VYRAZENO" ? "Vyřazeno" : "Návrh"}${r.disposition ? ` · ${r.disposition}` : ""}${r.areaM2 ? ` · ${r.areaM2} m²` : ""}`,
-      `${cena(r.price)}${r.pricePerM2 ? ` · ${czk(r.pricePerM2)}/m²` : ""}`,
+      `${cena(r.price)}${r.pricePerM2 && r.price >= MIN_SKUTECNA_CENA ? ` · ${czk(r.pricePerM2)}/m²` : ""}`,
     ],
   // eslint-disable-next-line react-hooks/exhaustive-deps
   })), [radky, typ]);
@@ -266,7 +268,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
       <div className={`min-w-0 flex-1 ${trida}`}>
         <div className="flex flex-wrap items-baseline gap-x-2 text-sm">
           <span className="font-semibold tabular-nums">{cena(r.price)}</span>
-          {r.pricePerM2 != null && <span className="text-xs text-ink-muted tabular-nums">{czk(r.pricePerM2)}/m²</span>}
+          {r.pricePerM2 != null && r.price >= MIN_SKUTECNA_CENA && <span className="text-xs text-ink-muted tabular-nums">{czk(r.pricePerM2)}/m²</span>}
           {r.zmizel && <Badge tone="neutral">zmizel z trhu {dateCz(r.zmizel)}</Badge>}
         </div>
         <div className="text-xs text-ink-secondary">
@@ -586,9 +588,11 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
                       <div>
                         <div className="flex flex-wrap items-baseline gap-x-2">
                           <span className="font-semibold tabular-nums">{cena(r.price)}</span>
-                          {r.pricePerM2 != null && <span className="text-xs text-ink-muted tabular-nums">{czk(r.pricePerM2)}/m²</span>}
-                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${k < 10 ? "bg-accent-soft text-accent" : "bg-surface-sunken text-ink-muted"}`}
-                            title={k < 10 ? "Objevila se v posledních 2 měsících, počítá se do odhadu" : "Starší než 2 měsíce, do odhadu už nevstupuje"}>{k < 10 ? "v odhadu" : "starší"}</span>
+                          {r.pricePerM2 != null && r.price >= MIN_SKUTECNA_CENA && <span className="text-xs text-ink-muted tabular-nums">{czk(r.pricePerM2)}/m²</span>}
+                          {r.price < MIN_SKUTECNA_CENA
+                            ? <span className="rounded-full bg-surface-sunken px-2 py-0.5 text-[10px] font-semibold text-ink-muted" title="Cena na vyžádání — inzerát slouží jen k porovnání, do odhadu nevstupuje">jen k porovnání</span>
+                            : <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${k < 10 ? "bg-accent-soft text-accent" : "bg-surface-sunken text-ink-muted"}`}
+                            title={k < 10 ? "Objevila se v posledních 2 měsících, počítá se do odhadu" : "Starší než 2 měsíce, do odhadu už nevstupuje"}>{k < 10 ? "v odhadu" : "starší"}</span>}
                           {r.zmizel && <Badge tone="neutral">zmizel {dateCz(r.zmizel)}</Badge>}
                         </div>
                         <div className="text-xs text-ink-secondary">

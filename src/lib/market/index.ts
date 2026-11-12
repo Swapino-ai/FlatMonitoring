@@ -1,3 +1,4 @@
+import { MIN_SKUTECNA_CENA } from "./zarazeni";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { MAX_OKRUH_KM, obalkaOkruhu, okruhyProTyp, vzdalenostKm } from "../geo";
@@ -248,7 +249,7 @@ export async function nabidkyVOkoli(
       category: p.type,
       scrapedAt: { gte: since },
       areaM2: { gte: p.areaM2 - tol, lte: p.areaM2 + tol },
-      pricePerM2: { not: null },
+      pricePerM2: { not: null }, price: { gte: MIN_SKUTECNA_CENA },
       ...(obalka
         ? { latitude: { gte: obalka.latMin, lte: obalka.latMax }, longitude: { gte: obalka.lonMin, lte: obalka.lonMax } }
         : p.region
@@ -336,13 +337,13 @@ export async function diagnostikaOceneni(propertyId: string, dealType: "SALE" | 
   await pridej(p.latitude != null ? "…se souřadnicemi (okruh se řeší až v paměti)" : `…z ${p.city}${p.region ? ` nebo kraje` : ""}`, mistni);
 
   await pridej(`…s plochou ${Math.round(p.areaM2 - tol)}–${Math.round(p.areaM2 + tol)} m²`, {
-    ...mistni, areaM2: { gte: p.areaM2 - tol, lte: p.areaM2 + tol }, pricePerM2: { not: null },
+    ...mistni, areaM2: { gte: p.areaM2 - tol, lte: p.areaM2 + tol }, pricePerM2: { not: null }, price: { gte: MIN_SKUTECNA_CENA },
   });
 
   if (p.disposition) {
     await pridej(`…s dispozicí ${p.disposition}`, {
       ...mistni, areaM2: { gte: p.areaM2 - tol, lte: p.areaM2 + tol },
-      pricePerM2: { not: null }, disposition: p.disposition,
+      pricePerM2: { not: null }, price: { gte: MIN_SKUTECNA_CENA }, disposition: p.disposition,
     });
   }
 
@@ -478,7 +479,7 @@ export async function comparableStats(opts: {
               ...(opts.district ? { district: { contains: opts.district } } : {}),
             }),
       areaM2: { gte: opts.areaM2 - tol, lte: opts.areaM2 + tol },
-      pricePerM2: { not: null },
+      pricePerM2: { not: null }, price: { gte: MIN_SKUTECNA_CENA },
     },
     select: {
       externalId: true, pricePerM2: true, price: true, areaM2: true, disposition: true,
