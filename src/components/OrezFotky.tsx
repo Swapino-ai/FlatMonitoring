@@ -3,12 +3,30 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { narovnej, velikostVysledku, type Bod } from "@/lib/perspektiva";
 
-/** Zdroj se pred upravou zmensi (delsi strana) — telefonni fotky maji 12+ Mpx */
-const MAX_ZDROJ = 2400;
+/**
+ * Zdroj se pred upravou zmensi (delsi strana) — telefonni fotky maji 12+ Mpx. Mene pameti
+ * = mensi sance, ze Android pri dalsim foceni prohlizec "pro nedostatek pameti" ukonci.
+ */
+const MAX_ZDROJ = 1800;
+
+/** Uvolni pamet canvasu hned (prohlizec ji jinak drzi do uklidu pameti). */
+export const uvolni = (c: HTMLCanvasElement | null | undefined) => { if (c) { c.width = 0; c.height = 0; } };
 const VYCHOZI: Bod[] = [{ x: 0.08, y: 0.08 }, { x: 0.92, y: 0.08 }, { x: 0.92, y: 0.92 }, { x: 0.08, y: 0.92 }];
 
-async function nactiCanvas(f: File | HTMLCanvasElement): Promise<HTMLCanvasElement> {
-  if (f instanceof HTMLCanvasElement) return f;
+async function nactiCanvas(f: File): Promise<HTMLCanvasElement> {
+  // createImageBitmap dekoduje mimo hlavni vlakno a bitmapa jde hned uvolnit (close)
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bmp = await createImageBitmap(f, { imageOrientation: "from-image" } as ImageBitmapOptions);
+      try {
+        const k = Math.min(1, MAX_ZDROJ / Math.max(bmp.width, bmp.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+        c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+        return c;
+      } finally { bmp.close(); }
+    } catch { /* starsi prohlizec — pres Image */ }
+  }
   const url = URL.createObjectURL(f);
   try {
     const img = await new Promise<HTMLImageElement>((ok, chyba) => { const i = new Image(); i.onload = () => ok(i); i.onerror = chyba; i.src = url; });
@@ -16,6 +34,7 @@ async function nactiCanvas(f: File | HTMLCanvasElement): Promise<HTMLCanvasEleme
     const c = document.createElement("canvas");
     c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
     c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+    img.src = "";
     return c;
   } finally {
     URL.revokeObjectURL(url);
@@ -27,6 +46,7 @@ function otoc(c: HTMLCanvasElement): HTMLCanvasElement {
   o.width = c.height; o.height = c.width;
   const g = o.getContext("2d")!;
   g.translate(o.width, 0); g.rotate(Math.PI / 2); g.drawImage(c, 0, 0);
+  uvolni(c);
   return o;
 }
 
@@ -69,8 +89,18 @@ function OknoOrezu({ soubor, poradi, onHotovo }: { soubor: File; poradi: string;
   const obr = useRef<HTMLDivElement>(null);
   const tazeny = useRef<number | null>(null);
 
-  const nastavZdroj = useCallback((c: HTMLCanvasElement) => { setZdroj(c); setNahled(c.toDataURL("image/jpeg", 0.85)); setRohy(VYCHOZI); }, []);
+  // Nahled jako blob URL (ne base64 retezec) — mene pameti
+  const nastavZdroj = useCallback((c: HTMLCanvasElement) => {
+    setZdroj(c); setRohy(VYCHOZI);
+    c.toBlob((b) => { if (b) setNahled((stary) => { if (stary) URL.revokeObjectURL(stary); return URL.createObjectURL(b); }); }, "image/jpeg", 0.8);
+  }, []);
   useEffect(() => { nactiCanvas(soubor).then(nastavZdroj).catch(() => onHotovo(soubor)); }, [soubor, nastavZdroj, onHotovo]);
+  // Po zavreni okna uvolnit nahled i zdrojovy canvas
+  const zdrojRef = useRef<HTMLCanvasElement | null>(null);
+  zdrojRef.current = zdroj;
+  const nahledRef = useRef<string | null>(null);
+  nahledRef.current = nahled;
+  useEffect(() => () => { if (nahledRef.current) URL.revokeObjectURL(nahledRef.current); uvolni(zdrojRef.current); }, []);
   // Pozadi se behem orezu neposouva
   useEffect(() => { const p = document.body.style.overflow; document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = p; }; }, []);
 
@@ -90,12 +120,14 @@ function OknoOrezu({ soubor, poradi, onHotovo }: { soubor: File; poradi: string;
     await new Promise((r) => setTimeout(r, 30));
     try {
       const px = rohy.map((b) => ({ x: b.x * zdroj.width, y: b.y * zdroj.height }));
-      const { w, h } = velikostVysledku(px, 2000);
+      const { w, h } = velikostVysledku(px, 1600);
       const src = zdroj.getContext("2d")!.getImageData(0, 0, zdroj.width, zdroj.height);
       const out = document.createElement("canvas");
       out.width = w; out.height = h;
       out.getContext("2d")!.putImageData(new ImageData(narovnej(src, px, w, h), w, h), 0, 0);
-      onHotovo(await doSouboru(out, soubor.name));
+      const vysledek = await doSouboru(out, soubor.name);
+      uvolni(out);
+      onHotovo(vysledek);
     } catch {
       onHotovo(soubor);
     }

@@ -8,6 +8,7 @@ import { Card } from "./Stat";
 import { DatumPole } from "./DatumPole";
 import { Ikona } from "./Ikony";
 import { useOrezFotky } from "./OrezFotky";
+import { nactiSoubor as nactiSouborKlient } from "@/lib/souborKlient";
 
 interface Obdobi { id: string; od: string; do: string | null; poznamka: string | null }
 interface Polozka { id: string; datum: string; castka: number; kategorie: string; popis: string | null; poznamka?: string | null; uctenky: { id: string; nazev: string; mime: string }[] }
@@ -18,26 +19,7 @@ const MESICE = ["leden", "únor", "březen", "duben", "květen", "červen", "če
 const vydaje = KATEGORIE_KRATKODOBE.filter((k) => k.kind === "EXPENSE");
 
 /** Fotka z telefonu se zmensi (delsi strana 1600 px, JPEG) — na AI i na Disk to staci. */
-async function nactiSoubor(f: File): Promise<Soubor> {
-  if (f.type === "application/pdf") {
-    const b = new Uint8Array(await f.arrayBuffer());
-    let s = "";
-    for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
-    return { data: btoa(s), mime: "application/pdf", nazev: f.name, nahled: null };
-  }
-  const url = URL.createObjectURL(f);
-  try {
-    const img = await new Promise<HTMLImageElement>((ok, chyba) => { const i = new Image(); i.onload = () => ok(i); i.onerror = chyba; i.src = url; });
-    const k = Math.min(1, 1600 / Math.max(img.width, img.height));
-    const c = document.createElement("canvas");
-    c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-    c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
-    const dataUrl = c.toDataURL("image/jpeg", 0.82);
-    return { data: dataUrl.split(",")[1], mime: "image/jpeg", nazev: f.name.replace(/\.[^.]+$/, "") + ".jpg", nahled: dataUrl };
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+const nactiSoubor = (f: File): Promise<Soubor> => nactiSouborKlient(f, 800);
 
 /**
  * Krátkodobý pronájem: období (kdy se byt pronajímá přes Airbnb a podobně), náklady

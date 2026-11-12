@@ -7,6 +7,7 @@ import { Card } from "./Stat";
 import { DatumPole } from "./DatumPole";
 import { Galerie } from "./Galerie";
 import { Ikona } from "./Ikony";
+import { nactiSoubor } from "@/lib/souborKlient";
 
 export interface ZaznamVykazu { id: string; datum: string; /** id pracovniku */ lide: string[]; minut: number; popis: string; fotky: { id: string; nazev: string }[] }
 interface Fotka { data: string; mime: string; nahled: string }
@@ -21,20 +22,10 @@ export const casText = (minut: number) => {
   return [h ? `${h} h` : "", m ? `${m} min` : ""].filter(Boolean).join(" ") || "0 min";
 };
 
-/** Fotka z telefonu se zmensi (delsi strana 1600 px, JPEG), aby se rychle nahrala. */
+/** Fotka z telefonu se zmensi (delsi strana 1600 px, JPEG); nahled jen miniatura — setri pamet telefonu. */
 async function zmensi(f: File): Promise<Fotka> {
-  const url = URL.createObjectURL(f);
-  try {
-    const img = await new Promise<HTMLImageElement>((ok, chyba) => { const i = new Image(); i.onload = () => ok(i); i.onerror = chyba; i.src = url; });
-    const k = Math.min(1, 1600 / Math.max(img.width, img.height));
-    const c = document.createElement("canvas");
-    c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-    c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
-    const dataUrl = c.toDataURL("image/jpeg", 0.8);
-    return { data: dataUrl.split(",")[1], mime: "image/jpeg", nahled: dataUrl };
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+  const s = await nactiSoubor(f, 300);
+  return { data: s.data, mime: s.mime, nahled: s.nahled ?? "" };
 }
 
 type Formular = { id?: string; datum: string | null; lide: string[]; noveJmena: string[]; novyText: string; pridavam: boolean; hodiny: string; minuty: string; popis: string; fotky: Fotka[] };
