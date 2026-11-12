@@ -386,9 +386,17 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   const poznamkyBanky = new Map(bankovniIds.length
     ? (await prisma.bankovniPohyb.findMany({ where: { id: { in: bankovniIds }, mojePoznamka: { not: null } }, select: { id: true, mojePoznamka: true } })).map((p) => [`banka:${p.id}`, p.mojePoznamka])
     : []);
+  // Doklady prilozene k pohybum (uctenky, faktury na Google Disku)
+  const doklady = await prisma.dokument.findMany({
+    where: { transactionId: { in: property.transactions.map((t) => t.id) } },
+    select: { id: true, name: true, mime: true, transactionId: true }, orderBy: { createdAt: "asc" },
+  });
   const recentTx = [...property.transactions]
     .sort((x, y) => new Date(y.date).getTime() - new Date(x.date).getTime())
-    .map((t) => ({ ...t, poznamkaBanky: t.sourceKey ? poznamkyBanky.get(t.sourceKey) ?? null : null }));
+    .map((t) => ({
+      ...t, poznamkaBanky: t.sourceKey ? poznamkyBanky.get(t.sourceKey) ?? null : null,
+      doklady: doklady.filter((d) => d.transactionId === t.id).map((d) => ({ id: d.id, nazev: d.name, mime: d.mime })),
+    }));
 
   return (
     <>
@@ -827,7 +835,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
             <PravidelnePlatby propertyId={property.id} navrh={navrhPlateb} zauctovane={zauctovanePlatby} canDelete={user.role === "OWNER"} />
           </SbalitelnaKarta>
           <SbalitelnaKarta klic="pohyby" title="Pohyby">
-            <TransactionManager propertyId={property.id} transactions={recentTx} canEdit={user.role === "OWNER"} />
+            <TransactionManager propertyId={property.id} transactions={recentTx} canEdit={user.role === "OWNER"} diskPripojen={diskPripojen} />
           </SbalitelnaKarta>
             </>),
           },

@@ -15,6 +15,10 @@ export interface EntityFormState {
   success?: string;
   /** Ulozeno, ale neco nesedi. Nebrani ulozeni — jen se o tom ma vedet. */
   warning?: string;
+  /** Id ulozeneho zaznamu (napr. noveho pohybu — kvuli prilozeni dokladu) */
+  id?: string;
+  /** Pocitadlo ulozeni: kazde ulozeni ma jine, aby na nej slo reagovat i pri stejne hlasce */
+  kdy?: number;
 }
 
 /** Cislo z formulare: zvlada mezery v tisicich i desetinnou carku. */
@@ -663,11 +667,10 @@ export async function saveTransaction(id: string | null, _prev: EntityFormState,
   }
 
   // Stejny formular slouzi k zalozeni i k uprave — id rozhoduje
-  if (id) await prisma.transaction.update({ where: { id }, data });
-  else await prisma.transaction.create({ data });
+  const ulozeny = id ? await prisma.transaction.update({ where: { id }, data }) : await prisma.transaction.create({ data });
 
   obnov(d.propertyId);
-  return { success: id ? "Pohyb upraven." : "Pohyb zaúčtován." };
+  return { success: id ? "Pohyb upraven." : "Pohyb zaúčtován.", id: ulozeny.id, kdy: Date.now() };
 }
 
 export async function deleteTransaction(_prev: EntityFormState, formData: FormData): Promise<EntityFormState> {
@@ -677,6 +680,12 @@ export async function deleteTransaction(_prev: EntityFormState, formData: FormDa
   const tx = await prisma.transaction.findUnique({ where: { id: String(formData.get("id")) } });
   if (!tx) return { error: "Pohyb neexistuje." };
 
+  // Prilozene doklady jdou na Disku do kose
+  const { doKose } = await import("./googleDrive");
+  for (const d of await prisma.dokument.findMany({ where: { transactionId: tx.id } })) {
+    await doKose(d.driveId).catch(() => undefined);
+    await prisma.dokument.delete({ where: { id: d.id } });
+  }
   await prisma.transaction.delete({ where: { id: tx.id } });
   obnov(tx.propertyId);
   return { success: "Pohyb smazán." };
