@@ -81,6 +81,8 @@ export async function zrusitParovani(pohybId: string): Promise<{ error?: string 
   const cil = vydaj?.vydaj ? cilZTextu(vydaj.vydaj) : null;
   await prisma.$transaction([
     ...(vydaj?.transakce ? [prisma.transaction.deleteMany({ where: { id: vydaj.transakce } })] : []),
+    // Proplaceni vydaju: vydaje zustanou, jen uz nejsou proplacene
+    ...(cil?.typ === "proplaceni" ? [prisma.transaction.updateMany({ where: { proplacenoPohybId: pohybId }, data: { proplacenoPohybId: null } })] : []),
     ...(cil?.typ === "vratka" ? [prisma.tenantStatement.update({ where: { id: cil.statementId }, data: { status: "ODESLANO", settledAt: null, settledNote: null } })] : []),
     prisma.pravidelnaPlatba.deleteMany({ where: { pohybId } }),
     ...(vyuct ? [prisma.tenantStatement.update({ where: { id: vyuct }, data: { status: "ODESLANO", settledAt: null, settledNote: null } })] : []),

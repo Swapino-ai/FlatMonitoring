@@ -276,9 +276,13 @@ model Transaction {
   documentRef String? // cislo faktury / odkaz na doklad
   /// Klic automaticky zauctovane pravidelne platby (napr. "najem:<smlouva>:2026-03"); brani zdvojeni
   sourceKey   String? @unique
+  /// Vydaj zaplaceny jinak (karta z jineho uctu) a pozdeji proplaceny prevodem z Fio: id bankovniho pohybu
+  proplacenoPohybId String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([proplacenoPohybId])
 }
 
 /// Sluzba / dodavatel — podklad pro hromadne vyjednavani a zlevnovani

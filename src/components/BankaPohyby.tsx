@@ -35,6 +35,8 @@ export interface CileNemovitosti {
   /** Vsechny sluzby jednoho dodavatele za mesic jednou platbou */
   skupiny?: { cil: string; nazev: string; detail: string }[];
   vratky: { cil: string; nazev: string }[];
+  /** Vydaje zaplacene jinak (karta z jineho uctu), ktere jde proplatit jednim prevodem */
+  vydajeKProplaceni?: { id: string; datum: string; castka: number; popis: string }[];
 }
 type Kategorie = { key: string; label: string };
 
@@ -116,6 +118,8 @@ function Prirazeni({ p, cile, kategorie, vychoziNemovitost, vychoziCil, bezi, on
   const odchozi = p.castka < 0;
   const [nemId, setNemId] = useState<string | null>(vychoziNemovitost);
   const [cil, setCil] = useState(vychoziCil);
+  // Proplaceni vic vydaju: zaskrtnute vydaje
+  const [vybrane, setVybrane] = useState<Set<string>>(new Set());
   const n = cile.find((c) => c.id === nemId) ?? null;
   if (!n) {
     return (
@@ -130,6 +134,7 @@ function Prirazeni({ p, cile, kategorie, vychoziNemovitost, vychoziCil, bezi, on
         { label: "Splátky úvěru", moznosti: n.predpisy.filter((x) => x.cil.includes(":uver:")).map((x) => ({ value: x.cil, label: x.nazev })) },
         { label: "Služby bez dodavatele", moznosti: n.predpisy.filter((x) => x.cil.includes(":sluzba:")).map((x) => ({ value: x.cil, label: x.nazev })) },
         { label: "Nedoplatky z vyúčtování dodavatele", moznosti: n.predpisy.filter((x) => x.cil.includes(":vyuctovani:")).map((x) => ({ value: x.cil, label: x.nazev })) },
+        { label: "Proplacení výdajů zaplacených jinak", moznosti: (n.vydajeKProplaceni?.length ? [{ value: `proplaceni:${n.id}`, label: "Více výdajů najednou (např. nákup kartou z jiného účtu)", detail: `${n.vydajeKProplaceni.length} neproplacených výdajů` }] : []) },
         { label: "Vrácení přeplatku nájemci", moznosti: n.vratky.map((x) => ({ value: x.cil, label: x.nazev })) },
         { label: "Výdaj", moznosti: kategorie.vydaje.map((k) => ({ value: `vydaj:${n.id}:${k.key}`, label: k.label })) },
       ]
@@ -138,13 +143,40 @@ function Prirazeni({ p, cile, kategorie, vychoziNemovitost, vychoziCil, bezi, on
         { label: "Krátkodobý pronájem", moznosti: [{ value: `kt:${n.id}`, label: "Výplata Airbnb, Booking…" }] },
         { label: "Příjem", moznosti: kategorie.prijmy.map((k) => ({ value: `vydaj:${n.id}:${k.key}`, label: k.label })) },
       ];
+  const proplaceni = cil === `proplaceni:${n.id}`;
+  const vydaje = n.vydajeKProplaceni ?? [];
+  const soucet = Math.round(vydaje.filter((v) => vybrane.has(v.id)).reduce((a, v) => a + v.castka, 0) * 100) / 100;
+  const rozdil = Math.round((Math.abs(p.castka) - soucet) * 100) / 100;
   return (
-    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+    <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-2 sm:w-auto">
       <button type="button" className="rounded-full bg-accent-soft px-3 py-1 text-sm font-medium text-accent" title="Změnit nemovitost"
-        onClick={() => { setNemId(null); setCil(""); }}>{n.nazev} ✕</button>
+        onClick={() => { setNemId(null); setCil(""); setVybrane(new Set()); }}>{n.nazev} ✕</button>
       <HledaciVyber className="w-full sm:w-72" label="Co platba je" placeholder="Co to je… (vyber nebo hledej)" value={cil} onChange={setCil}
         skupiny={skupiny.filter((s) => s.moznosti.length)} />
-      <button type="button" className="btn btn-primary py-1.5" disabled={!cil || bezi} onClick={() => onSparuj(cil)}>Spárovat</button>
+      <button type="button" className="btn btn-primary py-1.5" disabled={!cil || bezi || (proplaceni && !vybrane.size)}
+        onClick={() => onSparuj(proplaceni ? `proplaceni:${n.id}:${[...vybrane].join(",")}` : cil)}>Spárovat</button>
+      {proplaceni && (
+        <div className="w-full rounded-xl border border-line bg-surface-sunken/40 p-2">
+          <p className="mb-1.5 px-1 text-xs text-ink-secondary">Zaškrtni výdaje, které tahle platba proplácí (zaplacené kartou z jiného účtu a zapsané v Pohybech):</p>
+          <ul className="max-h-64 space-y-0.5 overflow-auto">
+            {vydaje.map((v) => (
+              <li key={v.id}>
+                <label className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-1 text-sm hover:bg-surface-card">
+                  <input type="checkbox" className="h-4 w-4 shrink-0" checked={vybrane.has(v.id)}
+                    onChange={(e) => setVybrane((s) => { const x = new Set(s); if (e.target.checked) x.add(v.id); else x.delete(v.id); return x; })} />
+                  <span className="w-20 shrink-0 tabular-nums text-ink-muted">{dateCz(v.datum)}</span>
+                  <span className="line-clamp-2 min-w-0 flex-1">{v.popis}</span>
+                  <span className="shrink-0 font-medium tabular-nums">{czk(v.castka)}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <p className={`mt-1.5 px-1 text-xs ${vybrane.size && Math.abs(rozdil) >= 1 ? "text-warn" : "text-ink-secondary"}`}>
+            Vybráno {vybrane.size} · součet <strong className="tabular-nums">{czk(soucet)}</strong> z platby {czk(Math.abs(p.castka))}
+            {vybrane.size > 0 && (Math.abs(rozdil) < 1 ? " — sedí ✓" : ` — rozdíl ${czk(rozdil)}`)}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -174,6 +206,7 @@ function coUhradila(p: PohybRadek["parovani"]): string {
     const [typ, , ...k] = p.vydaj.split(":");
     if (typ === "vratka") return `vrácení přeplatku${p.cislo ? ` ${p.cislo}` : ""}`;
     if (typ === "vydaj") return `kategorie: ${k[0] ?? ""}`;
+    if (typ === "proplaceni") return `proplacení výdajů${p.cislo ? ` (${p.cislo})` : ""}`;
     if (typ === "skupina") return `služby ${k.slice(1).join(":")} ${Number((k[0] ?? "").slice(5))}/${(k[0] ?? "").slice(0, 4)}`;
     const [druh, , mesic] = k;
     return `${POPIS_PREDPISU[druh] ?? "předpis"}${mesic && /^\d{4}-\d{2}$/.test(mesic) ? ` ${Number(mesic.slice(5))}/${mesic.slice(0, 4)}` : ""}`;
@@ -251,7 +284,7 @@ export function BankaPohyby({ napojeno, posledniStazeni, pocty, keKontrole, spar
                     {p.poznamka && <div className="mt-0.5 text-xs text-warn">{p.poznamka}</div>}
                     <Poznamka p={p} onUloz={(t) => akce(async () => { await ulozPoznamkuPohybu(p.id, t); return {}; })} />
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
                     <Prirazeni p={p} cile={cile} kategorie={kategorie} vychoziNemovitost={navrhNem} vychoziCil={navrh} bezi={bezi}
                       onSparuj={(cil) => vyrid(p.id, () => cil.startsWith("lease:") ? priraditPohyb(p.id, cil.slice(6))
                         : cil.startsWith("kt:") ? priraditKratkodoby(p.id, cil.slice(3)) : priraditVydaj(p.id, cil))} />

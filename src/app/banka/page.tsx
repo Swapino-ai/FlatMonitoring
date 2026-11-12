@@ -35,6 +35,12 @@ export default async function BankaPage() {
   const navrhy = kZarazeni.some((p) => p.castka < 0) ? await nactiNavrhyPortfolia(nemovitosti) : new Map();
   const odDne = denISO(new Date(Date.now() - 400 * 86400000)).slice(0, 7);
   const vratky = kZarazeni.some((p) => p.castka < 0) ? await prisma.tenantStatement.findMany({ where: { status: { in: ["VYDANO", "ODESLANO"] }, result: { gt: 0 } }, select: { id: true, cislo: true, result: true, snapshot: true, propertyId: true } }) : [];
+  // Vydaje zaplacene jinak (karta z jineho uctu), ktere jde proplatit prevodem z Fio
+  const kProplaceni = kZarazeni.some((p) => p.castka < 0) ? await prisma.transaction.findMany({
+    where: { propertyId: { in: nemovitosti.map((n) => n.id) }, amount: { lt: 0 }, proplacenoPohybId: null, sourceKey: null, date: { gte: new Date(Date.now() - 400 * 86400000) } },
+    select: { id: true, propertyId: true, date: true, amount: true, category: true, description: true }, orderBy: { date: "desc" },
+  }) : [];
+  const nazvyKategorii = new Map(CATEGORIES.map((c) => [c.key, c.label]));
   const cile: CileNemovitosti[] = nemovitosti.map((n) => ({
     id: n.id, nazev: n.name, adresa: [n.street, n.city].filter(Boolean).join(", "), kratkodoby: n.kratkodobe.length > 0,
     smlouvy: smlouvy.filter((s) => s.propertyId === n.id).map((s) => ({ id: s.id, nazev: `${s.tenantName}${s.isActive ? "" : " (skončená)"}` })),
@@ -46,6 +52,9 @@ export default async function BankaPage() {
       cil: `skupina:${n.id}:${g.mesic}:${g.dodavatel}`,
       nazev: `${g.dodavatel} · ${Number(g.mesic.slice(5))}/${g.mesic.slice(0, 4)} · ${Math.round(g.castka).toLocaleString("cs-CZ")} Kč`,
       detail: g.polozky.map((x) => x.popis.replace(/ \d{2}\/\d{4}$/, "")).join(", "),
+    })),
+    vydajeKProplaceni: kProplaceni.filter((t) => t.propertyId === n.id).map((t) => ({
+      id: t.id, datum: denISO(t.date), castka: -t.amount, popis: [nazvyKategorii.get(t.category) ?? t.category, t.description].filter(Boolean).join(" · "),
     })),
     vratky: vratky.filter((v) => v.propertyId === n.id).map((v) => ({ cil: `vratka:${v.id}`, nazev: `Vrácení přeplatku ${v.cislo} · ${(v.snapshot as { najemce?: { name?: string } })?.najemce?.name ?? ""} · ${Math.round(v.result).toLocaleString("cs-CZ")} Kč` })),
   }));
@@ -62,7 +71,7 @@ export default async function BankaPage() {
   const nazevBytu = (p: { leaseId: string | null; propertyId: string | null; parovani: unknown }) => {
     const par = p.parovani as { kratkodoby?: string; vydaj?: string } | null;
     if (par?.kratkodoby) return `Krátkodobý pronájem · ${vsechnyByty.get(p.propertyId ?? "") ?? ""}`;
-    if (par?.vydaj) return `${par.vydaj.startsWith("vratka:") ? "Vrácení přeplatku" : "Platba"} · ${vsechnyByty.get(p.propertyId ?? "") ?? ""}`;
+    if (par?.vydaj) return `${par.vydaj.startsWith("vratka:") ? "Vrácení přeplatku" : par.vydaj.startsWith("proplaceni:") ? "Proplacení výdajů" : "Platba"} · ${vsechnyByty.get(p.propertyId ?? "") ?? ""}`;
     return nazevSmlouvy(p.leaseId);
   };
   const radek = (p: (typeof keKontrole)[number]) => ({

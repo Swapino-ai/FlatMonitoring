@@ -125,18 +125,22 @@ export type CilVydaje =
   | { typ: "vratka"; statementId: string }
   | { typ: "vydaj"; propertyId: string; kategorie: string }
   /** Vsechny sluzby jednoho dodavatele za mesic jednou platbou (napr. SVJ) */
-  | { typ: "skupina"; propertyId: string; mesic: string; dodavatel: string };
+  | { typ: "skupina"; propertyId: string; mesic: string; dodavatel: string }
+  /** Proplaceni vic vydaju zaplacenych jinak (karta z jineho uctu) jednim prevodem z Fio */
+  | { typ: "proplaceni"; propertyId: string; transakce: string[] };
 
 export const cilZTextu = (t: string): CilVydaje | null => {
   const [typ, a, ...zbytek] = t.split(":");
   if (typ === "predpis" && a && zbytek.length) return { typ: "predpis", propertyId: a, klic: zbytek.join(":") };
   if (typ === "vratka" && a) return { typ: "vratka", statementId: a };
   if (typ === "vydaj" && a && zbytek[0]) return { typ: "vydaj", propertyId: a, kategorie: zbytek[0] };
+  if (typ === "proplaceni" && a && zbytek[0]) return { typ: "proplaceni", propertyId: a, transakce: zbytek[0].split(",").filter(Boolean) };
   if (typ === "skupina" && a && /^\d{4}-\d{2}$/.test(zbytek[0] ?? "") && zbytek.length > 1) return { typ: "skupina", propertyId: a, mesic: zbytek[0], dodavatel: zbytek.slice(1).join(":") };
   return null;
 };
 export const cilNaText = (c: CilVydaje) => c.typ === "predpis" ? `predpis:${c.propertyId}:${c.klic}` : c.typ === "vratka" ? `vratka:${c.statementId}`
-  : c.typ === "skupina" ? `skupina:${c.propertyId}:${c.mesic}:${c.dodavatel}` : `vydaj:${c.propertyId}:${c.kategorie}`;
+  : c.typ === "skupina" ? `skupina:${c.propertyId}:${c.mesic}:${c.dodavatel}`
+  : c.typ === "proplaceni" ? `proplaceni:${c.propertyId}:${c.transakce.join(",")}` : `vydaj:${c.propertyId}:${c.kategorie}`;
 
 export interface SkupinaSluzeb { dodavatel: string; mesic: string; castka: number; polozky: NavrzenaPlatba[] }
 
@@ -179,6 +183,28 @@ export async function sparujVydaj(pohybId: string, cil: CilVydaje): Promise<{ ok
       prisma.bankovniPohyb.update({ where: { id: pohybId }, data: { stav: "SPAROVANO", propertyId: cil.propertyId, navrhCil: null, poznamka: null, parovani: { vydaj: cilNaText(cil) } } }),
     ]);
     return { ok: true, zprava: "Platba zapsána k předpisu." };
+  }
+  if (cil.typ === "proplaceni") {
+    // Vydaje uz jsou zauctovane (s doklady) — prevod je jen jejich proplaceni, novy vydaj nevznika
+    if (pohyb.castka >= 0) return { ok: false, zprava: "Proplacení jde jen u odchozí platby." };
+    const tx = await prisma.transaction.findMany({ where: { id: { in: cil.transakce }, propertyId: cil.propertyId, amount: { lt: 0 } } });
+    if (!tx.length) return { ok: false, zprava: "Vyber výdaje, které platba proplácí." };
+    const jinde = tx.filter((t) => t.proplacenoPohybId && t.proplacenoPohybId !== pohybId);
+    if (jinde.length) return { ok: false, zprava: `${jinde.length === 1 ? "Jeden z výdajů už je" : "Některé výdaje už jsou"} proplacené jinou platbou.` };
+    const soucet = Math.round(tx.reduce((a, t) => a - t.amount, 0) * 100) / 100;
+    const rozdil = Math.round((castka - soucet) * 100) / 100;
+    await prisma.$transaction([
+      prisma.transaction.updateMany({ where: { id: { in: tx.map((t) => t.id) } }, data: { proplacenoPohybId: pohybId } }),
+      prisma.bankovniPohyb.update({
+        where: { id: pohybId },
+        data: {
+          stav: "SPAROVANO", propertyId: cil.propertyId, navrhCil: null,
+          poznamka: Math.abs(rozdil) >= TOLERANCE ? `Proplaceno o ${Math.abs(rozdil).toLocaleString("cs-CZ")} Kč ${rozdil > 0 ? "víc" : "míň"}, než je součet vybraných výdajů (${soucet.toLocaleString("cs-CZ")} Kč).` : null,
+          parovani: { vydaj: cilNaText({ ...cil, transakce: tx.map((t) => t.id) }), cislo: `${tx.length}×` },
+        },
+      }),
+    ]);
+    return { ok: true, zprava: `Proplaceno ${tx.length} ${tx.length === 1 ? "výdaj" : tx.length < 5 ? "výdaje" : "výdajů"} (${soucet.toLocaleString("cs-CZ")} Kč).` };
   }
   if (cil.typ === "skupina") {
     const sk = skupinySluzeb(await nactiNavrhPlatby(cil.propertyId)).find((x) => x.dodavatel === cil.dodavatel && x.mesic === cil.mesic);
@@ -277,7 +303,8 @@ async function zpracujVydaj(p: { id: string; castka: number; datum: Date; vs: st
       if (x.castka < 0 && x.stav === "nezaplaceno" && Math.abs(Math.abs(x.castka) - castka) < TOLERANCE) shodne.push({ typ: "predpis", propertyId: id, klic: x.klic });
     }
   }
-  const navrh = shodne.length === 1 ? shodne[0] : driveCil;
+  // Drivejsi proplaceni se neopakuje (jine vydaje) — jako navrh se nepouzije
+  const navrh = shodne.length === 1 ? shodne[0] : driveCil?.typ === "proplaceni" ? null : driveCil;
   await prisma.bankovniPohyb.update({
     where: { id: p.id },
     data: {

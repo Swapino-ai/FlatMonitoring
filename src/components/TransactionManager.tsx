@@ -17,6 +17,8 @@ interface Row {
   poznamkaBanky?: string | null;
   /** "banka:<id>" = importovano z Fio (datum, castka a popis nejdou menit) */
   sourceKey?: string | null;
+  /** Vydaj zaplaceny jinak a proplaceny prevodem z Fio (id pohybu v bance) */
+  proplacenoPohybId?: string | null;
   /** Prilozene doklady (uctenky, faktury) na Google Disku */
   doklady?: { id: string; nazev: string; mime: string }[];
 }
@@ -140,6 +142,7 @@ export function TransactionManager({ propertyId, transactions, canEdit, diskPrip
                       <td className="max-w-[24rem] text-ink-secondary">
                         <span className="line-clamp-2" title={t.description ?? undefined}>{t.description}</span>
                         {t.documentRef && <span className="text-xs text-ink-muted">{t.documentRef}</span>}
+                        {t.proplacenoPohybId && <span className="block text-xs font-medium text-good" title="Zaplaceno kartou z jiného účtu a proplaceno převodem z Fio">✓ proplaceno z Fio</span>}
                         {t.poznamkaBanky && <span className="block text-xs italic text-ink-secondary" title="Poznámka z banky">✎ {t.poznamkaBanky}</span>}
                         {/* Na telefonu jsou akce mimo obrazovku — doklad jde pridat primo tady */}
                         {canEdit && diskPripojen && (
