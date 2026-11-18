@@ -7,7 +7,7 @@ import type { PolozkaZalohy } from "./zalohy";
 
 /** Navrh pravidelnych plateb nemovitosti z dat v databazi (pocita server, klient jen zobrazuje). */
 export async function nactiNavrhPlatby(propertyId: string): Promise<NavrzenaPlatba[]> {
-  const [smlouvy, sluzby, pohyby, zaplaceno, typy, uvery, vyuctovani] = await Promise.all([
+  const [smlouvy, sluzby, pohyby, zaplaceno, typy, uvery, vyuctovani, pojistky] = await Promise.all([
     prisma.lease.findMany({ where: { propertyId }, include: { tenant: true, advanceChanges: { orderBy: { validFrom: "asc" } } } }),
     prisma.service.findMany({ where: { propertyId }, include: { costChanges: { orderBy: { validFrom: "asc" } } } }),
     prisma.transaction.findMany({ where: { propertyId, sourceKey: { not: null } }, select: { date: true, category: true, sourceKey: true, amount: true } }),
@@ -15,6 +15,7 @@ export async function nactiNavrhPlatby(propertyId: string): Promise<NavrzenaPlat
     nactiTypySluzeb(),
     prisma.loan.findMany({ where: { propertyId, isActive: true } }),
     prisma.serviceSettlement.findMany({ where: { service: { propertyId } }, include: { service: true } }),
+    prisma.pojistka.findMany({ where: { propertyId }, include: { zmeny: true } }),
   ]);
 
   // Poznamky ze sparovanych plateb v bance
@@ -40,6 +41,10 @@ export async function nactiNavrhPlatby(propertyId: string): Promise<NavrzenaPlat
     vyuctovani: vyuctovani.map((v) => ({
       id: v.id, datum: denISO(v.createdAt), obdobiOd: denISO(v.periodFrom), obdobiDo: denISO(v.periodTo),
       rozdil: v.totalCost - v.supplierAdvances, dodavatel: v.service.provider, nazevDruhu: nazevDruhu(typy, v.service.type),
+    })),
+    pojistky: pojistky.map((p) => ({
+      id: p.id, pojistovna: p.pojistovna, od: denISO(p.od), do: p.do ? denISO(p.do) : null, frekvence: p.frekvence, castka: p.castka,
+      zmeny: p.zmeny.map((z) => ({ validFrom: denISO(z.validFrom), castka: z.castka })),
     })),
     pohyby: pohyby.map((p) => ({ date: denISO(p.date), category: p.category, sourceKey: p.sourceKey, amount: p.amount })),
     zaplaceno: zaplaceno.map((z) => ({ klic: z.klic, datum: denISO(z.paidAt), castka: z.amount, ...(z.pohybId ? { zBanky: true, poznamka: poznamky.get(z.pohybId) ?? null } : {}) })),

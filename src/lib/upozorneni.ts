@@ -144,6 +144,38 @@ export async function nactiUpozorneni(
     });
   }
 
+  // 6) Pojisteni: nemovitost bez platne pojistky, pojistka brzy konci, AI nasla problem
+  const pojistky = await prisma.pojistka.findMany({ where: { propertyId: { in: ids } }, select: { id: true, propertyId: true, pojistovna: true, od: true, do: true, ai: true } }).catch(() => []);
+  const za30 = denISO(new Date(dnes.getTime() + 30 * 86400000));
+  for (const p of aktivni) {
+    const platne = pojistky.filter((x) => x.propertyId === p.id && denISO(x.od) <= dnesISO && (!x.do || denISO(x.do) >= dnesISO));
+    if (!platne.length) {
+      out.push({
+        klic: `pojisteni:${p.id}`, uroven: "warn", ikona: "stit", text: `${p.name}: chybí pojištění`,
+        detail: "Nemovitost nemá platnou pojistku — zadej ji a nahraj smlouvu.", href: `/properties/${p.id}/pojisteni`, akce: "Doplnit",
+      });
+      continue;
+    }
+    for (const x of platne) {
+      // Konci brzy a nenavazuje na ni jina
+      const navazuje = (konec: Date) => pojistky.some((y) => y.propertyId === p.id && y.id !== x.id && (!y.do || y.do > konec)
+        && y.od.getTime() <= konec.getTime() + 31 * 86400000);
+      if (x.do && denISO(x.do) <= za30 && !navazuje(x.do)) {
+        out.push({
+          klic: `pojisteni-konec:${x.id}`, uroven: "warn", ikona: "stit", text: `${p.name}: pojištění končí ${Number(denISO(x.do).slice(8))}. ${Number(denISO(x.do).slice(5, 7))}.`,
+          detail: `${x.pojistovna} — prodluž nebo zadej novou pojistku.`, href: `/properties/${p.id}/pojisteni`, akce: "Vyřešit",
+        });
+      }
+      const ai = x.ai as { hodnoceni?: { stav?: string; body?: { uroven: string; text: string }[] } } | null;
+      if (ai?.hodnoceni?.stav === "PROBLEM") {
+        out.push({
+          klic: `pojisteni-ai:${x.id}`, uroven: "warn", ikona: "stit", text: `${p.name}: pojistka má podle AI problém`,
+          detail: ai.hodnoceni.body?.find((b) => b.uroven === "PROBLEM")?.text, href: `/properties/${p.id}/pojisteni`, akce: "Zkontrolovat",
+        });
+      }
+    }
+  }
+
   const poradi = { bad: 0, warn: 1, info: 2 };
   return out.sort((a, b) => poradi[a.uroven] - poradi[b.uroven]);
 }

@@ -1,3 +1,4 @@
+import { castkaKDatu, splatnosti, type PojistkaVstup } from "./pojistky";
 import { zalohyZaRozsah, type NajemVstup as NajemVyuct, prunik, pridejDny } from "./vyuctovani";
 import { mesicniNaklad, sluzbaKDatu, type SluzbaVstup } from "./zalohy";
 
@@ -6,7 +7,7 @@ import { mesicniNaklad, sluzbaKDatu, type SluzbaVstup } from "./zalohy";
  * Cisty vypocet bez databaze. Nic se nezauctuje samo: navrh se ukaze a clovek ho potvrdi.
  */
 
-export type DruhPlatby = "NAJEM" | "ZALOHA" | "SLUZBA" | "UVER" | "VYUCTOVANI";
+export type DruhPlatby = "NAJEM" | "ZALOHA" | "SLUZBA" | "UVER" | "VYUCTOVANI" | "POJISTKA";
 
 export interface NavrzenaPlatba {
   /** Stabilni klic, podle ktereho se pozna, ze uz je zauctovano. */
@@ -111,6 +112,8 @@ export function navrhniPlatby(a: {
   sluzby: SluzbaPlatba[];
   uvery?: UverPlatba[];
   vyuctovani?: VyuctovaniPlatba[];
+  /** Pojistky: pojistne podle frekvence (predpis jako u sluzeb) */
+  pojistky?: PojistkaVstup[];
   pohyby: ExistujiciPohyb[];
   /** Zaplacene platby z prehledu (klic -> datum a castka). */
   zaplaceno?: { klic: string; datum: string; castka: number; zBanky?: boolean; poznamka?: string | null }[];
@@ -125,7 +128,8 @@ export function navrhniPlatby(a: {
   const vyuctovani = a.vyuctovani ?? [];
   // Okno sledovani zacina nejstarsi smlouvou ci sluzbou; splatky uveru pred nim uz nikoho nezajimaji
   const zacatekSledovani = zacatky.length ? zacatky.reduce((x, y) => (x < y ? x : y)) : null;
-  const zacatkyVse = [...zacatky, ...uvery.map((u) => u.od), ...vyuctovani.map((v) => v.datum)];
+  const pojistky = a.pojistky ?? [];
+  const zacatkyVse = [...zacatky, ...uvery.map((u) => u.od), ...vyuctovani.map((v) => v.datum), ...pojistky.map((p) => p.od)];
   if (zacatkyVse.length === 0) return [];
   const od = zacatkyVse.reduce((x, y) => (x < y ? x : y));
 
@@ -204,6 +208,21 @@ export function navrhniPlatby(a: {
         skupina: { typ: "DODAVATEL", nazev: u.veritel.trim() || "Úvěr" },
         popis: `Splátka úvěru ${mesic.slice(5)}/${r} · ${u.veritel}`,
         castka: -u.splatka,
+      });
+    }
+  }
+
+  // Pojistne: kazda splatnost podle frekvence, vyse platna k datu splatnosti
+  for (const p of pojistky) {
+    for (const datum of splatnosti(p, dnes)) {
+      const castka = castkaKDatu(p, datum);
+      if (castka <= 0) continue;
+      const mesic = datum.slice(0, 7);
+      pridej({
+        klic: `pojistka:${p.id}:${mesic}`, druh: "POJISTKA", mesic, datum, kategorie: "INSURANCE",
+        skupina: { typ: "DODAVATEL", nazev: p.pojistovna.trim() || "Pojišťovna" },
+        popis: `Pojistné ${mesic.slice(5)}/${mesic.slice(0, 4)} · ${p.pojistovna}`,
+        castka: -castka,
       });
     }
   }

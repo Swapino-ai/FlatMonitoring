@@ -132,6 +132,7 @@ function Prirazeni({ p, cile, kategorie, vychoziNemovitost, vychoziCil, bezi, on
     ? [
         { label: "Služby (za dodavatele a měsíc)", moznosti: (n.skupiny ?? []).map((x) => ({ value: x.cil, label: x.nazev, detail: x.detail })) },
         { label: "Splátky úvěru", moznosti: n.predpisy.filter((x) => x.cil.includes(":uver:")).map((x) => ({ value: x.cil, label: x.nazev })) },
+        { label: "Pojištění", moznosti: n.predpisy.filter((x) => x.cil.includes(":pojistka:")).map((x) => ({ value: x.cil, label: x.nazev })) },
         { label: "Služby bez dodavatele", moznosti: n.predpisy.filter((x) => x.cil.includes(":sluzba:")).map((x) => ({ value: x.cil, label: x.nazev })) },
         { label: "Nedoplatky z vyúčtování dodavatele", moznosti: n.predpisy.filter((x) => x.cil.includes(":vyuctovani:")).map((x) => ({ value: x.cil, label: x.nazev })) },
         { label: "Proplacení výdajů zaplacených jinak", moznosti: (n.vydajeKProplaceni?.length ? [{ value: `proplaceni:${n.id}`, label: "Více výdajů najednou (např. nákup kartou z jiného účtu)", detail: `${n.vydajeKProplaceni.length} neproplacených výdajů` }] : []) },
@@ -181,7 +182,7 @@ function Prirazeni({ p, cile, kategorie, vychoziNemovitost, vychoziCil, bezi, on
   );
 }
 
-const POPIS_PREDPISU: Record<string, string> = { sluzba: "platba služby", uver: "splátka úvěru", vyuctovani: "nedoplatek z vyúčtování dodavatele" };
+const POPIS_PREDPISU: Record<string, string> = { sluzba: "platba služby", uver: "splátka úvěru", vyuctovani: "nedoplatek z vyúčtování dodavatele", pojistka: "pojistné" };
 
 /** Vlastni poznamka k platbe: klik otevre pole, ulozi se po opusteni */
 function Poznamka({ p, onUloz }: { p: PohybRadek; onUloz: (text: string) => void }) {

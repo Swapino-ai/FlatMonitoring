@@ -743,6 +743,7 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           },
           { id: "kratkodoby", nazev: "Krátkodobý", odkaz: `/properties/${property.id}/kratkodoby` },
           { id: "vykaz", nazev: "Výkaz práce", odkaz: `/properties/${property.id}/vykaz` },
+          { id: "pojisteni", nazev: "Pojištění", odkaz: `/properties/${property.id}/pojisteni` },
           {
             id: "finance",
             nazev: "Finance",
@@ -912,7 +913,7 @@ function Row({ label, value, strong, muted, note, term }: {
 function RozpadToku({ rozpad, podil, podilSplatek }: { rozpad: Record<string, number>; podil: number; podilSplatek: number }) {
   return (
     <div className="mt-3 flex flex-wrap gap-2 text-xs">
-      {([["NAJEM", "Nájem"], ["ZALOHA", "Zálohy od nájemce"], ["SLUZBA", "Služby dodavatelům"], ["UVER", "Splátky úvěru"], ["VYUCTOVANI", "Vyúčtování"], ["POHYB", "Ostatní pohyby"]] as const)
+      {([["NAJEM", "Nájem"], ["ZALOHA", "Zálohy od nájemce"], ["SLUZBA", "Služby dodavatelům"], ["UVER", "Splátky úvěru"], ["POJISTKA", "Pojištění"], ["VYUCTOVANI", "Vyúčtování"], ["POHYB", "Ostatní pohyby"]] as const)
         .filter(([k]) => Math.abs(rozpad[k] ?? 0) >= 1)
         .map(([k, n]) => {
           const v = rozpad[k] * (k === "UVER" ? podilSplatek : podil);

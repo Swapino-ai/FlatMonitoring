@@ -17,6 +17,7 @@ const IKONY: Record<string, string> = {
   sprava: "M4 6h9M19 6h1M4 12h3M13 12h7M4 18h11M21 18h-1M16 6m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M10 12m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0M18 18m-2 0a2 2 0 1 0 4 0a2 2 0 1 0-4 0",
   vice: "M5 12h.01M12 12h.01M19 12h.01",
   banka: "M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 21h18",
+  stit: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z",
 };
 
 function Ikona({ nazev, trida = "h-[18px] w-[18px]" }: { nazev: string; trida?: string }) {
@@ -35,6 +36,7 @@ const LINKS = [
   { href: "/market", label: "Trh", ikona: "trh" },
   { href: "/savings", label: "Úspory", ikona: "uspory" },
   { href: "/tax", label: "Daně", ikona: "dane" },
+  { href: "/pojisteni", label: "Pojištění", ikona: "stit" },
   { href: "/reports", label: "Reporty", ikona: "reporty" },
 ];
 

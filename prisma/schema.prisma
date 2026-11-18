@@ -152,6 +152,8 @@ model Property {
   kratkodobeUcty   String[] @default([])
   /// Vykaz prace na byte (kdo, kolik casu, co udelal, fotky)
   vykazy           VykazPrace[]
+  /// Pojistne smlouvy (nemovitost, domacnost, odpovednost)
+  pojistky         Pojistka[]
   /// Cislo bytu v Evidenci SVJ: meraky se tam dohledaji podle vyrobniho cisla
   svjByt           String?
   /// Posledni prevzeti stavu ze SVJ (automaticky jednou za mesic, jinak tlacitkem)
@@ -656,6 +658,46 @@ model DriveFolder {
 }
 
 /// Dokument nahrany na Google Disk. Vazby jsou volne (retezce), at smazani zaznamu nesmaze soubor.
+/// Pojistna smlouva nemovitosti. Pojistne se plati jako predpis (Stav uctu, parovani z banky),
+/// vyse se muze v case menit (PojistkaZmena). AI z nahrane smlouvy vytahne udaje a posoudi kryti.
+model Pojistka {
+  id             String    @id @default(cuid())
+  propertyId     String
+  property       Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  pojistovna     String
+  cisloSmlouvy   String?
+  /// NEMOVITOST | DOMACNOST | KOMBINOVANA | ODPOVEDNOST
+  druh           String    @default("NEMOVITOST")
+  od             DateTime
+  /// Konec (ukonceni smlouvy); null = trva
+  do             DateTime?
+  /// MESICNE | CTVRTLETNE | POLOLETNE | ROCNE
+  frekvence      String    @default("ROCNE")
+  /// Pojistne za jednu platbu (aktualni vyse; historie v zmeny)
+  castka         Float
+  /// Pojistna castka (limit plneni) nemovitosti
+  pojistnaCastka Float?
+  poznamka       String?
+  /// Vysledek AI rozboru smlouvy (udaje, rizika, hodnoceni)
+  ai             Json?
+  aiAt           DateTime?
+  createdAt      DateTime  @default(now())
+  zmeny          PojistkaZmena[]
+
+  @@index([propertyId])
+}
+
+/// Zmena vyse pojistneho od data (jako u sluzeb)
+model PojistkaZmena {
+  id         String   @id @default(cuid())
+  pojistkaId String
+  pojistka   Pojistka @relation(fields: [pojistkaId], references: [id], onDelete: Cascade)
+  validFrom  DateTime
+  castka     Float
+
+  @@unique([pojistkaId, validFrom])
+}
+
 /// Clovek, ktery pracuje na bytech (vykaz prace); jmena jsou spolecna pro vsechny byty
 model Pracovnik {
   id        String       @id @default(cuid())
@@ -712,6 +754,8 @@ model Dokument {
   transactionId String?
   /// Fotka k zaznamu vykazu prace
   vykazId      String?
+  /// Pojistna smlouva (PDF / fotka)
+  pojistkaId   String?
   rok          Int?
   note         String?
   uploadedById String?
