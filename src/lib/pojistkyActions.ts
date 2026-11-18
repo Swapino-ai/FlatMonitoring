@@ -37,6 +37,8 @@ async function srovnejCastku(pojistkaId: string) {
 export interface PojistkaFormular {
   id?: string; pojistovna: string; cisloSmlouvy?: string | null; druh: string; od: string; do?: string | null;
   frekvence: string; castka: number; pojistnaCastka?: number | null; poznamka?: string | null;
+  /** Datum splatnosti pojistneho (rrrr-mm-dd); null = k zacatku pojisteni */
+  splatnost?: string | null;
   /** Pri zmene vyse pojistneho: od kdy nova vyse plati */
   castkaOd?: string | null;
   /** Nova pojistka ze smlouvy: uz nahrane soubory smlouvy a jeji rozbor AI */
@@ -54,9 +56,10 @@ export async function ulozPojistku(propertyId: string, v: PojistkaFormular): Pro
   if (!(v.frekvence in FREKVENCE)) return { error: "Vyber, jak často se platí." };
   if (!(v.druh in DRUHY_POJISTKY)) return { error: "Vyber druh pojištění." };
   if (!Number.isFinite(v.castka) || v.castka <= 0) return { error: "Vyplň výši pojistného." };
+  if (v.splatnost && !jeDatum(v.splatnost)) return { error: "Datum splatnosti není platné." };
   const data = {
     pojistovna, cisloSmlouvy: v.cisloSmlouvy?.trim() || null, druh: v.druh, od: den(v.od), do: v.do ? den(v.do) : null,
-    frekvence: v.frekvence, pojistnaCastka: v.pojistnaCastka && v.pojistnaCastka > 0 ? v.pojistnaCastka : null, poznamka: v.poznamka?.trim() || null,
+    frekvence: v.frekvence, splatnost: v.splatnost ? den(v.splatnost) : null, pojistnaCastka: v.pojistnaCastka && v.pojistnaCastka > 0 ? v.pojistnaCastka : null, poznamka: v.poznamka?.trim() || null,
   };
   if (!v.id) {
     const p = await prisma.pojistka.create({ data: {
@@ -245,6 +248,7 @@ export async function rozeberSmlouvu(propertyId: string, pojistkaId: string): Pr
       ai: rozbor as unknown as Prisma.InputJsonValue, aiAt: new Date(),
       ...(p.cisloSmlouvy ? {} : rozbor.cisloSmlouvy ? { cisloSmlouvy: rozbor.cisloSmlouvy } : {}),
       ...(p.pojistnaCastka ? {} : rozbor.pojistnaCastkaNemovitost ? { pojistnaCastka: rozbor.pojistnaCastkaNemovitost } : {}),
+      ...(p.splatnost ? {} : rozbor.splatnost && jeDatum(rozbor.splatnost) ? { splatnost: den(rozbor.splatnost) } : {}),
     },
   });
   obnov(propertyId);

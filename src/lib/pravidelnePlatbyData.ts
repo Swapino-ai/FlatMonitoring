@@ -44,6 +44,7 @@ export async function nactiNavrhPlatby(propertyId: string): Promise<NavrzenaPlat
     })),
     pojistky: pojistky.map((p) => ({
       id: p.id, pojistovna: p.pojistovna, od: denISO(p.od), do: p.do ? denISO(p.do) : null, frekvence: p.frekvence, castka: p.castka,
+      splatnost: p.splatnost ? denISO(p.splatnost) : null,
       zmeny: p.zmeny.map((z) => ({ validFrom: denISO(z.validFrom), castka: z.castka })),
     })),
     pohyby: pohyby.map((p) => ({ date: denISO(p.date), category: p.category, sourceKey: p.sourceKey, amount: p.amount })),

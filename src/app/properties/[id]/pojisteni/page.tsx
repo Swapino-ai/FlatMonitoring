@@ -35,7 +35,7 @@ export default async function PojisteniPage({ params }: { params: Promise<{ id: 
           hodnota={property.valuations[0]?.value ?? property.purchasePrice ?? null}
           pojistky={property.pojistky.map((p) => ({
             id: p.id, pojistovna: p.pojistovna, cisloSmlouvy: p.cisloSmlouvy, druh: p.druh, od: denISO(p.od), do: p.do ? denISO(p.do) : null,
-            frekvence: p.frekvence, castka: p.castka, pojistnaCastka: p.pojistnaCastka, poznamka: p.poznamka,
+            frekvence: p.frekvence, castka: p.castka, pojistnaCastka: p.pojistnaCastka, poznamka: p.poznamka, splatnost: p.splatnost ? denISO(p.splatnost) : null,
             zmeny: p.zmeny.map((z) => ({ id: z.id, validFrom: denISO(z.validFrom), castka: z.castka })),
             smlouvy: smlouvy.filter((s) => s.pojistkaId === p.id).map((s) => ({ id: s.id, nazev: s.name, mime: s.mime })),
             ai: (p.ai as RozborPojistky | null) ?? null, aiAt: p.aiAt?.toISOString() ?? null,

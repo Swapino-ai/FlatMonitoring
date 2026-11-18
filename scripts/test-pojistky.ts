@@ -13,5 +13,10 @@ over("roční pojistné 4 × 1200", rocniPojistne(p, "2026-06-01") === 4800);
 const u = { ...p, frekvence: "ROCNE", do: "2026-02-28" };
 over("ukončená: jen do konce", JSON.stringify(splatnosti(u, "2027-12-31")) === JSON.stringify(["2025-03-31"]));
 over("platí k datu / po konci ne", platiKDatu(u, "2026-01-15") && !platiKDatu(u, "2026-03-01"));
+// Splatnost ze smlouvy: rocne k 15. 3., pojisteni od 1. 1. 2025 — prvni platba 15. 3. 2025
+const s2 = splatnosti({ id: "x", pojistovna: "A", od: "2025-01-01", do: null, frekvence: "ROCNE", castka: 5000, splatnost: "2026-03-15" }, "2026-12-31");
+over("splatnost ze smlouvy k 15. 3.", JSON.stringify(s2) === JSON.stringify(["2025-03-15", "2026-03-15"]), s2.join(","));
+const s3 = splatnosti({ id: "x", pojistovna: "A", od: "2025-01-10", do: null, frekvence: "POLOLETNE", castka: 5000, splatnost: "2025-01-01" }, "2026-01-31");
+over("kotva před začátkem: první splatnost až v době pojištění", JSON.stringify(s3) === JSON.stringify(["2025-07-01", "2026-01-01"]), s3.join(","));
 console.log(chyby ? `${chyby} chyb` : "vše v pořádku");
 process.exit(chyby ? 1 : 0);

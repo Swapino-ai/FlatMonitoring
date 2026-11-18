@@ -673,6 +673,8 @@ model Pojistka {
   do             DateTime?
   /// MESICNE | CTVRTLETNE | POLOLETNE | ROCNE
   frekvence      String    @default("ROCNE")
+  /// Datum splatnosti pojistneho (napr. prvni platby); dalsi platby po frekvenci od nej. null = k zacatku pojisteni
+  splatnost      DateTime?
   /// Pojistne za jednu platbu (aktualni vyse; historie v zmeny)
   castka         Float
   /// Pojistna castka (limit plneni) nemovitosti

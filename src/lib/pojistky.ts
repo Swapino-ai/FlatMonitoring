@@ -24,6 +24,8 @@ export interface PojistkaVstup {
   do: string | null;
   frekvence: string;
   castka: number;
+  /** rrrr-mm-dd: datum splatnosti, od nej se pocitaji dalsi platby (jinak od zacatku pojisteni) */
+  splatnost?: string | null;
   zmeny?: { validFrom: string; castka: number }[];
 }
 
@@ -41,20 +43,39 @@ export function castkaKDatu(p: PojistkaVstup, datum: string): number {
 /** Plati pojistka k datu? */
 export const platiKDatu = (p: { od: string; do: string | null }, datum: string) => p.od <= datum && (!p.do || p.do >= datum);
 
-/** Data splatnosti pojistneho od zacatku po `doDne` (vcetne), po `frekvence` mesicich od data zacatku. */
+/** Datum `i` kroku (po `krok` mesicich) od kotvy r/m/d; den se zarovna na konec kratsiho mesice. */
+function posunuto(r0: number, m0: number, d0: number, mesicuPosun: number): string {
+  const m = m0 - 1 + mesicuPosun;
+  const r = r0 + Math.floor(m / 12), mm = ((m % 12) + 12) % 12 + 1;
+  const posledni = new Date(Date.UTC(r, mm, 0)).getUTCDate();
+  return `${r}-${String(mm).padStart(2, "0")}-${String(Math.min(d0, posledni)).padStart(2, "0")}`;
+}
+
+/**
+ * Data splatnosti pojistneho od zacatku pojisteni po `doDne` (vcetne), po `frekvence` mesicich.
+ * Kotvou je datum splatnosti ze smlouvy (napr. "splatne k 15. 3."), jinak zacatek pojisteni;
+ * platby pred zacatkem pojisteni ani po jeho konci nevznikaji.
+ */
 export function splatnosti(p: PojistkaVstup, doDne: string): string[] {
   const out: string[] = [];
-  const [r0, m0, d0] = p.od.split("-").map(Number);
+  const [r0, m0, d0] = (p.splatnost || p.od).split("-").map(Number);
   const krok = mesicu(p.frekvence);
-  for (let i = 0; i < 1200; i++) {
-    const m = m0 - 1 + i * krok;
-    const r = r0 + Math.floor(m / 12), mm = (m % 12) + 1;
-    const posledni = new Date(Date.UTC(r, mm, 0)).getUTCDate();
-    const datum = `${r}-${String(mm).padStart(2, "0")}-${String(Math.min(d0, posledni)).padStart(2, "0")}`;
+  // Od kotvy zpet na prvni splatnost v dobe pojisteni
+  let i = 0;
+  while (i > -1200 && posunuto(r0, m0, d0, (i - 1) * krok) >= p.od) i--;
+  while (i < 1200 && posunuto(r0, m0, d0, i * krok) < p.od) i++;
+  for (; i < 1200; i++) {
+    const datum = posunuto(r0, m0, d0, i * krok);
     if (datum > doDne || (p.do && datum > p.do)) break;
     out.push(datum);
   }
   return out;
+}
+
+/** Nejblizsi splatnost od dneska (vcetne), nebo null, kdyz pojisteni uz konci. */
+export function pristiSplatnost(p: PojistkaVstup, dnes: string): string | null {
+  const zaRok = new Date(Date.parse(`${dnes}T00:00:00Z`) + 400 * 86400000).toISOString().slice(0, 10);
+  return splatnosti(p, zaRok).find((d) => d >= dnes) ?? null;
 }
 
 /** Rocni pojistne k datu (vyse platby × pocet plateb za rok). */

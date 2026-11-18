@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { nahrajSmlouvu, prectiNovouSmlouvu, rozeberSmlouvu, smazPojistku, smazSmlouvu, smazZmenuPojistneho, ukonciPojistku, ulozPojistku } from "@/lib/pojistkyActions";
-import { DRUHY_POJISTKY, FREKVENCE, RIZIKA, type Frekvence } from "@/lib/pojistky";
+import { DRUHY_POJISTKY, FREKVENCE, RIZIKA, pristiSplatnost, type Frekvence } from "@/lib/pojistky";
 import type { RozborPojistky } from "@/lib/pojistkaAi";
 import { nactiSoubor } from "@/lib/souborKlient";
 import { czk, dateCz } from "@/lib/format";
@@ -14,6 +14,8 @@ import { useOrezFotky } from "./OrezFotky";
 export interface PojistkaRadek {
   id: string; pojistovna: string; cisloSmlouvy: string | null; druh: string; od: string; do: string | null;
   frekvence: string; castka: number; pojistnaCastka: number | null; poznamka: string | null;
+  /** Datum splatnosti (rrrr-mm-dd) nebo null = k zacatku pojisteni */
+  splatnost: string | null;
   zmeny: { id: string; validFrom: string; castka: number }[];
   smlouvy: { id: string; nazev: string; mime: string }[];
   ai: RozborPojistky | null; aiAt: string | null;
@@ -22,6 +24,7 @@ export interface PojistkaRadek {
 type Form = {
   id?: string; pojistovna: string; cisloSmlouvy: string; druh: string; od: string | null; do: string | null;
   frekvence: string; castka: string; pojistnaCastka: string; poznamka: string; castkaOd: string | null; puvodniCastka?: number;
+  splatnost: string | null;
 };
 
 const dnes = () => new Date().toISOString().slice(0, 10);
@@ -89,7 +92,7 @@ export function Pojisteni({ propertyId, canEdit, diskPripojen, aiZapnuto, hodnot
       const r = await ulozPojistku(propertyId, {
         id: form.id, pojistovna: form.pojistovna, cisloSmlouvy: form.cisloSmlouvy, druh: form.druh, od: form.od ?? "", do: form.do,
         frekvence: form.frekvence, castka: cislo(form.castka), pojistnaCastka: form.pojistnaCastka.trim() ? cislo(form.pojistnaCastka) : null,
-        poznamka: form.poznamka, castkaOd: form.castkaOd,
+        poznamka: form.poznamka, castkaOd: form.castkaOd, splatnost: form.splatnost,
         ...(!form.id && nova ? { dokumenty: nova.dokumenty.map((d) => d.id), ai: nova.ai } : {}),
       });
       if (r.error || !r.id) { vysledek(r); return; }
@@ -128,6 +131,7 @@ export function Pojisteni({ propertyId, canEdit, diskPripojen, aiZapnuto, hodnot
       od: a.od && /^\d{4}-\d{2}-\d{2}$/.test(a.od) ? a.od : null, do: a.do && /^\d{4}-\d{2}-\d{2}$/.test(a.do) ? a.do : null,
       frekvence, castka: castka != null ? String(Math.round(castka * 100) / 100).replace(".", ",") : "",
       pojistnaCastka: a.pojistnaCastkaNemovitost != null ? String(a.pojistnaCastkaNemovitost) : "", poznamka: "", castkaOd: null,
+      splatnost: a.splatnost && /^\d{4}-\d{2}-\d{2}$/.test(a.splatnost) ? a.splatnost : null,
     });
     setHlaska(null);
   });
@@ -137,7 +141,7 @@ export function Pojisteni({ propertyId, canEdit, diskPripojen, aiZapnuto, hodnot
     setNova(null); setForm(null);
   });
 
-  const novy = (): Form => ({ pojistovna: "", cisloSmlouvy: "", druh: "NEMOVITOST", od: dnes(), do: null, frekvence: "ROCNE", castka: "", pojistnaCastka: "", poznamka: "", castkaOd: dnes() });
+  const novy = (): Form => ({ pojistovna: "", cisloSmlouvy: "", druh: "NEMOVITOST", od: dnes(), do: null, frekvence: "ROCNE", castka: "", pojistnaCastka: "", poznamka: "", castkaOd: dnes(), splatnost: null });
   const zmenaCastky = form?.id != null && form.puvodniCastka != null && Math.abs(cislo(form.castka) - form.puvodniCastka) >= 0.01;
 
   return (
@@ -198,6 +202,8 @@ export function Pojisteni({ propertyId, canEdit, diskPripojen, aiZapnuto, hodnot
               </select></label>
             <DatumPole label="Platí od" name="poj-od" defaultValue={form.od ?? ""} onChange={(d) => setForm((f) => f && { ...f, od: d })} />
             <DatumPole label="Platí do (prázdné = na dobu neurčitou)" name="poj-do" defaultValue={form.do ?? ""} onChange={(d) => setForm((f) => f && { ...f, do: d })} />
+            <DatumPole label="Splatnost pojistného (datum platby)" name="poj-splatnost" defaultValue={form.splatnost ?? ""} onChange={(d) => setForm((f) => f && { ...f, splatnost: d })}
+              hint="Např. 15/03 — další platby podle frekvence. Prázdné = k začátku pojištění." />
             <label className="block"><span className="label mb-1.5 block">Pojistné za jednu platbu (Kč)</span>
               <input className="input" inputMode="decimal" value={form.castka} onChange={(e) => setForm((f) => f && { ...f, castka: e.target.value })} />
               {cislo(form.castka) > 0 && <span className="mt-1 block text-xs text-ink-muted">= {czk(cislo(form.castka) * zaRok(form.frekvence))} ročně</span>}</label>
@@ -234,6 +240,13 @@ export function Pojisteni({ propertyId, canEdit, diskPripojen, aiZapnuto, hodnot
                 <div>Platnost: <strong>{dateCz(p.od)} – {p.do ? dateCz(p.do) : "na dobu neurčitou"}</strong></div>
                 {p.cisloSmlouvy && <div>Smlouva č.: <strong>{p.cisloSmlouvy}</strong></div>}
                 <div>Pojistné: <strong>{czk(p.castka)} {FREKVENCE[p.frekvence as Frekvence]?.nazev}</strong> <span className="text-ink-muted">= {czk(p.castka * zaRok(p.frekvence))}/rok</span></div>
+                {(() => {
+                  const pristi = pristiSplatnost({ id: p.id, pojistovna: p.pojistovna, od: p.od, do: p.do, frekvence: p.frekvence, castka: p.castka, splatnost: p.splatnost, zmeny: p.zmeny }, dnes());
+                  return (
+                    <div>Splatnost: <strong>{p.splatnost ? `${Number(p.splatnost.slice(8))}. ${Number(p.splatnost.slice(5, 7))}.` : "k začátku pojištění"}</strong>
+                      {pristi && <span className={pristi <= new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10) ? " font-medium text-warn" : " text-ink-muted"}> · příští platba {dateCz(pristi)}</span>}</div>
+                  );
+                })()}
                 {p.pojistnaCastka != null && (
                   <div>Pojistná částka: <strong>{czk(p.pojistnaCastka)}</strong>
                     {kryti != null && <span className={kryti < 0.6 ? " text-bad" : kryti < 0.85 ? " text-warn" : " text-ink-muted"}> ({Math.round(kryti * 100)} % hodnoty nemovitosti)</span>}</div>
@@ -283,7 +296,7 @@ export function Pojisteni({ propertyId, canEdit, diskPripojen, aiZapnuto, hodnot
                   <button type="button" className="text-accent hover:underline" onClick={() => { setHlaska(null); setForm({
                     id: p.id, pojistovna: p.pojistovna, cisloSmlouvy: p.cisloSmlouvy ?? "", druh: p.druh, od: p.od, do: p.do, frekvence: p.frekvence,
                     castka: String(p.castka).replace(".", ","), pojistnaCastka: p.pojistnaCastka != null ? String(p.pojistnaCastka) : "", poznamka: p.poznamka ?? "",
-                    castkaOd: dnes(), puvodniCastka: p.castka,
+                    castkaOd: dnes(), puvodniCastka: p.castka, splatnost: p.splatnost,
                   }); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Upravit / změnit cenu</button>
                   {!p.do && <button type="button" className="text-accent hover:underline" onClick={() => setUkoncit({ id: p.id, do: dnes() })}>Ukončit</button>}
                   <button type="button" className="text-bad hover:underline" disabled={bezi}
@@ -314,6 +327,7 @@ export function RozborAi({ ai, kdy }: { ai: RozborPojistky; kdy: string | null }
     ["Limit odpovědnosti", ai.limitOdpovednosti != null ? czk(ai.limitOdpovednosti) : null],
     ["Spoluúčast", ai.spoluucast != null ? czk(ai.spoluucast) : null],
     ["Roční pojistné", ai.rocniPojistne != null ? czk(ai.rocniPojistne) : null],
+    ["Splatnost", ai.splatnost ? dateCz(ai.splatnost) : null],
     ["Plnění", ai.pojisteniNaNovou == null ? null : ai.pojisteniNaNovou ? "v nové ceně" : "v časové ceně"],
   ];
   return (

@@ -21,6 +21,7 @@ const schema = z.object({
   od: z.string().nullable().describe("Pocatek pojisteni RRRR-MM-DD"),
   do: z.string().nullable().describe("Konec pojisteni RRRR-MM-DD; null = na dobu neurcitou"),
   frekvence: z.enum(["MESICNE", "CTVRTLETNE", "POLOLETNE", "ROCNE"]).nullable(),
+  splatnost: z.string().nullable().describe("Datum splatnosti pojistneho RRRR-MM-DD (prvni nebo nejblizsi platba, napr. 'splatne k 15. 3.' = 15. 3. v roce pocatku); null, kdyz ve smlouve neni"),
   pojistneZaPlatbu: z.number().nullable().describe("Kc za jednu platbu podle frekvence"),
   rocniPojistne: z.number().nullable(),
   pojistnaCastkaNemovitost: z.number().nullable().describe("Pojistna castka / limit plneni stavby, Kc"),
