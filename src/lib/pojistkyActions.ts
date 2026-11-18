@@ -39,6 +39,9 @@ export interface PojistkaFormular {
   frekvence: string; castka: number; pojistnaCastka?: number | null; poznamka?: string | null;
   /** Pri zmene vyse pojistneho: od kdy nova vyse plati */
   castkaOd?: string | null;
+  /** Nova pojistka ze smlouvy: uz nahrane soubory smlouvy a jeji rozbor AI */
+  dokumenty?: string[];
+  ai?: RozborPojistky | null;
 }
 
 export async function ulozPojistku(propertyId: string, v: PojistkaFormular): Promise<{ error?: string; id?: string }> {
@@ -56,7 +59,11 @@ export async function ulozPojistku(propertyId: string, v: PojistkaFormular): Pro
     frekvence: v.frekvence, pojistnaCastka: v.pojistnaCastka && v.pojistnaCastka > 0 ? v.pojistnaCastka : null, poznamka: v.poznamka?.trim() || null,
   };
   if (!v.id) {
-    const p = await prisma.pojistka.create({ data: { propertyId, ...data, castka: v.castka, zmeny: { create: { validFrom: den(v.od), castka: v.castka } } } });
+    const p = await prisma.pojistka.create({ data: {
+      propertyId, ...data, castka: v.castka, zmeny: { create: { validFrom: den(v.od), castka: v.castka } },
+      ...(v.ai ? { ai: v.ai as unknown as Prisma.InputJsonValue, aiAt: new Date() } : {}),
+    } });
+    if (v.dokumenty?.length) await prisma.dokument.updateMany({ where: { id: { in: v.dokumenty }, propertyId, kategorie: "POJISTKA", pojistkaId: null }, data: { pojistkaId: p.id } });
     obnov(propertyId);
     return { id: p.id };
   }
@@ -124,37 +131,80 @@ const POVOLENE = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
 const MAX_SOUBOR = 2_900_000;
 
 /** Nahraje smlouvu (PDF nebo fotku strany) na Google Disk do 11 Pojištění. */
-export async function nahrajSmlouvu(propertyId: string, pojistkaId: string, f: { data: string; mime: string; nazev: string }): Promise<{ error?: string }> {
+export async function nahrajSmlouvu(propertyId: string, pojistkaId: string | null, f: { data: string; mime: string; nazev: string }): Promise<{ error?: string; dokument?: { id: string; nazev: string; mime: string } }> {
   const chyba = await majitel();
   if (chyba) return { error: chyba };
   if (!POVOLENE.includes(f.mime)) return { error: "Smlouvu nahraj jako PDF nebo fotky stran." };
   if (f.data.length * 0.75 > MAX_SOUBOR) return { error: "Soubor je moc velký (max. 2,8 MB). Velké PDF nahraj jako fotky jednotlivých stran." };
-  const p = await prisma.pojistka.findFirst({ where: { id: pojistkaId, propertyId }, include: { property: { select: { name: true } } } });
-  if (!p) return { error: "Pojistka neexistuje." };
-  const poradi = await prisma.dokument.count({ where: { pojistkaId } });
+  // Bez pojistky = nova smlouva: nejdriv se nahraje, AI z ni vyplni pojistku a uzivatel ji potvrdi
+  const nem = await prisma.property.findUnique({ where: { id: propertyId }, select: { name: true } });
+  const p = pojistkaId ? await prisma.pojistka.findFirst({ where: { id: pojistkaId, propertyId } }) : null;
+  if (!nem || (pojistkaId && !p)) return { error: "Pojistka neexistuje." };
+  const poradi = pojistkaId ? await prisma.dokument.count({ where: { pojistkaId } }) : 0;
   try {
-    const slozka = await zajistiCestu(cestaSlozek({ kategorie: "POJISTKA", propertyId, propertyNazev: p.property.name }));
+    const slozka = await zajistiCestu(cestaSlozek({ kategorie: "POJISTKA", propertyId, propertyNazev: nem.name }));
     const pripona = f.mime === "application/pdf" ? "pdf" : f.mime === "image/png" ? "png" : f.mime === "image/webp" ? "webp" : "jpg";
-    const nazev = `${bezpecneJmeno([`Pojistná smlouva ${p.pojistovna}`, p.cisloSmlouvy, p.property.name, `od ${iso(p.od).split("-").reverse().map(Number).join(".")}`].filter(Boolean).join(" – ")).slice(0, 150)}${poradi ? ` (${poradi + 1})` : ""}.${pripona}`;
+    const casti = p ? [`Pojistná smlouva ${p.pojistovna}`, p.cisloSmlouvy, nem.name, `od ${iso(p.od).split("-").reverse().map(Number).join(".")}`]
+      : [`Pojistná smlouva`, nem.name, f.nazev.replace(/\.[^.]+$/, ""), iso(new Date())];
+    const nazev = `${bezpecneJmeno(casti.filter(Boolean).join(" – ")).slice(0, 150)}${poradi ? ` (${poradi + 1})` : ""}.${pripona}`;
     const bajty = Buffer.from(f.data, "base64");
     const driveId = await nahrajPrimo({ rodicId: slozka, nazev, mime: f.mime, data: new Uint8Array(bajty) });
-    await prisma.dokument.create({ data: { driveId, name: nazev, mime: f.mime, size: bajty.length, kategorie: "POJISTKA", propertyId, pojistkaId } });
+    const d = await prisma.dokument.create({ data: { driveId, name: nazev, mime: f.mime, size: bajty.length, kategorie: "POJISTKA", propertyId, pojistkaId } });
+    if (pojistkaId) obnov(propertyId);
+    return { dokument: { id: d.id, nazev, mime: f.mime } };
   } catch (e) {
     return { error: e instanceof ChybaDisku ? `Smlouva se neuložila: ${e.message}` : "Smlouva se neuložila (Google Disk)." };
   }
-  obnov(propertyId);
-  return {};
 }
 
 export async function smazSmlouvu(propertyId: string, dokumentId: string): Promise<{ error?: string }> {
   const chyba = await majitel();
   if (chyba) return { error: chyba };
-  const d = await prisma.dokument.findFirst({ where: { id: dokumentId, propertyId, pojistkaId: { not: null } } });
+  const d = await prisma.dokument.findFirst({ where: { id: dokumentId, propertyId, kategorie: "POJISTKA" } });
   if (!d) return {};
   await doKose(d.driveId).catch(() => undefined);
   await prisma.dokument.delete({ where: { id: d.id } });
   obnov(propertyId);
   return {};
+}
+
+/** Kontext nemovitosti pro AI a stazeni souboru smlouvy z Disku. */
+async function podkladyAi(propertyId: string, dokumentIds: string[], zadano: { pojistovna: string; castka: number; frekvence: string; pojistnaCastka: number | null } | null) {
+  const n = await prisma.property.findUnique({
+    where: { id: propertyId },
+    include: { valuations: { orderBy: { date: "desc" }, take: 1 }, leases: { where: { isActive: true }, select: { id: true } }, kratkodobe: { select: { id: true } } },
+  });
+  if (!n) throw new Error("Nemovitost neexistuje.");
+  const dokumenty = await prisma.dokument.findMany({ where: { id: { in: dokumentIds }, propertyId }, orderBy: { createdAt: "asc" } });
+  const soubory = [];
+  for (const d of dokumenty.slice(0, 20)) {
+    const r = await stahni(d.driveId);
+    if (!r.ok) throw new ChybaDisku(`Smlouvu ${d.name} se nepodařilo stáhnout z Disku.`, 502);
+    soubory.push({ data: Buffer.from(await r.arrayBuffer()).toString("base64"), mime: d.mime });
+  }
+  return {
+    soubory,
+    kontext: {
+      nazev: n.name, adresa: `${n.street}, ${n.zip} ${n.city}`, typ: n.type, plochaM2: n.areaM2,
+      porizovaciCena: n.purchasePrice, aktualniHodnota: n.valuations[0]?.value ?? null,
+      pronajimano: n.leases.length > 0 || n.kratkodobe.length > 0, kratkodobe: n.kratkodobe.length > 0, zadano,
+    },
+  };
+}
+
+/** Nova pojistka: AI precte nahranou smlouvu a vrati udaje k vyplneni (nic neuklada — uzivatel potvrdi). */
+export async function prectiNovouSmlouvu(propertyId: string, dokumentIds: string[]): Promise<{ error?: string; rozbor?: RozborPojistky }> {
+  const chyba = await majitel();
+  if (chyba) return { error: chyba };
+  if (!aiPojistkyNastaveno()) return { error: "Čtení smlouvy AI není zapnuté — chybí ANTHROPIC_API_KEY v nastavení Vercelu. Vyplň údaje ručně." };
+  if (!dokumentIds.length) return { error: "Nahraj smlouvu." };
+  try {
+    const { soubory, kontext } = await podkladyAi(propertyId, dokumentIds, null);
+    return { rozbor: await rozeberPojistku(soubory, kontext) };
+  } catch (e) {
+    console.error("Čtení smlouvy:", e);
+    return { error: e instanceof ChybaDisku ? e.message : "Smlouvu se nepodařilo přečíst — zkus to znovu, nebo vyplň údaje ručně." };
+  }
 }
 
 /** AI projde nahranou smlouvu: vytahne udaje, posoudi kryti a doplni chybejici udaje pojistky. */

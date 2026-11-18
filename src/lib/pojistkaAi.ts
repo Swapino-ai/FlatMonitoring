@@ -47,7 +47,8 @@ export type RozborPojistky = z.infer<typeof schema>;
 export interface KontextNemovitosti {
   nazev: string; adresa: string; typ: string; plochaM2: number;
   porizovaciCena: number; aktualniHodnota: number | null; pronajimano: boolean; kratkodobe: boolean;
-  zadano: { pojistovna: string; castka: number; frekvence: string; pojistnaCastka: number | null };
+  /** Co zadal majitel (u nove smlouvy null — udaje se teprve ctou) */
+  zadano: { pojistovna: string; castka: number; frekvence: string; pojistnaCastka: number | null } | null;
 }
 
 export const aiPojistkyNastaveno = () => !!process.env.ANTHROPIC_API_KEY?.trim();
@@ -72,7 +73,9 @@ export async function rozeberPojistku(soubory: { data: string; mime: string }[],
     `Nemovitost: ${k.nazev}, ${k.adresa}; typ ${k.typ}, ${k.plochaM2} m².`,
     `Pořizovací cena ${Math.round(k.porizovaciCena).toLocaleString("cs-CZ")} Kč${k.aktualniHodnota ? `, aktuální odhad hodnoty ${Math.round(k.aktualniHodnota).toLocaleString("cs-CZ")} Kč` : ""}.`,
     k.pronajimano ? `Nemovitost se pronajímá${k.kratkodobe ? " (i krátkodobě, Airbnb)" : ""}.` : "Nemovitost se nyní nepronajímá.",
-    `Majitel zadal: pojišťovna ${k.zadano.pojistovna}, pojistné ${k.zadano.castka} Kč ${k.zadano.frekvence}${k.zadano.pojistnaCastka ? `, pojistná částka ${k.zadano.pojistnaCastka} Kč` : ""}. Když smlouva uvádí něco jiného, upozorni na to.`,
+    k.zadano
+      ? `Majitel zadal: pojišťovna ${k.zadano.pojistovna}, pojistné ${k.zadano.castka} Kč ${k.zadano.frekvence}${k.zadano.pojistnaCastka ? `, pojistná částka ${k.zadano.pojistnaCastka} Kč` : ""}. Když smlouva uvádí něco jiného, upozorni na to.`
+      : "Nová smlouva — všechny údaje (pojišťovna, číslo, počátek a konec, frekvence a výše pojistného, pojistné částky) přečti ze smlouvy co nejpřesněji, majitel je jen zkontroluje.",
   ].join("\n");
   const odpoved = await client.beta.messages.parse({
     model: MODEL_POJISTKY,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { nahrajSmlouvu, rozeberSmlouvu, smazPojistku, smazSmlouvu, smazZmenuPojistneho, ukonciPojistku, ulozPojistku } from "@/lib/pojistkyActions";
+import { nahrajSmlouvu, prectiNovouSmlouvu, rozeberSmlouvu, smazPojistku, smazSmlouvu, smazZmenuPojistneho, ukonciPojistku, ulozPojistku } from "@/lib/pojistkyActions";
 import { DRUHY_POJISTKY, FREKVENCE, RIZIKA, type Frekvence } from "@/lib/pojistky";
 import type { RozborPojistky } from "@/lib/pojistkaAi";
 import { nactiSoubor } from "@/lib/souborKlient";
@@ -43,7 +43,21 @@ export function Pojisteni({ propertyId, canEdit, diskPripojen, aiZapnuto, hodnot
   const [bezi, spust] = useTransition();
   const [hlaska, setHlaska] = useState<{ ok: boolean; text: string } | null>(null);
   const [form, setForm] = useState<Form | null>(null);
-  const [soubory, setSoubory] = useState<File[]>([]);
+  // Nova pojistka ze smlouvy: soubory se nahraji, AI z nich vyplni formular, uzivatel potvrdi
+  const [nova, setNova] = useState<{ faze: "nahrani" | "prace" | "kontrola"; dokumenty: { id: string; nazev: string; mime: string }[]; ai: RozborPojistky | null } | null>(null);
+  const vstupNove = useRef<HTMLInputElement>(null);
+  // Drag & drop: nad kterou plochou se zrovna tahne soubor ("nova" nebo id pojistky)
+  const [tahnuti, setTahnuti] = useState<string | null>(null);
+  const POVOLENE = /^(application\/pdf|image\/)/;
+  const pretazeni = (cil: string, onSoubory: (f: File[]) => void) => ({
+    onDragOver: (e: React.DragEvent) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; if (tahnuti !== cil) setTahnuti(cil); } },
+    onDragLeave: (e: React.DragEvent) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTahnuti(null); },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault(); setTahnuti(null);
+      const f = Array.from(e.dataTransfer.files).filter((x) => POVOLENE.test(x.type));
+      if (f.length) onSoubory(f); else setHlaska({ ok: false, text: "Přetáhni PDF nebo fotky stran smlouvy." });
+    },
+  });
   const [ukoncit, setUkoncit] = useState<{ id: string; do: string | null } | null>(null);
   const [kPojistce, setKPojistce] = useState<string | null>(null);
   const vstup = useRef<HTMLInputElement>(null);
@@ -76,14 +90,52 @@ export function Pojisteni({ propertyId, canEdit, diskPripojen, aiZapnuto, hodnot
         id: form.id, pojistovna: form.pojistovna, cisloSmlouvy: form.cisloSmlouvy, druh: form.druh, od: form.od ?? "", do: form.do,
         frekvence: form.frekvence, castka: cislo(form.castka), pojistnaCastka: form.pojistnaCastka.trim() ? cislo(form.pojistnaCastka) : null,
         poznamka: form.poznamka, castkaOd: form.castkaOd,
+        ...(!form.id && nova ? { dokumenty: nova.dokumenty.map((d) => d.id), ai: nova.ai } : {}),
       });
       if (r.error || !r.id) { vysledek(r); return; }
-      const vybrane = soubory;
-      setForm(null); setSoubory([]);
-      if (vybrane.length) await nahrajARozeber(r.id, vybrane);
-      else setHlaska({ ok: true, text: form.id ? "Pojistka upravena." : "Pojistka uložena." });
+      setForm(null); setNova(null);
+      setHlaska({ ok: true, text: form.id ? "Pojistka upravena." : "Pojistka uložena." });
     });
   };
+
+  /** Smlouva vybrana: fotky oriznout, nahrat na Disk, AI precte udaje a vyplni formular. */
+  const prectiSmlouvu = (vybrane: File[]) => spust(async () => {
+    const upravene = await orizni(vybrane);
+    if (!upravene.length) return;
+    setNova((n) => n && { ...n, faze: "prace" });
+    const dokumenty = [...(nova?.dokumenty ?? [])];
+    for (let i = 0; i < upravene.length; i++) {
+      setHlaska({ ok: true, text: `Nahrávám smlouvu ${i + 1} z ${upravene.length}…` });
+      const s = await nactiSoubor(upravene[i]);
+      const r = await nahrajSmlouvu(propertyId, null, { data: s.data, mime: s.mime, nazev: s.nazev });
+      if (r.error || !r.dokument) { vysledek(r); setNova((n) => n && { ...n, faze: "nahrani", dokumenty }); return; }
+      dokumenty.push(r.dokument);
+    }
+    if (!aiZapnuto) {
+      setNova({ faze: "kontrola", dokumenty, ai: null }); setForm(novy());
+      setHlaska({ ok: false, text: "Smlouva je nahraná, ale čtení AI není zapnuté — vyplň údaje ručně." });
+      return;
+    }
+    setHlaska({ ok: true, text: "AI čte smlouvu… (může trvat i minutu)" });
+    const r = await prectiNovouSmlouvu(propertyId, dokumenty.map((d) => d.id));
+    if (r.error || !r.rozbor) { setNova({ faze: "kontrola", dokumenty, ai: null }); setForm(novy()); vysledek({ error: r.error ?? "Smlouvu se nepodařilo přečíst — vyplň údaje ručně." }); return; }
+    const a = r.rozbor;
+    const frekvence = a.frekvence ?? "ROCNE";
+    const castka = a.pojistneZaPlatbu ?? (a.rocniPojistne != null ? a.rocniPojistne / zaRok(frekvence) : null);
+    setNova({ faze: "kontrola", dokumenty, ai: a });
+    setForm({
+      pojistovna: a.pojistovna ?? "", cisloSmlouvy: a.cisloSmlouvy ?? "", druh: a.druh ?? "NEMOVITOST",
+      od: a.od && /^\d{4}-\d{2}-\d{2}$/.test(a.od) ? a.od : null, do: a.do && /^\d{4}-\d{2}-\d{2}$/.test(a.do) ? a.do : null,
+      frekvence, castka: castka != null ? String(Math.round(castka * 100) / 100).replace(".", ",") : "",
+      pojistnaCastka: a.pojistnaCastkaNemovitost != null ? String(a.pojistnaCastkaNemovitost) : "", poznamka: "", castkaOd: null,
+    });
+    setHlaska(null);
+  });
+  const zrusNovou = () => spust(async () => {
+    // Nahrane soubory k neulozene pojistce pryc (na Disku do kose)
+    for (const d of nova?.dokumenty ?? []) await smazSmlouvu(propertyId, d.id);
+    setNova(null); setForm(null);
+  });
 
   const novy = (): Form => ({ pojistovna: "", cisloSmlouvy: "", druh: "NEMOVITOST", od: dnes(), do: null, frekvence: "ROCNE", castka: "", pojistnaCastka: "", poznamka: "", castkaOd: dnes() });
   const zmenaCastky = form?.id != null && form.puvodniCastka != null && Math.abs(cislo(form.castka) - form.puvodniCastka) >= 0.01;
@@ -93,9 +145,9 @@ export function Pojisteni({ propertyId, canEdit, diskPripojen, aiZapnuto, hodnot
       {dialog}
       <input ref={vstup} type="file" accept="application/pdf,image/*" multiple className="hidden"
         onChange={(e) => { const id = kPojistce; const vybrane = Array.from(e.target.files ?? []); e.target.value = ""; if (id && vybrane.length) spust(() => nahrajARozeber(id, vybrane)); }} />
-      {hlaska && <p className={`rounded-lg px-3 py-2 text-sm ${hlaska.ok ? "bg-good/10 text-good" : "bg-bad/10 text-bad"}`}>{hlaska.text}</p>}
+      {hlaska && !nova && !form && <p className={`rounded-lg px-3 py-2 text-sm ${hlaska.ok ? "bg-good/10 text-good" : "bg-bad/10 text-bad"}`}>{hlaska.text}</p>}
 
-      <Card title="Pojištění" action={canEdit && !form ? <button type="button" className="btn btn-primary text-sm" onClick={() => { setForm(novy()); setHlaska(null); }}>+ Přidat pojistku</button> : undefined}>
+      <Card title="Pojištění" action={canEdit && !form && !nova ? <button type="button" className="btn btn-primary text-sm" onClick={() => { setHlaska(null); if (diskPripojen) setNova({ faze: "nahrani", dokumenty: [], ai: null }); else setForm(novy()); }}>+ Přidat pojistku</button> : undefined}>
         {platne.length ? (
           <p className="text-sm text-ink-secondary">
             Platné pojištění: {platne.map((p) => <strong key={p.id} className="text-ink-primary">{p.pojistovna} ({czk(p.castka * zaRok(p.frekvence))}/rok)</strong>).reduce<React.ReactNode[]>((a, x, i) => (i ? [...a, ", ", x] : [x]), [])}
@@ -106,8 +158,31 @@ export function Pojisteni({ propertyId, canEdit, diskPripojen, aiZapnuto, hodnot
         )}
       </Card>
 
+      <input ref={vstupNove} type="file" accept="application/pdf,image/*" multiple className="hidden"
+        onChange={(e) => { const vybrane = Array.from(e.target.files ?? []); e.target.value = ""; if (vybrane.length) prectiSmlouvu(vybrane); }} />
+      {nova && nova.faze !== "kontrola" && (
+        <Card title="Nová pojistka">
+          <div {...pretazeni("nova", (f) => { if (!bezi) prectiSmlouvu(f); })}
+            className={`rounded-xl border-2 border-dashed p-4 transition-colors ${tahnuti === "nova" ? "border-accent bg-accent-soft/60" : "border-line"}`}>
+          <p className="mb-3 text-sm text-ink-secondary">Nahraj smlouvu — AI z ní přečte pojišťovnu, číslo, platnost, pojistné i pojistné částky a ty údaje jen zkontroluješ a potvrdíš.</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" className="btn btn-primary inline-flex items-center gap-2 py-2.5" disabled={bezi} onClick={() => vstupNove.current?.click()}>
+              <Ikona nazev="dokument" trida="h-4 w-4" /> {bezi ? "Zpracovávám…" : "Nahrát smlouvu (PDF nebo fotky stran)"}
+            </button>
+            <button type="button" className="text-sm text-accent hover:underline" disabled={bezi} onClick={() => { setNova(null); setForm(novy()); }}>Bez smlouvy — vyplnit ručně</button>
+            <button type="button" className="text-sm text-ink-muted hover:underline" disabled={bezi} onClick={zrusNovou}>Zrušit</button>
+          </div>
+          <p className="mt-3 hidden text-xs text-ink-muted sm:block">{tahnuti === "nova" ? "Pusť soubory sem…" : "…nebo sem smlouvu přetáhni myší (PDF i fotky, víc souborů najednou)."}</p>
+          </div>
+          {hlaska && <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${hlaska.ok ? "bg-good/10 text-good" : "bg-bad/10 text-bad"}`}>{hlaska.text}</p>}
+        </Card>
+      )}
+
       {form && (
-        <Card title={form.id ? "Upravit pojistku" : "Nová pojistka"}>
+        <Card title={form.id ? "Upravit pojistku" : nova?.ai ? "Nová pojistka — zkontroluj údaje ze smlouvy" : "Nová pojistka"}>
+          {!form.id && nova?.ai && (
+            <p className="mb-3 rounded-lg bg-accent-soft/60 px-3 py-2 text-sm text-ink-secondary">Údaje vyplnila AI ze smlouvy ({nova.dokumenty.length} {nova.dokumenty.length === 1 ? "soubor" : "soubory"}). Zkontroluj je, případně oprav, a potvrď.</p>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block"><span className="label mb-1.5 block">Pojišťovna</span>
               <input className="input" value={form.pojistovna} placeholder="např. Kooperativa" onChange={(e) => setForm((f) => f && { ...f, pojistovna: e.target.value })} /></label>
@@ -134,20 +209,13 @@ export function Pojisteni({ propertyId, canEdit, diskPripojen, aiZapnuto, hodnot
             )}
             <label className="block sm:col-span-2"><span className="label mb-1.5 block">Poznámka</span>
               <input className="input" value={form.poznamka} onChange={(e) => setForm((f) => f && { ...f, poznamka: e.target.value })} /></label>
-            {!form.id && diskPripojen && (
-              <div className="sm:col-span-2">
-                <label className="btn inline-flex cursor-pointer items-center gap-2">
-                  <Ikona nazev="dokument" trida="h-4 w-4" /> Přiložit smlouvu (PDF nebo fotky stran)
-                  <input type="file" accept="application/pdf,image/*" multiple className="hidden" onChange={(e) => { setSoubory((s) => [...s, ...Array.from(e.target.files ?? [])]); e.target.value = ""; }} />
-                </label>
-                {soubory.length > 0 && <span className="ml-2 text-sm text-ink-secondary">{soubory.length} {soubory.length === 1 ? "soubor" : "soubory"} · {aiZapnuto ? "po uložení ji AI projde" : "uloží se na Disk"}</span>}
-              </div>
-            )}
           </div>
+          {hlaska && <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${hlaska.ok ? "bg-good/10 text-good" : "bg-bad/10 text-bad"}`}>{hlaska.text}</p>}
           <div className="mt-4 flex gap-2">
-            <button type="button" className="btn btn-primary" disabled={bezi || !form.pojistovna.trim() || !form.od || !(cislo(form.castka) > 0)} onClick={uloz}>{bezi ? "Ukládám…" : "Uložit"}</button>
-            <button type="button" className="btn" disabled={bezi} onClick={() => { setForm(null); setSoubory([]); }}>Zrušit</button>
+            <button type="button" className="btn btn-primary" disabled={bezi || !form.pojistovna.trim() || !form.od || !(cislo(form.castka) > 0)} onClick={uloz}>{bezi ? "Ukládám…" : nova?.ai ? "Potvrdit a uložit" : "Uložit"}</button>
+            <button type="button" className="btn" disabled={bezi} onClick={() => { if (nova) zrusNovou(); else setForm(null); }}>Zrušit</button>
           </div>
+          {!form.id && nova?.ai && <div className="mt-4"><RozborAi ai={nova.ai} kdy={null} /></div>}
         </Card>
       )}
 
@@ -159,7 +227,9 @@ export function Pojisteni({ propertyId, canEdit, diskPripojen, aiZapnuto, hodnot
         return (
           <Card key={p.id} title={`${p.pojistovna} · ${DRUHY_POJISTKY[p.druh] ?? p.druh}`}
             action={<Badge tone={stav.tone}>{stav.t}</Badge>}>
-            <div className={`space-y-3 text-sm ${p.do && p.do < dnes() ? "opacity-70" : ""}`}>
+            <div {...(canEdit && diskPripojen ? pretazeni(p.id, (f) => { if (!bezi) spust(() => nahrajARozeber(p.id, f)); }) : {})}
+              className={`space-y-3 rounded-lg text-sm transition-colors ${p.do && p.do < dnes() ? "opacity-70" : ""} ${tahnuti === p.id ? "bg-accent-soft/60 outline-dashed outline-2 outline-accent" : ""}`}>
+              {tahnuti === p.id && <p className="text-center font-medium text-accent">Pusť soubory — přidají se ke smlouvě a AI ji znovu posoudí</p>}
               <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
                 <div>Platnost: <strong>{dateCz(p.od)} – {p.do ? dateCz(p.do) : "na dobu neurčitou"}</strong></div>
                 {p.cisloSmlouvy && <div>Smlouva č.: <strong>{p.cisloSmlouvy}</strong></div>}
