@@ -22,11 +22,16 @@ export async function presunSnimkyNaDisk(limit = 5): Promise<number> {
         { klic: "TRH", nazev: "Trh" },
         { klic: `TRH:${s.inzerat.category}:${s.inzerat.city}`, nazev: bezpecneJmeno(`${s.inzerat.city}`) },
         { klic: `TRH:I:${s.inzerat.id}`, nazev: bezpecneJmeno(`${s.inzerat.dealType === "SALE" ? "prodej" : "nájem"} ${s.inzerat.disposition ?? ""} ${s.inzerat.areaM2 ?? ""} m2 ${s.inzerat.externalId}`) },
+        // Fotky zvlast, snimky stranky zvlast — podle snimku je videt, jak se cena v case menila
+        s.druh === "FOTO"
+          ? { klic: `TRH:I:${s.inzerat.id}:FOTKY`, nazev: "Fotky" }
+          : { klic: `TRH:I:${s.inzerat.id}:CENY`, nazev: "Historie ceny (snímky stránky)" },
       ]);
       const pripona = s.mime === "image/png" ? ".png" : s.mime === "image/webp" ? ".webp" : ".jpg";
+      const cena = s.price == null ? "" : s.price < 1000 ? " – cena na vyžádání" : ` – ${Math.round(s.price).toLocaleString("cs-CZ")} Kč${s.inzerat.dealType === "RENT" ? " měsíčně" : ""}`;
       const nazev = s.druh === "FOTO"
         ? `foto ${String((s.poradi ?? 0) + 1).padStart(2, "0")}${pripona}`
-        : bezpecneJmeno(`stránka ${s.createdAt.toISOString().slice(0, 10)}`) + pripona;
+        : bezpecneJmeno(`${s.createdAt.toISOString().slice(0, 10)}${cena}`) + pripona;
       const driveId = await nahrajPrimo({ rodicId: slozka, nazev, mime: s.mime, data: s.data! });
       await prisma.inzeratSnimek.update({ where: { id: s.id }, data: { driveId, data: null } });
       presunuto++;

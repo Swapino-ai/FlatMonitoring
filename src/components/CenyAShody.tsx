@@ -28,8 +28,10 @@ const platnyOdkaz = (u: string | null) => !!u && !u.includes("/x/x/");
  * Historie ceny inzeratu (vyrazne, kdyz se cena zmenila) a stejny byt v jinych inzeratech:
  * navrhy ke schvaleni a potvrzene drivejsi nabidky.
  */
-export function CenyAShody({ ceny, najem, shody = [], canEdit, onRozhodni }: {
+export function CenyAShody({ ceny, snimky = [], najem, shody = [], canEdit, onRozhodni }: {
   ceny: { at: string; price: number }[];
+  /** Snimky stranky s cenou v dobe porizeni — u historie ceny odkaz na snimek */
+  snimky?: { id: string; createdAt: string; price?: number | null }[];
   najem: boolean;
   shody?: ShodaRadku[];
   canEdit: boolean;
@@ -96,11 +98,19 @@ export function CenyAShody({ ceny, najem, shody = [], canEdit, onRozhodni }: {
       )}
       {historie && (
         <ol className="ml-1 border-l-2 border-line pl-3 text-xs tabular-nums text-ink-secondary">
-          {ceny.map((c, k) => (
-            <li key={k}>{dateCz(c.at)} — <strong className="text-ink-primary">{cena(c.price)}</strong>
-              {k > 0 && c.price >= MIN_SKUTECNA_CENA && ceny[k - 1].price >= MIN_SKUTECNA_CENA && <span className={c.price < ceny[k - 1].price ? "text-good" : "text-bad"}> ({c.price > ceny[k - 1].price ? "+" : ""}{czk(c.price - ceny[k - 1].price)})</span>}
-            </li>
-          ))}
+          {ceny.map((c, k) => {
+            // Snimek stranky s touto cenou (porizeny od zmeny ceny do dalsi zmeny)
+            const doKdy = ceny[k + 1]?.at ?? "9999";
+            const snimek = snimky.filter((s) => s.price != null && Math.abs(s.price - c.price) < 1 && s.createdAt.slice(0, 10) >= c.at.slice(0, 10) && s.createdAt < doKdy)
+              .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+            return (
+              <li key={k}>{dateCz(c.at)} — <strong className="text-ink-primary">{cena(c.price)}</strong>
+                {k > 0 && c.price >= MIN_SKUTECNA_CENA && ceny[k - 1].price >= MIN_SKUTECNA_CENA && <span className={c.price < ceny[k - 1].price ? "text-good" : "text-bad"}> ({c.price > ceny[k - 1].price ? "+" : ""}{czk(c.price - ceny[k - 1].price)})</span>}
+                {snimek && <> · <button type="button" className="text-accent hover:underline"
+                  onClick={() => setGalerie({ polozky: [{ src: `/api/snimek/${snimek.id}`, popis: `Snímek stránky ${dateCz(snimek.createdAt)} — ${cena(c.price)}`, posouvat: true }] })}>snímek</button></>}
+              </li>
+            );
+          })}
         </ol>
       )}
 

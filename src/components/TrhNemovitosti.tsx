@@ -79,7 +79,8 @@ export interface RadekTrhu {
   vahaRucne?: number | null;
   /** Vaha v odhadu (spocitana nebo rucni) */
   vaha?: number;
-  snimky: { id: string; createdAt: string }[];
+  /** Snimky stranky (nejnovejsi prvni) s cenou v dobe porizeni — historie ceny */
+  snimky: { id: string; createdAt: string; price?: number | null }[];
   /** Fotografie z inzeratu (ulozene u zarazenych) */
   fotky?: string[];
   /** Parametry vyctene AI z textu stranky */
@@ -165,6 +166,10 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
   // Galerie inzeratu: nejnovejsi screenshot stranky jako prvni, pak fotky
   const fotkyRadku = (r: RadekTrhu) => ((r.fotky?.length ?? 0) > 0 ? r.fotky!.map((id) => `/api/snimek/${id}`) : r.fotkyUrl ?? []);
   const otevriGalerii = (r: RadekTrhu) => setGalerieStav({ polozky: polozkyGalerie(r), naskenovano: r.firstSeen });
+  // Vsechny snimky stranky od nejnovejsiho, v popisu datum a tehdejsi cena
+  const snimkyGalerie = (r: RadekTrhu): PolozkaGalerie[] => [...r.snimky]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map((s) => ({ src: `/api/snimek/${s.id}`, popis: `Snímek stránky ${dateCz(s.createdAt)}${s.price != null ? ` — ${cena(s.price)}` : ""}`, posouvat: true }));
   const polozkyGalerie = (r: RadekTrhu): PolozkaGalerie[] => [
     ...(r.snimky[0] ? [{ src: `/api/snimek/${r.snimky[0].id}`, popis: `Screenshot stránky ${dateCz(r.snimky[0].createdAt)}`, posouvat: true }] : []),
     ...fotkyRadku(r).map((src) => ({ src })),
@@ -279,7 +284,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
           {vicekrat(r)}
         </div>
         {r.stav === "NAVRH" && r.duvod && <div className="text-xs text-ink-muted">{r.duvod}</div>}
-        <div className="mt-1"><CenyAShody ceny={r.ceny} najem={r.dealType === "RENT"} shody={r.shody} canEdit={canEdit} onRozhodni={rozhodniShodu_} /></div>
+        <div className="mt-1"><CenyAShody ceny={r.ceny} snimky={r.snimky} najem={r.dealType === "RENT"} shody={r.shody} canEdit={canEdit} onRozhodni={rozhodniShodu_} /></div>
         <div className="mt-1">{slouceni(r)}</div>
         {r.ai && <div className="mt-1"><AiInfo ai={r.ai} profil={profil} kompaktni={r.stav !== "NAVRH"} /></div>}
       </div>
@@ -335,11 +340,13 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
       {fotkyRadku(r).length > 0 && (
         <button type="button" onClick={() => otevriGalerii(r)} className="text-accent hover:underline">Fotky ({fotkyRadku(r).length})</button>
       )}
-      {r.snimky.map((s, k) => (
-        <a key={s.id} href={`/api/snimek/${s.id}`} target="_blank" rel="noreferrer" className="text-accent hover:underline" title={`Screenshot z ${dateCz(s.createdAt)}`}>
-          {k === 0 ? "Snímek" : `Snímek ${dateCz(s.createdAt)}`}
-        </a>
-      ))}
+      {r.snimky.length === 1 && (
+        <a href={`/api/snimek/${r.snimky[0].id}`} target="_blank" rel="noreferrer" className="text-accent hover:underline" title={`Screenshot z ${dateCz(r.snimky[0].createdAt)}`}>Snímek</a>
+      )}
+      {r.snimky.length > 1 && (
+        <button type="button" className="text-accent hover:underline" title="Snímky stránky v čase — jak se měnila cena"
+          onClick={() => setGalerieStav({ polozky: snimkyGalerie(r), naskenovano: r.firstSeen })}>Snímky ({r.snimky.length})</button>
+      )}
     </span>
   );
 
@@ -604,7 +611,7 @@ export function TrhNemovitosti({ propertyId, historieProdej, historieNajem, poca
                     );
                   })()}
 
-                  <CenyAShody ceny={r.ceny} najem={r.dealType === "RENT"} shody={r.shody} canEdit={canEdit} onRozhodni={rozhodniShodu_} />
+                  <CenyAShody ceny={r.ceny} snimky={r.snimky} najem={r.dealType === "RENT"} shody={r.shody} canEdit={canEdit} onRozhodni={rozhodniShodu_} />
                   {slouceni(r)}
                   {/* Vlastnosti podle profilu typu: tvoje volba, jinak AI. Na telefonu sbalene do jednoho radku */}
                   {!vlastnostiOtevrene.has(r.id) && (

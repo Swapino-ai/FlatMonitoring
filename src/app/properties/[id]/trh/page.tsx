@@ -62,23 +62,23 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
       inzerat: {
         include: {
           ceny: { orderBy: { at: "asc" } },
-          snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true } },
+          snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true, price: true } },
           // Stejny byt v jinem inzeratu (navrhy i potvrzene, zamitnute ne)
-          shody: { include: { drivejsi: { include: { ceny: { orderBy: { at: "asc" } }, snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true } } } } } },
-          shodyDrive: { include: { inzerat: { include: { ceny: { orderBy: { at: "asc" } }, snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true } } } } } },
+          shody: { include: { drivejsi: { include: { ceny: { orderBy: { at: "asc" } }, snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true, price: true } } } } } },
+          shodyDrive: { include: { inzerat: { include: { ceny: { orderBy: { at: "asc" } }, snimky: { orderBy: [{ druh: "asc" }, { poradi: "asc" }, { createdAt: "desc" }], select: { id: true, createdAt: true, druh: true, price: true } } } } } },
         },
       },
     },
   });
   type JinyInzerat = {
     url: string | null; dealType: string; price: number; firstSeenAt: Date; lastSeenAt: Date; zmizelAt: Date | null; ceny: { at: Date; price: number }[];
-    fotkyUrl: string[]; snimky: { id: string; createdAt: Date; druh: string }[];
+    fotkyUrl: string[]; snimky: { id: string; createdAt: Date; druh: string; price: number | null }[];
   };
   // Druha verze inzeratu: i smazany jde porovnat podle ulozeneho snimku stranky a fotek
   const jiny = (j: JinyInzerat) => ({
     url: j.url, najem: j.dealType === "RENT", price: j.price, od: denISO(j.firstSeenAt), do: denISO(j.zmizelAt ?? j.lastSeenAt), zmizel: !!j.zmizelAt,
     ceny: j.ceny.map((c) => ({ at: denISO(c.at), price: c.price })),
-    snimky: j.snimky.filter((s) => s.druh !== "FOTO").map((s) => ({ id: s.id, createdAt: s.createdAt.toISOString() })),
+    snimky: j.snimky.filter((s) => s.druh !== "FOTO").map((s) => ({ id: s.id, createdAt: s.createdAt.toISOString(), price: s.price })),
     fotky: j.snimky.some((s) => s.druh === "FOTO") ? j.snimky.filter((s) => s.druh === "FOTO").map((s) => `/api/snimek/${s.id}`) : j.zmizelAt ? [] : j.fotkyUrl,
     naskenovano: j.firstSeenAt.toISOString(),
   });
@@ -149,7 +149,7 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
         inzeratId: x.inzeratId,
         popis: `${x.j.dealType === "RENT" ? `${x.j.price.toLocaleString("cs-CZ")} Kč/měs.` : `${x.j.price.toLocaleString("cs-CZ")} Kč`} · ${[x.j.disposition, x.j.areaM2 ? `${x.j.areaM2} m²` : null, x.j.city].filter(Boolean).join(" · ")} · ${denISO(x.j.firstSeenAt).split("-").reverse().join(". ")}${x.j.zmizelAt ? " · smazaný" : ""}`,
       })),
-      snimky: i.snimky.filter((s) => s.druh !== "FOTO").map((s) => ({ id: s.id, createdAt: s.createdAt.toISOString() })),
+      snimky: i.snimky.filter((s) => s.druh !== "FOTO").map((s) => ({ id: s.id, createdAt: s.createdAt.toISOString(), price: s.price })),
       fotky: i.snimky.filter((s) => s.druh === "FOTO").map((s) => s.id),
     };
   });
@@ -175,7 +175,7 @@ export default async function TrhPage({ params, searchParams }: { params: Promis
       where: { externalId: { in: idNabidek } },
       select: {
         source: true, externalId: true, fotkyUrl: true, firstSeenAt: true,
-        snimky: { where: { druh: { in: ["SNIMEK", "FOTO"] } }, orderBy: [{ poradi: "asc" }, { createdAt: "desc" }], select: { id: true, druh: true, createdAt: true } },
+        snimky: { where: { druh: { in: ["SNIMEK", "FOTO"] } }, orderBy: [{ poradi: "asc" }, { createdAt: "desc" }], select: { id: true, druh: true, createdAt: true, price: true } },
       },
     })) {
       const ulozene = i.snimky.filter((s) => s.druh === "FOTO").map((s) => `/api/snimek/${s.id}`);
