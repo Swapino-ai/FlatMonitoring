@@ -18,6 +18,35 @@ export interface DetailInzeratu {
   fotky: string[];
   /** Tlacitka, ktera se kvuli celemu popisu rozklikla (pro kontrolu v logu) */
   rozbaleno: string[];
+  /** Aktualni cena z detailu (Kc); 0 = cena na vyzadani; undefined = nepodarilo se precist */
+  cena?: number;
+  cenaZaM2?: number;
+  /** Klice s cenou, ktere detail obsahoval (do logu, kdyz cenu precist nejde) */
+  cenoveKlice?: string[];
+}
+
+/** Cislo z hodnoty ceny: primo cislo, nebo objekt { value_raw | value | amount }. */
+function cislo(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && /^\d+(\.\d+)?$/.test(v)) return Number(v);
+  if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>;
+    for (const k of ["value_raw", "valueRaw", "value", "amount", "czk"]) { const n = cislo(o[k]); if (n != null) return n; }
+  }
+  return undefined;
+}
+
+/**
+ * Cena z dat detailu (dotaz "estate"). Vypis pouziva priceCzk / priceCzkPerSqM, detail ma
+ * stejne nebo podobne pojmenovani — zkousi se postupne, prvni nalezena vyhrava.
+ */
+export function cenaZDetailu(estate: Record<string, unknown>): { cena?: number; zaM2?: number; klice: string[] } {
+  const klice = Object.keys(estate).filter((k) => /price/i.test(k));
+  let cena: number | undefined;
+  for (const k of ["priceCzk", "priceSummaryCzk", "price_czk", "price", "priceTotal"]) { cena = cislo(estate[k]); if (cena != null) break; }
+  let zaM2: number | undefined;
+  for (const k of ["priceCzkPerSqM", "pricePerSqM", "price_czk_m2", "priceCzkM2"]) { zaM2 = cislo(estate[k]); if (zaM2 != null) break; }
+  return { cena, zaM2: zaM2 || undefined, klice };
 }
 
 /**
@@ -40,7 +69,7 @@ export async function nactiDetail(stranka: Page, url: string, externalId: string
 
   const text: string = await stranka.evaluate(() => document.body?.innerText ?? "").catch(() => "");
   const data = await stranka.evaluate(() => document.getElementById("__NEXT_DATA__")?.textContent ?? "").catch(() => "");
-  let estate: { images?: { url?: string; order?: number }[] } | null | undefined;
+  let estate: ({ images?: { url?: string; order?: number }[] } & Record<string, unknown>) | null | undefined;
   let maDotaz = false;
   try {
     const queries = JSON.parse(data)?.props?.pageProps?.dehydratedState?.queries;
@@ -72,7 +101,8 @@ export async function nactiDetail(stranka: Page, url: string, externalId: string
     .sort((a, b) => b.res - a.res);
   const format = formaty[0] && formaty[0].res >= 800 ? formaty[0].f : ZALOZNI_FORMAT;
   const fotky = galerie.map((u) => u + format);
-  return { stav: "OK", text, fotky: [...new Set(fotky)], rozbaleno };
+  const { cena, zaM2, klice } = cenaZDetailu(estate);
+  return { stav: "OK", text, fotky: [...new Set(fotky)], rozbaleno, cena, cenaZaM2: zaM2, cenoveKlice: klice };
 }
 
 /**

@@ -17,7 +17,7 @@ import { NEMOVITOST_MAP } from "../src/lib/catalogs";
 import { doplnPolohu } from "../src/lib/geokodovani";
 import { uklidDenik } from "../src/lib/scanLog";
 import { skenujNemovitost } from "../src/lib/market/sken";
-import { aktualizujSkupinu, najdiShody } from "../src/lib/market/inzeraty";
+import { aktualizujSkupinu, najdiShody, zmenCenuInzeratu } from "../src/lib/market/inzeraty";
 import { presunSnimkyNaDisk } from "../src/lib/market/snimky";
 import { jeNastaveno } from "../src/lib/googleDrive";
 import { doplnParametry } from "./ai-parametry";
@@ -72,6 +72,8 @@ async function zarazeneInzeraty() {
   let vraceno = 0;
   let neovereno = 0;
   let fotekChyba = 0;
+  let zmenCeny = 0;
+  let cenuNeprecteno = 0;
   for (const i of inzeraty) {
     const potrebaFotky = i._count.snimky === 0;
     // Snimky pred CELA_STRANKA_OD zachycovaly jen horni cast stranky — porizuji se znovu
@@ -105,7 +107,21 @@ async function zarazeneInzeraty() {
               vraceno++;
             }
             if (d.fotky.length) await prisma.inzerat.update({ where: { id: i.id }, data: { fotkyUrl: d.fotky } });
-            if (potrebaSnimek) {
+            // Cena z detailu: zlevneni / zdrazeni zarazeneho inzeratu, i kdyz ho vypis nenasel
+            let novySnimek = potrebaSnimek;
+            if (d.cena != null && d.cena >= 0) {
+              const puvodni = i.price;
+              if (await zmenCenuInzeratu(i.id, d.cena, d.cenaZaM2)) {
+                zmenCeny++;
+                novySnimek = true;
+                i.price = d.cena;
+                console.log(`  ${i.externalId}: cena ${Math.round(puvodni).toLocaleString("cs-CZ")} → ${Math.round(d.cena).toLocaleString("cs-CZ")} Kč`);
+              }
+            } else {
+              cenuNeprecteno++;
+              if (cenuNeprecteno <= 3) console.log(`  ${i.externalId}: cenu z detailu nejde přečíst (klíče: ${d.cenoveKlice?.join(", ") || "žádné"})`);
+            }
+            if (novySnimek) {
               // Okna, ktera vyskocila az po nacteni, jeste jednou zavrit
               await stranka.waitForTimeout(1500);
               await uklidStranku(stranka);
@@ -137,7 +153,7 @@ async function zarazeneInzeraty() {
     await sleep(1500);
   }
   await prohlizec?.close();
-  console.log(`Zařazené inzeráty: ${inzeraty.length}, nových screenshotů ${snimku}, fotografií ${fotek}${fotekChyba ? ` (nestaženo ${fotekChyba})` : ""}, zmizelo z trhu ${zmizelo}, chybně označených vráceno ${vraceno}, existenci nešlo ověřit ${neovereno}.`);
+  console.log(`Zařazené inzeráty: ${inzeraty.length}, nových screenshotů ${snimku}, fotografií ${fotek}${fotekChyba ? ` (nestaženo ${fotekChyba})` : ""}, zmizelo z trhu ${zmizelo}, chybně označených vráceno ${vraceno}, existenci nešlo ověřit ${neovereno}, změn ceny z detailu ${zmenCeny}${cenuNeprecteno ? ` (cenu nešlo přečíst u ${cenuNeprecteno})` : ""}.`);
 }
 
 async function main() {

@@ -35,6 +35,21 @@ export async function aktualizujSkupinu(propertyId: string) {
   await Promise.all(clenove.flatMap((id) => [aktualizujOdhad(id, "SALE"), aktualizujOdhad(id, "RENT")]));
 }
 
+/**
+ * Zmena ceny zjistena z detailu inzeratu (nocni kontrola zarazenych): vypis portalu k nim
+ * nemusi dojit, protoze sken konci, jakmile ma dost srovnatelnych nabidek.
+ */
+export async function zmenCenuInzeratu(id: string, cena: number, zaM2?: number): Promise<boolean> {
+  const i = await prisma.inzerat.findUnique({ where: { id }, select: { price: true, areaM2: true } });
+  if (!i || Math.abs(i.price - cena) < 1) return false;
+  const naM2 = jeCenaNaVyzadani({ price: cena }) ? null : zaM2 ?? (i.areaM2 ? cena / i.areaM2 : null);
+  await prisma.inzerat.update({
+    where: { id },
+    data: { price: cena, pricePerM2: naM2, lastSeenAt: new Date(), ceny: { create: { price: cena, pricePerM2: naM2 } } },
+  });
+  return true;
+}
+
 /** Ulozi vysledky skenu: novy inzerat zalozi, znamy aktualizuje (cena jen pri zmene). Vraci pocet novych. */
 export async function ulozInzeraty(listings: ScrapedListing[], region?: string | null): Promise<{ novych: number; zmenCeny: number; ids: string[] }> {
   const ids: string[] = [];
