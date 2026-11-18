@@ -12,7 +12,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const s = await prisma.inzeratSnimek.findUnique({ where: { id } });
   if (!s) return new NextResponse("Snímek neexistuje.", { status: 404 });
-  const hlavicky = { "Content-Type": s.mime, "Cache-Control": "private, max-age=86400" };
+  // Snimek ani fotka se po ulozeni nemeni (novy snimek = novy zaznam) — prohlizec je muze drzet natrvalo
+  const hlavicky = { "Content-Type": s.mime, "Cache-Control": "private, max-age=31536000, immutable" };
   if (s.data) return new NextResponse(Buffer.from(s.data), { headers: hlavicky });
   if (s.driveId) {
     try {

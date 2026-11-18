@@ -81,6 +81,26 @@ export function Galerie({ polozky, onZavrit, rovnou = 0, naskenovano }: {
     return () => { window.removeEventListener("keydown", klavesy); document.body.style.overflow = puvodni; };
   }, [onZavrit, posun]);
 
+  // Prednacteni sousednich fotek: dalsi obrazek je pri listovani uz v prohlizeci (fotky jdou
+  // pres server z Google Disku a kazda by se jinak nacitala az po kliknuti)
+  const [nactene, setNactene] = useState<Set<string>>(() => new Set());
+  const oznacNactene = useCallback((src: string) => setNactene((s) => (s.has(src) ? s : new Set(s).add(src))), []);
+  useEffect(() => {
+    if (polozky.length < 2) return;
+    const sousede = [1, 2, 3, -1].map((o) => polozky[(index + o + polozky.length) % polozky.length]?.src).filter((x): x is string => !!x);
+    const obrazky = sousede.filter((src) => !nactene.has(src)).map((src) => {
+      const im = new Image();
+      im.referrerPolicy = "no-referrer";
+      im.decoding = "async";
+      im.onload = () => oznacNactene(src);
+      im.src = src;
+      return im;
+    });
+    return () => { for (const im of obrazky) im.onload = null; };
+    // nactene zamerne ne v zavislostech — jinak by se prednacitani spoustelo po kazdem nacteni
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, polozky, oznacNactene]);
+
   const tlacitko = "flex items-center justify-center rounded-full bg-white/90 text-ink-primary shadow hover:bg-white";
 
   const p = polozky[index];
@@ -103,7 +123,13 @@ export function Galerie({ polozky, onZavrit, rovnou = 0, naskenovano }: {
         onMouseDown={(e) => zacni(e.clientX, e.clientY)}
         onMouseUp={(e) => dokonci(e.clientX, e.clientY)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={p.src} alt={p.popis ?? `Fotka ${index + 1}`} referrerPolicy="no-referrer" draggable={false}
+        {!nactene.has(p.src) && (
+          <div className="pointer-events-none fixed inset-0 z-0 flex items-center justify-center" aria-hidden>
+            <span className="h-10 w-10 animate-spin rounded-full border-4 border-white/20 border-t-white/80" />
+          </div>
+        )}
+        <img key={p.src} src={p.src} alt={p.popis ?? `Fotka ${index + 1}`} referrerPolicy="no-referrer" draggable={false} decoding="async"
+          onLoad={() => oznacNactene(p.src)} onError={() => oznacNactene(p.src)}
           className={p.posouvat
             ? "mx-auto block w-full max-w-[1280px] select-none rounded-lg"
             : "max-h-full max-w-full select-none rounded-lg object-contain"}
