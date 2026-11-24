@@ -36,11 +36,19 @@ async function main() {
     }
     // Prehled: inzeraty srovnatelne dispozice v databazi a jak dopadly
     const vsechny = await prisma.inzerat.findMany({ where: { category: p.type, dealType: "SALE", disposition: { in: ["1+1", "2+kk"] }, zmizelAt: null } });
-    const zname = new Set((await prisma.zarazeniInzeratu.findMany({ where: { propertyId: p.id }, select: { inzeratId: true } })).map((z) => z.inzeratId));
+    const zname = new Map((await prisma.zarazeniInzeratu.findMany({ where: { propertyId: p.id }, select: { inzeratId: true, stav: true } })).map((z) => [z.inzeratId, z.stav]));
+    const vyloucene = (p.excludedCities ?? "").split(/[,;\n]/).map((x) => x.trim().toLowerCase()).filter(Boolean);
     const souhrn = new Map<string, number>();
     for (const x of vsechny) {
-      const k = zname.has(x.id) ? "už známé" : (() => { const h = ohodnot(nem, { ...x, pricePerM2: x.pricePerM2 }, null); return h.mimo ? `mimo: ${h.duvod.replace(/[\d,]+/g, "#")}` : "navrhl by se"; })();
+      const h = ohodnot(nem, { ...x, pricePerM2: x.pricePerM2 }, null);
+      const k = zname.has(x.id) ? `už známé (${zname.get(x.id)})`
+        : vyloucene.some((m) => x.city.toLowerCase().includes(m)) ? "vyloučená obec"
+        : h.mimo ? `mimo: ${h.duvod.replace(/[\d,]+/g, "#")}` : "navrhl by se";
       souhrn.set(k, (souhrn.get(k) ?? 0) + 1);
+      if (k === "navrhl by se" || k === "vyloučená obec") {
+        const kandidat = x.category === p.type && (x.city.toLowerCase() === p.city.toLowerCase() || (p.latitude != null && x.latitude != null));
+        console.log(`    → ${k}: ${x.externalId} ${x.disposition} ${x.areaM2} m², ${x.city}/${x.district}, ${x.price} Kč, poprvé ${x.firstSeenAt.toISOString().slice(0, 10)}, naposledy ${x.lastSeenAt.toISOString().slice(0, 10)}, kandidát ${kandidat ? "ano" : "NE"} — ${h.duvod} (skóre ${h.skore})`);
+      }
     }
     console.log(`  prodej 1+1 / 2+kk v databázi (živé): ${vsechny.length}`);
     for (const [k, n] of souhrn) console.log(`    ${n}× ${k}`);
