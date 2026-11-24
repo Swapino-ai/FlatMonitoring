@@ -2,7 +2,8 @@
  * Cista logika noveho sledovani trhu: podobnost navrzeneho inzeratu a odhad
  * z posledních zarazenych inzeratu. Bez databaze, at jde otestovat.
  */
-import { MIN_SKUTECNA_CENA } from "./konstanty";
+import { MIN_SKUTECNA_CENA, tridaDispozice } from "./konstanty";
+export { tridaDispozice };
 import { hodnotyNabidky, hodnotyZaznamu, profilTypu, vahaVlastnosti, type Profil } from "./profily";
 
 export interface NemovitostProSrovnani {
@@ -51,11 +52,6 @@ export function median(cisla: number[]): number {
  * Velikost bytu podle dispozice: pocet mistnosti vcetne samostatne kuchyne.
  * 1+kk = 1, 1+1 a 2+kk = 2, 2+1 a 3+kk = 3, 3+1 a 4+kk = 4 ... Atypicky / pokoj = null.
  */
-export function tridaDispozice(d: string | null | undefined): number | null {
-  const m = /^(\d+)\s*\+\s*(kk|1)$/i.exec((d ?? "").trim());
-  if (!m) return null;
-  return Number(m[1]) + (m[2].toLowerCase() === "kk" ? 0 : 1);
-}
 
 export interface Hodnoceni {
   /** 0-100, vic = podobnejsi */

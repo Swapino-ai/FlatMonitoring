@@ -1,4 +1,5 @@
 import type { ScanQuery, ScrapedListing } from "./types";
+import { tridaDispozice } from "./konstanty";
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -93,7 +94,11 @@ export function filtrujSrovnatelne(nabidky: ScrapedListing[], query: ScanQuery):
   let out = nabidky;
 
   if (query.disposition) {
-    out = out.filter((l) => !l.disposition || l.disposition === query.disposition);
+    // Srovnatelna dispozice (1+1 ≈ 2+kk, 2+1 ≈ 3+kk) — stejne pravidlo jako hodnoceni navrhu;
+    // jinak by se 2+kk k bytu 1+1 vubec nestahlo a navrh by nemel z ceho vzniknout
+    const trida = tridaDispozice(query.disposition);
+    out = out.filter((l) => !l.disposition || l.disposition === query.disposition
+      || (trida != null && tridaDispozice(l.disposition) === trida));
   }
   if (query.areaM2) {
     const tolerance = query.toleranceM2 ?? Math.max(10, query.areaM2 * 0.25);
