@@ -88,7 +88,10 @@ export function KratkodobyPronajem({ propertyId, canEdit, aiZapnuto, diskPripoje
   // Prehled po mesicich za vybrany rok
   const roky = useMemo(() => [...new Set([new Date().getFullYear(), ...polozky.map((p) => Number(p.datum.slice(0, 4)))])].sort((a, b) => b - a), [polozky]);
   const [rok, setRok] = useState(roky[0]);
-  const vRoce = polozky.filter((p) => p.datum.startsWith(String(rok)));
+  // Splatky uveru nejsou naklad bytu (plati je vlastnik uveru ze sveho podilu) — zvlast
+  const jeSplatka = (p: Polozka) => p.kategorie.startsWith("LOAN_");
+  const splatkyRoku = polozky.filter((p) => p.datum.startsWith(String(rok)) && jeSplatka(p)).reduce((a, p) => a - p.castka, 0);
+  const vRoce = polozky.filter((p) => p.datum.startsWith(String(rok)) && !jeSplatka(p));
   const mesice = MESICE.map((nazev, i) => {
     const m = vRoce.filter((p) => Number(p.datum.slice(5, 7)) === i + 1);
     return { nazev, prijmy: m.filter((p) => p.castka > 0).reduce((a, p) => a + p.castka, 0), naklady: m.filter((p) => p.castka < 0).reduce((a, p) => a - p.castka, 0) };
@@ -224,6 +227,7 @@ export function KratkodobyPronajem({ propertyId, canEdit, aiZapnuto, diskPripoje
           <div><div className="text-xs text-ink-muted">Náklady</div><div className="text-lg font-semibold tabular-nums text-bad">{czk(naklady)}</div></div>
           <div><div className="text-xs text-ink-muted">Výsledek</div><div className={`text-lg font-semibold tabular-nums ${prijmy - naklady >= 0 ? "text-good" : "text-bad"}`}>{czk(prijmy - naklady)}</div></div>
         </div>
+        {splatkyRoku > 0 && <p className="mt-2 text-center text-xs text-ink-muted">Splátky úvěrů {czk(splatkyRoku)} nejsou v nákladech — platí je vlastník úvěru ze svého podílu (rozdělení na Stavu účtu).</p>}
         {(prijmy > 0 || naklady > 0) && (
           <div className="mt-4 grid gap-5 lg:grid-cols-2">
             <div className="table-scroll">

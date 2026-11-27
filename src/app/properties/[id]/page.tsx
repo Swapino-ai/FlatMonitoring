@@ -317,19 +317,39 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
   };
   const vahaPohybu = (kategorie: string) => kategorie.startsWith("LOAN_") ? a.podilSplatek : podil;
   const kraceno = pohled === "moje" && (podil !== 1 || a.podilSplatek !== 1);
-  const evidovane = navrhPlateb.filter((p) => p.zaplaceno?.zdroj === "EVIDENCE")
-    .map((p) => ({ datum: p.zaplaceno!.datum, castka: (p.castka >= 0 ? 1 : -1) * p.zaplaceno!.castka * vahaPredpisu(p.klic) }));
+  // Splatky uveru nejsou naklad bytu: plati je vlastnik uveru ze sveho podilu. Proto zvlast
+  // (uverId u predpisu, u pohybu splatky jediny uver bytu, jinak podle podilu).
+  const evidovaneVse = navrhPlateb.filter((p) => p.zaplaceno?.zdroj === "EVIDENCE")
+    .map((p) => ({ datum: p.zaplaceno!.datum, cela: (p.castka >= 0 ? 1 : -1) * p.zaplaceno!.castka, uver: p.klic.startsWith("uver:") ? p.klic.split(":")[1] : null, w: vahaPredpisu(p.klic) }));
   const letos = String(new Date().getFullYear());
-  const vse = [
-    ...property.transactions.map((t) => ({ datum: denISO(t.date), castka: t.amount * vahaPohybu(t.category) })),
-    ...evidovane,
+  const jedinyUver = property.loans.length === 1 ? property.loans[0].id : null;
+  const vseCele = [
+    ...property.transactions.map((t) => ({ datum: denISO(t.date), cela: t.amount, uver: t.category.startsWith("LOAN_") ? (jedinyUver ?? "?") : null, w: vahaPohybu(t.category) })),
+    ...evidovaneVse,
   ];
+  const vse = vseCele.map((x) => ({ ...x, castka: x.cela * x.w }));
+  const provoz = vse.filter((x) => !x.uver);
   const souctyPohybu = {
-    prijmy: vse.filter((x) => x.castka > 0).reduce((a, x) => a + x.castka, 0),
-    vydaje: -vse.filter((x) => x.castka < 0).reduce((a, x) => a + x.castka, 0),
-    letos: vse.filter((x) => x.datum.startsWith(letos)).reduce((a, x) => a + x.castka, 0),
+    prijmy: provoz.filter((x) => x.castka > 0).reduce((a, x) => a + x.castka, 0),
+    vydaje: -provoz.filter((x) => x.castka < 0).reduce((a, x) => a + x.castka, 0),
+    letos: provoz.filter((x) => x.datum.startsWith(letos)).reduce((a, x) => a + x.castka, 0),
+    /** Zaplacene splatky uveru (kladne) — plati vlastnik uveru */
+    splatky: -vse.filter((x) => x.uver).reduce((a, x) => a + x.castka, 0),
   };
+  // Na uctu bytu: prijmy minus provozni vydaje (splatky jdou z podilu vlastnika uveru)
   const naUctu = souctyPohybu.prijmy - souctyPohybu.vydaje;
+  // Rozdeleni mezi vlastniky: podil na vysledku bytu minus splatky jeho uveru
+  const vlastnici = property.owners.length ? property.owners : [{ userId: user.id, share: 100 }];
+  const vysledekCely = provoz.reduce((a, x) => a + x.cela, 0);
+  const rozdeleni = vlastnici.map((o) => {
+    const splatky = -vseCele.filter((x) => x.uver).reduce((a, x) => {
+      const l = property.loans.find((u) => u.id === x.uver);
+      const pomer = l ? podilNaUveru("moje", l, property.owners, o.userId) : podilUzivatele(property.owners, o.userId);
+      return a + x.cela * pomer;
+    }, 0);
+    const podilVysledku = vysledekCely * podilUzivatele(property.owners, o.userId);
+    return { jmeno: uzivatele.find((u) => u.id === o.userId)?.name ?? "?", podil: podilUzivatele(property.owners, o.userId), podilVysledku, splatky, zustava: podilVysledku - splatky };
+  });
   const dluhyPlateb = prehledPlateb(kraceno ? navrhPlateb.map((p) => {
     const w = vahaPredpisu(p.klic);
     return { ...p, castka: p.castka * w, ...(p.zaplaceno ? { zaplaceno: { ...p.zaplaceno, castka: p.zaplaceno.castka * w } } : {}) };
@@ -812,18 +832,42 @@ export default async function PropertyDetail({ params }: { params: Promise<{ id:
           <div className="mb-3 space-y-3">
             <StatGrid>
               <Stat label="Na účtu" value={czk(naUctu)} tone={naUctu >= 0 ? "good" : "bad"}
-                sub="součet všech pohybů a zaplacených pravidelných plateb" />
+                sub="příjmy minus výdaje bytu (bez splátek úvěrů)" />
               <Stat label="Příjmy celkem" value={czk(souctyPohybu.prijmy)} tone="good" />
-              <Stat label="Výdaje celkem" value={czk(souctyPohybu.vydaje)} />
+              <Stat label="Výdaje celkem" value={czk(souctyPohybu.vydaje)} sub="provoz bytu, bez splátek úvěrů" />
               <Stat label={`Výsledek ${letos}`} value={czk(souctyPohybu.letos)} tone={souctyPohybu.letos >= 0 ? "good" : "bad"}
                 sub="příjmy minus výdaje letos" />
             </StatGrid>
+            {souctyPohybu.splatky > 0 && (
+              <div className="rounded-card border border-line bg-surface-card p-4 shadow-card">
+                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="text-sm font-semibold">Rozdělení mezi vlastníky</h3>
+                  <span className="text-xs text-ink-muted">Zaplacené splátky úvěrů celkem {czk(souctyPohybu.splatky)} — platí je vlastník úvěru ze svého podílu</span>
+                </div>
+                <div className="table-scroll">
+                  <table className="table-base">
+                    <thead><tr><th>Vlastník</th><th className="num">Podíl</th><th className="num">Podíl na výsledku bytu</th><th className="num">Splátky jeho úvěrů</th><th className="num">Zůstává</th></tr></thead>
+                    <tbody>
+                      {rozdeleni.map((r) => (
+                        <tr key={r.jmeno}>
+                          <td className="font-medium">{r.jmeno}</td>
+                          <td className="num">{Math.round(r.podil * 1000) / 10} %</td>
+                          <td className="num">{czk(r.podilVysledku)}</td>
+                          <td className="num">{r.splatky ? `−${czk(r.splatky)}` : "—"}</td>
+                          <td className={`num font-semibold ${r.zustava >= 0 ? "text-good" : "text-bad"}`}>{czk(r.zustava)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
             {(dluhyPlateb.najemciDluzi > 0 || dluhyPlateb.dluzimDodavatelum > 0) && (
               <StatGrid>
                 <Stat label="Nájemci dluží" value={czk(dluhyPlateb.najemciDluzi)} tone={dluhyPlateb.najemciDluzi > 0 ? "bad" : "good"} />
                 <Stat label="Dlužím dodavatelům" value={czk(dluhyPlateb.dluzimZaSluzby)} tone={dluhyPlateb.dluzimZaSluzby > 0 ? "bad" : "good"} sub="služby a nedoplatky z vyúčtování" />
                 {dluhyPlateb.dluzimNaSplatkach > 0 && <Stat label="Nezaplacené splátky" value={czk(dluhyPlateb.dluzimNaSplatkach)} tone="bad" sub="splátky úvěrů" />}
-                <Stat label="Po vyrovnání dluhů" value={czk(naUctu + dluhyPlateb.najemciDluzi - dluhyPlateb.dluzimDodavatelum)}
+                <Stat label="Po vyrovnání dluhů" value={czk(naUctu + dluhyPlateb.najemciDluzi - dluhyPlateb.dluzimZaSluzby)}
                   sub="kolik by bylo na účtu, kdyby se vše zaplatilo" />
               </StatGrid>
             )}
