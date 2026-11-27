@@ -27,6 +27,12 @@ async function main() {
   console.log(`\nKRÁTKODOBÁ OBDOBÍ: ${kt.map((o) => `${o.od.toISOString().slice(0, 10)}–${o.do?.toISOString().slice(0, 10) ?? "dosud"}`).join(", ") || "žádná"}`);
   const sluzby = await prisma.service.findMany({ where: { propertyId: p.id }, select: { type: true, provider: true, monthlyCost: true, contractStart: true, activeTo: true } });
   console.log(`SLUŽBY: ${sluzby.map((s) => `${s.type}/${s.provider} ${s.monthlyCost} od ${s.contractStart?.toISOString().slice(0, 10)}`).join("; ")}`);
+  const users = new Map((await prisma.user.findMany({ select: { id: true, name: true } })).map((u) => [u.id, u.name]));
+  const owners = await prisma.propertyOwner.findMany({ where: { propertyId: p.id } });
+  console.log(`\nVLASTNÍCI BYTU: ${owners.map((o) => `${users.get(o.userId)} ${o.share} %`).join(", ") || "nezadáni (= 100 % každý)"}`);
+  for (const l of await prisma.loan.findMany({ where: { propertyId: p.id }, include: { vlastnici: true } })) {
+    console.log(`ÚVĚR ${l.lender} ${l.monthlyPayment} Kč/měs., aktivní ${l.isActive}, vlastníci úvěru: ${l.vlastnici.map((v) => users.get(v.userId)).join(", ") || "NEZADÁNI (dělí se podle podílů na bytě)"}`);
+  }
   const prijmy = [...tx.map((t) => t.amount), ...evid.map((x) => (x.castka >= 0 ? 1 : -1) * x.zaplaceno!.castka)];
   console.log(`\nSOUČET: příjmy ${kc(prijmy.filter((x) => x > 0).reduce((a, x) => a + x, 0))}, výdaje ${kc(-prijmy.filter((x) => x < 0).reduce((a, x) => a + x, 0))}`);
 }
