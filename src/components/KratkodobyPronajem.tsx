@@ -11,7 +11,13 @@ import { useOrezFotky } from "./OrezFotky";
 import { nactiSoubor as nactiSouborKlient } from "@/lib/souborKlient";
 
 interface Obdobi { id: string; od: string; do: string | null; poznamka: string | null }
-interface Polozka { id: string; datum: string; castka: number; kategorie: string; popis: string | null; poznamka?: string | null; uctenky: { id: string; nazev: string; mime: string }[] }
+interface Polozka {
+  id: string; datum: string; castka: number; kategorie: string; popis: string | null; poznamka?: string | null; uctenky: { id: string; nazev: string; mime: string }[];
+  /** POHYB = zapsany pohyb (lze smazat jen krátkodobý), PREDPIS = zaplacena pravidelna platba (splatka, sluzba) ze Stavu uctu */
+  zdroj?: "POHYB" | "PREDPIS";
+  /** Vydaj zaplaceny kartou z jineho uctu a proplaceny z Fio */
+  proplaceno?: boolean;
+}
 interface Soubor { data: string; mime: string; nazev: string; nahled: string | null }
 
 const dnes = () => new Date().toISOString().slice(0, 10);
@@ -88,7 +94,10 @@ export function KratkodobyPronajem({ propertyId, canEdit, aiZapnuto, diskPripoje
     return { nazev, prijmy: m.filter((p) => p.castka > 0).reduce((a, p) => a + p.castka, 0), naklady: m.filter((p) => p.castka < 0).reduce((a, p) => a - p.castka, 0) };
   });
   const prijmy = mesice.reduce((a, m) => a + m.prijmy, 0), naklady = mesice.reduce((a, m) => a + m.naklady, 0);
-  const podleKategorii = vydaje.map((k) => ({ k, castka: vRoce.filter((p) => p.kategorie === k.key).reduce((a, p) => a - p.castka, 0) })).filter((x) => x.castka > 0).sort((a, b) => b.castka - a.castka);
+  // Naklady po kategoriich — vsechny pohyby bytu (stejna evidence jako Stav uctu), ne jen kategorie krátkodobého pronájmu
+  const podleKategorii = [...new Set(vRoce.filter((p) => p.castka < 0).map((p) => p.kategorie))]
+    .map((key) => ({ k: { key, label: categoryLabel(key) }, castka: vRoce.filter((p) => p.kategorie === key).reduce((a, p) => a - p.castka, 0) }))
+    .filter((x) => x.castka > 0).sort((a, b) => b.castka - a.castka);
   const aktivni = obdobi.find((o) => o.od <= dnes() && (!o.do || o.do >= dnes()));
 
   return (
@@ -245,6 +254,7 @@ export function KratkodobyPronajem({ propertyId, canEdit, aiZapnuto, diskPripoje
 
       {/* Pohyby */}
       <Card title={`Příjmy a náklady ${rok}`}>
+        <p className="mb-2 text-xs text-ink-muted">Stejná evidence jako Stav účtu — všechny pohyby bytu včetně zaplacených pravidelných plateb (služby, splátky).</p>
         {vRoce.length === 0 ? (
           <p className="py-3 text-center text-sm text-ink-muted">Zatím nic zapsaného.</p>
         ) : (
@@ -256,12 +266,14 @@ export function KratkodobyPronajem({ propertyId, canEdit, aiZapnuto, diskPripoje
                   <span className="block truncate">{p.popis || categoryLabel(p.kategorie)}</span>
                   <span className="block text-xs text-ink-muted">
                     {categoryLabel(p.kategorie)}
+                    {p.zdroj === "PREDPIS" && <span className="ml-1.5 rounded bg-surface-sunken px-1.5 py-0.5 text-[10px]">pravidelná platba</span>}
+                    {p.proplaceno && <span className="ml-1.5 text-good">✓ proplaceno z Fio</span>}
                     {p.uctenky.map((u) => <a key={u.id} href={`/api/soubory/${u.id}`} target="_blank" rel="noreferrer" className="ml-2 text-accent hover:underline">účtenka</a>)}
                   </span>
                   {p.poznamka && <span className="block text-xs italic text-ink-secondary" title="Poznámka z banky">✎ {p.poznamka}</span>}
                 </span>
                 <span className={`shrink-0 font-medium tabular-nums ${p.castka >= 0 ? "text-good" : ""}`}>{p.castka >= 0 ? "+" : "−"}{czk(Math.abs(p.castka))}</span>
-                {canEdit && (
+                {canEdit && p.zdroj !== "PREDPIS" && KATEGORIE_KRATKODOBE.some((k) => k.key === p.kategorie) && (
                   <button type="button" className="shrink-0 text-ink-muted hover:text-bad" aria-label="Smazat" title="Smazat (i s účtenkou)"
                     onClick={() => { if (confirm("Smazat položku i s účtenkou?")) spust(async () => vysledek(await smazPolozku(propertyId, p.id))); }}>
                     <Ikona nazev="kos" trida="h-4 w-4" />

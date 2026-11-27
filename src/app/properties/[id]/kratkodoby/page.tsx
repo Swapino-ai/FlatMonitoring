@@ -5,9 +5,9 @@ import { Verze } from "@/components/Verze";
 import { HlavickaNemovitosti } from "@/components/HlavickaNemovitosti";
 import { KratkodobyPronajem } from "@/components/KratkodobyPronajem";
 import { prisma } from "@/lib/db";
-import { KATEGORIE_KRATKODOBE } from "@/lib/categories";
 import { aiNastaveno } from "@/lib/uctenkaAi";
 import { denISO } from "@/lib/format";
+import { nactiNavrhPlatby } from "@/lib/pravidelnePlatbyData";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,8 @@ export default async function KratkodobyPage({ params }: { params: Promise<{ id:
     where: { id },
     include: {
       kratkodobe: { orderBy: { od: "desc" } },
-      transactions: { where: { category: { in: KATEGORIE_KRATKODOBE.map((k) => k.key) } }, orderBy: { date: "desc" } },
+      // Vsechny pohyby bytu — jedna evidence se Stavem uctu
+      transactions: { orderBy: { date: "desc" } },
     },
   });
   if (!property) notFound();
@@ -32,6 +33,8 @@ export default async function KratkodobyPage({ params }: { params: Promise<{ id:
     ? (await prisma.bankovniPohyb.findMany({ where: { id: { in: bankovni }, mojePoznamka: { not: null } }, select: { id: true, mojePoznamka: true } })).map((p) => [`banka:${p.id}`, p.mojePoznamka])
     : []);
   const canEdit = user.role === "OWNER";
+  // Zaplacene pravidelne platby zapsane jen v evidenci (splatky, sluzby) — Stav uctu je pocita taky
+  const predpisy = (await nactiNavrhPlatby(id)).filter((p) => p.zaplaceno?.zdroj === "EVIDENCE");
 
   return (
     <>
@@ -44,11 +47,17 @@ export default async function KratkodobyPage({ params }: { params: Promise<{ id:
           aiZapnuto={aiNastaveno()}
           diskPripojen={!!disk}
           obdobi={property.kratkodobe.map((o) => ({ id: o.id, od: denISO(o.od), do: o.do ? denISO(o.do) : null, poznamka: o.poznamka }))}
-          polozky={property.transactions.map((t) => ({
-            id: t.id, datum: denISO(t.date), castka: t.amount, kategorie: t.category, popis: t.description,
-            poznamka: t.sourceKey ? poznamky.get(t.sourceKey) ?? null : null,
-            uctenky: dokumenty.filter((d) => d.transactionId === t.id).map((d) => ({ id: d.id, nazev: d.name, mime: d.mime })),
-          }))}
+          polozky={[
+            ...property.transactions.map((t) => ({
+              id: t.id, datum: denISO(t.date), castka: t.amount, kategorie: t.category, popis: t.description, zdroj: "POHYB" as const,
+              poznamka: t.sourceKey ? poznamky.get(t.sourceKey) ?? null : null, proplaceno: !!t.proplacenoPohybId,
+              uctenky: dokumenty.filter((d) => d.transactionId === t.id).map((d) => ({ id: d.id, nazev: d.name, mime: d.mime })),
+            })),
+            ...predpisy.map((p) => ({
+              id: p.klic, datum: p.zaplaceno!.datum, castka: (p.castka >= 0 ? 1 : -1) * p.zaplaceno!.castka, kategorie: p.kategorie,
+              popis: p.popis, zdroj: "PREDPIS" as const, poznamka: p.zaplaceno!.poznamka ?? null, uctenky: [],
+            })),
+          ].sort((a, b) => b.datum.localeCompare(a.datum))}
         />
       </main>
     </>
